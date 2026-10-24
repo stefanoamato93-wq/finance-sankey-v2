@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Finance v2: v1's mini Sankey on a teal full-bleed square (maskable-safe),
+       plus a gold "2" badge so the home-screen icon differs from v1 -->
+  <rect width="32" height="32" fill="#0f2a2c"/>
+  <g transform="translate(3.2 3.6) scale(0.8)">
+    <path d="M8 6C16 6 16 4 24 4V10C16 10 16 12 8 12Z" fill="#5b8fd0" opacity=".85"/>
+    <path d="M8 13H24V19H8Z" fill="#e08a3c" opacity=".85"/>
+    <path d="M8 20C16 20 16 22 24 22V28C16 28 16 26 8 26Z" fill="#e7c14a" opacity=".85"/>
+    <rect x="4" y="6" width="4" height="20" rx="1" fill="#3aa86a"/>
+    <rect x="24" y="4" width="4" height="6" rx="1" fill="#5b8fd0"/>
+    <rect x="24" y="13" width="4" height="6" rx="1" fill="#e08a3c"/>
+    <rect x="24" y="22" width="4" height="6" rx="1" fill="#e7c14a"/>
+  </g>
+  <circle cx="23" cy="23" r="6" fill="#ffffff"/>
+  <text x="23" y="26.4" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="9.5" font-weight="800" fill="#0f2a2c">2</text>
+</svg>
