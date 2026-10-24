@@ -25,7 +25,7 @@ const {
 } = await import(`${SDK}/firebase-auth.js`);
 const {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-  collection, doc, getDoc, getDocs, setDoc, query, where, writeBatch,
+  collection, doc, getDoc, getDocs, getDocsFromCache, setDoc, query, where, writeBatch,
   serverTimestamp, Timestamp
 } = await import(`${SDK}/firebase-firestore.js`);
 const { firebaseConfig } = await import("./firebase-config.js");
@@ -64,16 +64,23 @@ export function signOut() { return fbSignOut(auth); }
 export function onUser(cb) { return onAuthStateChanged(auth, cb); }
 
 // ---- months -------------------------------------------------------------------------
+const monthOf = d => {
+  const x = d.data();
+  return { month: d.id, tx: x.tx || {}, source: x.source || "",
+           updatedAt: x.updatedAt && x.updatedAt.toMillis ? x.updatedAt.toMillis() : 0 };
+};
+// Months already in the offline cache (no network, no billed reads).
+export async function loadCachedMonths() {
+  try { return (await getDocsFromCache(monthsCol())).docs.map(monthOf); }
+  catch (e) { return []; }
+}
+// From the server: every month (sinceMs = 0) or only months changed after sinceMs.
 export async function loadMonths(sinceMs) {
   const q = sinceMs
     ? query(monthsCol(), where("updatedAt", ">", Timestamp.fromMillis(sinceMs)))
     : monthsCol();
   const snap = await getDocs(q);
-  return snap.docs.map(d => {
-    const x = d.data();
-    return { month: d.id, tx: x.tx || {}, source: x.source || "",
-             updatedAt: x.updatedAt && x.updatedAt.toMillis ? x.updatedAt.toMillis() : 0 };
-  });
+  return snap.docs.map(monthOf);
 }
 
 // Full overwrite of each given month (deleted rows disappear). Firestore allows 500
@@ -122,7 +129,7 @@ export async function checkAccess() {
   }
 }
 
-const api = { signIn, signOut, onUser, loadMonths, writeMonths, loadPlan, savePlan,
+const api = { signIn, signOut, onUser, loadMonths, loadCachedMonths, writeMonths, loadPlan, savePlan,
               getSettings, setSettings, checkAccess };
 window.FS2Data = api;
 

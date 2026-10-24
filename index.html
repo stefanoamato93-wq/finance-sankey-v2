@@ -41,6 +41,11 @@
   #acct button{font:inherit; font-size:11.5px; color:var(--muted); background:none; border:1px solid var(--grid);
                border-radius:6px; padding:2px 8px; cursor:pointer;}
   #acct button:hover{color:var(--ink);}
+  .fspanel{margin-top:8px; max-width:640px; padding:10px 12px; border:1px solid var(--grid); border-radius:10px;
+           background:var(--panel); font-size:12.5px; line-height:1.5;}
+  .fspanel[hidden]{display:none;}
+  .fspanel button{font:inherit; font-weight:600; color:#fff; background:#25603f; border:0; border-radius:8px; padding:6px 12px; cursor:pointer;}
+  .fspanel button[disabled]{opacity:.6; cursor:wait;}
   body{margin:0; background:var(--bg); color:var(--ink);
        font-family:"Amazon Ember","Segoe UI",Calibri,Arial,sans-serif;}
   header{padding:16px 26px 4px;}
@@ -805,8 +810,10 @@
     <span id="acctEmail"></span>
     <span>uid <code id="acctUid"></code></span>
     <button type="button" id="acctCopy">Copy uid</button>
+    <button type="button" id="acctData" aria-expanded="false" aria-controls="fsPanel">Data</button>
     <button type="button" id="acctOut">Sign out</button>
   </div>
+  <div id="fsPanel" class="fspanel" role="region" aria-label="Data source" aria-live="polite" hidden></div>
 </header>
 
 <!-- pages: one block per page. Only the page on screen is shown and rendered; the
@@ -822,7 +829,7 @@
   <a href="#plan" data-page="plan">Plan</a>
 </nav>
 
-<div class="status" id="status" style="display:none">Loading data from Google Sheets…</div>
+<div class="status" id="status" style="display:none">Loading your data…</div>
 <div class="badge" id="dataBadge" style="display:none"></div>
 
 <!-- skeleton Loading_State: visible at first paint, hidden the moment real content
@@ -3558,8 +3565,12 @@ const TxCache={
       rows.forEach(r=>R.push(r.dk, r.v, id(r.acct), id(r.lab), id(r.det), id(r.typ), id(r.c1), id(r.c2)));
       localStorage.setItem(this.KEY, JSON.stringify({v:1, hash, db:db||null, at:Date.now(), s:S, r:R})); return true; }catch(e){ return false; } }
 };
-/* tx query first (attempts 1-2), else the full export (columns re-learned for next time) */
+/* v2: the transactions come from the same Firestore months as the DB (no second read) */
 async function fetchTx(){
+  if(!FS_CSV) await fsFetch();
+  return FS_CSV;
+}
+async function fetchTxSheet(){
   let lastErr;
   for(let attempt=0; attempt<3; attempt++){
     try{
@@ -4229,10 +4240,49 @@ function planValid(s){
   return !!s && s.v===1 && Array.isArray(s.rows) && s.rows.every(r=> r && typeof r.g==='string' &&
     typeof r.l==='string' && typeof r.d==='string' && r.m && typeof r.m==='object');
 }
-function planSave(){
+function planSave(seed){
   PLAN.at=Date.now();
+  if(seed) PLAN.seed=true; else delete PLAN.seed;
+  planCloudSave();
   try{ localStorage.setItem(PLAN_KEY, JSON.stringify(PLAN)); return true; }
   catch(e){ planNote='Not saved: this browser refused to store the plan. Use Export to keep it.'; return false; }
+}
+/* v2 phase 3: the plan also lives in Firestore (users/{uid}/plan/current), so phone and
+   laptop share it. Local copy first (instant, offline), cloud save debounced 800 ms.
+   planCloud() runs once after boot and settles which copy wins:
+   - cloud plan newer than the local one (or no real local edits) -> take the cloud plan;
+   - local edits newer than the cloud (made offline) -> push them up;
+   - nothing in the cloud -> push the local plan; if this browser has no v2 plan but has
+     v1's (finance-sankey-plan-v1, same github.io origin), copy that one (v1 is untouched).
+   A freshly seeded plan (seed:true) never overwrites a cloud plan. Cloud saves wait until
+   planCloud() has run, so an early seed cannot clobber the shared plan. */
+const PLAN_V1_KEY='finance-sankey-'+'plan-v1';
+let planCloudReady=false, planCloudT=null, planCloudErr='';
+function planCloudSave(){
+  if(!planCloudReady || !FS2.data || !PLAN) return;
+  clearTimeout(planCloudT);
+  planCloudT=setTimeout(()=>{ const p=JSON.parse(JSON.stringify(PLAN));
+    Promise.resolve(FS2.data.savePlan(p)).then(()=>{ planCloudErr=''; }).catch(e=>{ planCloudErr=(e&&(e.code||e.message))||'save failed'; }); }, 800);
+}
+async function planCloud(){
+  const D=FS2.data; if(!D || planCloudReady) return;
+  let cloud=null;
+  try{ cloud=await D.loadPlan(); }catch(e){ planCloudErr=(e&&(e.code||e.message))||'load failed'; return; }   // stay local-only this visit
+  const local=PLAN||planLoad();
+  let take=null, push=false, note='';
+  if(planValid(cloud)){
+    if(local && !local.seed && (+local.at||0) > (+cloud.at||0)) push=true;
+    else { take=cloud; }
+  } else if(local && !local.seed){ push=true; }
+  else {
+    let v1=null; try{ v1=JSON.parse(localStorage.getItem(PLAN_V1_KEY)||'null'); }catch(e){}
+    if(planValid(v1)){ take=v1; push=true; note='Copied your plan from v1 in this browser. It is now shared across your devices.'; }
+    else if(local) push=true;
+  }
+  if(take){ PLAN=take; delete PLAN.seed; try{ localStorage.setItem(PLAN_KEY, JSON.stringify(PLAN)); }catch(e){} if(note) planNote=note; }
+  planCloudReady=true;
+  if(push && (PLAN||local)){ if(!PLAN) PLAN=local; planCloudSave(); }
+  if(take) renderPlan(true);
 }
 function planPush(){ planUndo.push(JSON.stringify(PLAN.rows)); if(planUndo.length>30) planUndo.shift(); }
 /* last-12-complete-month average per "LABEL|detail" (spend per month) + each label's main group */
@@ -4260,7 +4310,7 @@ function renderPlan(force){
   const ae=document.activeElement;
   if(!force && ae && ae.tagName==='INPUT' && wrap.contains(ae)) return;   // a data refresh never steals the cell being typed in
   if(!PLAN){ PLAN=planLoad();
-    if(!PLAN){ if(!DATA.length) return; PLAN=planSeed(); planSave();
+    if(!PLAN){ if(!DATA.length) return; PLAN=planSeed(); planSave(true);
       planNote='Filled with your averages of the last 12 months. Change any amount.'; } }
   const ms=planMonths(), y0=Math.floor(ms[0]/12), {ref}=planRef();
   const MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -4609,14 +4659,166 @@ function sameFp(a, b, pair){
 }
 /* tagged answers {csv, src, h} */
 const tagged=(src,csv)=>({csv, src, h:dbFp(csv, src)});
-/* background check: slim first (light on the wire), the full export as the last resort */
-async function fetchDB(){
-  let lastErr;
-  for(let attempt=0; attempt<3; attempt++){
-    try{ return attempt<2 ? tagged('S', await fetchSlim()) : tagged('F', await fetchFull()); }
-    catch(e){ lastErr=e; if(attempt<2) await new Promise(r=>setTimeout(r,400*(attempt+1))); }
+/* v2: every DB check reads Firestore (fsFetch below), not the sheet. The sheet fetchers
+   above stay only for the test shim; the sheet is read only by the import (fsImport). */
+async function fetchDB(){ return fsFetch(); }
+
+/* ---- v2 phase 3: Firestore data source ---------------------------------------------
+   users/{uid}/months/{YYYY-MM} = {tx:{id:Tx}, updatedAt, source}. A DB check merges the
+   months the Firestore offline cache already holds (free, no network) with the months
+   changed on the server since the newest updatedAt seen ("changed since" query: a warm
+   open costs ~1 read), then rebuilds the DB tab as CSV text (same 21 columns, same
+   names) so aggregate(), parseTx() and every page run unchanged. Once a week the whole
+   collection is re-read (~106 reads) in case the local cache lost a month. */
+const FS_COLS=["YEAR","MONTH","DAY","YEAR-MONTH","PROGRESSIVE","DATE_NUMERIC","DATE","ACCOUNT","VALUE","LABEL",
+  "DETAIL","ASSETCLASSDETAILS","ASSETCLASS","VARIABLE","LIQUIDITY","TYPE","AVAILABLE","CATEGORY1","CATEGORY2",
+  "CATEGORY3","ASSETCLASSDETAILSFORM"];
+/* Tx short key per stored column (YEAR..DATE are rebuilt from tx.d) */
+const FS_KEY={ACCOUNT:'a',VALUE:'v',LABEL:'l',DETAIL:'dt',ASSETCLASSDETAILS:'acd',ASSETCLASS:'ac',VARIABLE:'var',
+  LIQUIDITY:'liq',TYPE:'ty',AVAILABLE:'av',CATEGORY1:'c1',CATEGORY2:'c2',CATEGORY3:'c3',ASSETCLASSDETAILSFORM:'acdf'};
+const FS_FULL_KEY='fs2-fsfull-v1', FS_FULL_EVERY=7*24*3600e3;
+let FS_MONTHS=new Map(), FS_MAX=0, FS_CSV=null, FS_FP=null, FS_READS=0;
+const pad2=n=>String(n).padStart(2,'0');
+const csvQ=s=>'"'+String(s==null?'':s).replace(/"/g,'""')+'"';
+/* pure: one Tx -> the 21 DB cells, in FS_COLS order */
+function fsCells(t){
+  const [y,m,d]=String(t.d||'').split('-').map(Number);
+  const serial=Math.round((Date.UTC(y,m-1,d)-Date.UTC(1899,11,30))/864e5);
+  return [y, m, d, y+'-'+m, (y-2018)*12+m, serial, pad2(m)+'/'+pad2(d)+'/'+y,
+    t.a, t.v, t.l, t.dt, t.acd, t.ac, t.var, t.liq, t.ty, t.av, t.c1, t.c2, t.c3, t.acdf];
+}
+/* pure: month docs -> DB-shaped CSV text (months in date order, rows in sheet order) */
+function fsCSV(months){
+  const out=[FS_COLS.map(csvQ).join(',')];
+  [...months].sort((a,b)=>a.month<b.month?-1:a.month>b.month?1:0).forEach(m=>{
+    Object.entries(m.tx||{}).sort((a,b)=>((a[1].o||0)-(b[1].o||0)) || (a[0]<b[0]?-1:1))
+      .forEach(([,t])=>out.push(fsCells(t).map(csvQ).join(',')));
+  });
+  return out.join('\n')+'\n';
+}
+function fsMerge(list){ (list||[]).forEach(m=>{ FS_MONTHS.set(m.month, m); if((m.updatedAt||0)>FS_MAX) FS_MAX=m.updatedAt||0; }); }
+async function fsFetch(){
+  const D=FS2.data; if(!D) throw new Error('not signed in');
+  let full=false; try{ full=Date.now()-(+localStorage.getItem(FS_FULL_KEY)||0) > FS_FULL_EVERY; }catch(e){ full=true; }
+  if(!FS_MONTHS.size && !full && D.loadCachedMonths){ try{ fsMerge(await D.loadCachedMonths()); }catch(e){} }
+  const fresh=await D.loadMonths(full || !FS_MONTHS.size ? 0 : FS_MAX);
+  FS_READS+=Math.max(1, fresh.length); fsMerge(fresh);
+  if(full || !FS_MONTHS.size){ try{ localStorage.setItem(FS_FULL_KEY, String(Date.now())); }catch(e){} }
+  if(!FS_MONTHS.size){ const e=new Error('no data in Firebase yet'); e.code='empty'; throw e; }
+  const fp='X:'+csvHash([...FS_MONTHS.values()].map(m=>m.month+'@'+(m.updatedAt||0)).sort().join(','));
+  if(fp!==FS_FP){ FS_CSV=fsCSV(FS_MONTHS.values()); FS_FP=fp; }
+  fsPanelRender();
+  return {csv:FS_CSV, src:'X', h:FS_FP};
+}
+
+/* ---- v2 phase 2: import from the sheet (the sheet stays the truth until cutover) -----
+   Reads the DB tab as gviz JSON, not CSV: the CSV export rounds VALUE to whole euros
+   (10 rows carry cents, e.g. CAPGAIN -32079.086), the JSON keeps the raw number (stored
+   rounded to the cent). Every other cell is stored as the sheet shows it (f, else v).
+   Rows without a year > 1900, a month 1-12 or a numeric VALUE (the sheet's blank formula
+   rows) are left out. Rows are grouped by month; ids are deterministic (FNV of
+   month|row index in month|account|value|label|detail), so a re-import rewrites the same
+   ids. A month is written only when its content hash differs from settings.importHash;
+   each write is a full overwrite, so rows deleted in the sheet disappear. DB!I2 (CAPGAIN
+   ApprecTaxes = CAPITALGAIN!M2, GOOGLEFINANCE) is stored like any row, flagged live:true:
+   v1 shows the DB copy too and lets loadLive() override it on Net Worth, so the numbers
+   stay identical; when the market moves it, only 2018-01 is rewritten (1 write).
+   Runs by itself on the first open (empty Firebase) and in the background when the last
+   import is older than 12 h; never once settings.cutover is true. */
+const IMPORT_EVERY=12*3600e3;
+const fsJsonURL=()=>`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(SHEET_NAME)}`;
+let fsImportBusy=false, FS_SETTINGS=null, FS_LAST=null;
+function fsHash(s){
+  let a=0x811c9dc5, b=0x01000193^s.length;
+  for(let i=0;i<s.length;i++){ const c=s.charCodeAt(i); a=Math.imul(a^c,0x01000193); b=Math.imul(b^c,0x5bd1e995); b^=b>>>13; }
+  return (a>>>0).toString(36)+(b>>>0).toString(36);
+}
+/* pure: gviz JSON text -> {months:{ym:{tx}}, hash:{ym:h}, rows, skipped} */
+function fsFromGviz(text){
+  const j=JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}')+1));
+  if(j.status==='error' || !j.table) throw new Error('sheet answer: '+((j.errors&&j.errors[0]&&j.errors[0].detailed_message)||'error'));
+  const ix={}; j.table.cols.forEach((c,i)=>{ const n=norm(c.label); if(n && ix[n]==null) ix[n]=i; });
+  const miss=FS_COLS.filter(n=>ix[n]==null); if(miss.length) throw new Error('sheet DB is missing columns: '+miss.join(', '));
+  const cell=(row,n)=>{ const c=row.c[ix[n]]; return c==null ? '' : (c.f!=null ? String(c.f) : (c.v==null ? '' : String(c.v))); };
+  const months={}, order={}; let rows=0, skipped=0;
+  (j.table.rows||[]).forEach((row,ri)=>{
+    if(!row || !row.c){ skipped++; return; }
+    const y=parseInt(cell(row,'YEAR'),10), m=parseInt(cell(row,'MONTH'),10), d=parseInt(cell(row,'DAY'),10)||1;
+    const vc=row.c[ix.VALUE], v=vc && typeof vc.v==='number' ? Math.round(vc.v*100)/100 : NaN;
+    if(!(y>1900) || !(m>=1 && m<=12) || !isFinite(v)){ skipped++; return; }
+    const ym=y+'-'+pad2(m), o=order[ym]=(order[ym]||0)+1;
+    const t={o, d:y+'-'+pad2(m)+'-'+pad2(Math.min(31,Math.max(1,d)))};
+    for(const n in FS_KEY) if(n!=='VALUE') t[FS_KEY[n]]=cell(row,n);
+    t.v=v;
+    if(ri===0 && norm(t.a)==='CAPGAIN' && norm(t.dt)==='APPRECTAXES') t.live=true;
+    const id='s'+fsHash([ym,o,t.a,v,t.l,t.dt].join('|'));
+    (months[ym]||(months[ym]={tx:{}})).tx[id]=t; rows++;
+  });
+  const hash={}; for(const ym in months) hash[ym]=fsHash(JSON.stringify(months[ym].tx));
+  return {months, hash, rows, skipped};
+}
+/* pure: the import report (per-year income / expenses as the sheet sums them) */
+function fsReport(parsed, written){
+  const years={}; let big=0, bigM='';
+  for(const ym in parsed.months){
+    const tx=parsed.months[ym].tx, bytes=JSON.stringify(tx).length; if(bytes>big){ big=bytes; bigM=ym; }
+    for(const id in tx){ const t=tx[id], ty=norm(t.ty), y=ym.slice(0,4), Y=years[y]||(years[y]={income:0,expenses:0});
+      if(ty==='INCOME') Y.income+=t.v; else if(ty==='EXPENSES') Y.expenses+=t.v; }
   }
-  throw lastErr || new Error("fetch failed");
+  for(const y in years){ years[y].income=Math.round(years[y].income*100)/100; years[y].expenses=Math.round(years[y].expenses*100)/100; }
+  return {at:Date.now(), months:Object.keys(parsed.months).length, written, rows:parsed.rows, skipped:parsed.skipped,
+          biggestMonth:bigM, biggestBytes:big, years};
+}
+async function fsImport(opt){
+  const D=FS2.data; if(!D || fsImportBusy) return null;
+  fsImportBusy=true; fsPanelRender('Importing from the sheet…');
+  try{
+    const S=FS_SETTINGS=await D.getSettings();
+    if(S.cutover===true) throw new Error('import is switched off (cutover done)');
+    const parsed=fsFromGviz(await fetchText(fsJsonURL()));
+    if(parsed.rows<1000) throw new Error('the sheet answered only '+parsed.rows+' rows; nothing written');
+    const old=S.importHash||{}, map={};
+    for(const ym in parsed.hash) if(old[ym]!==parsed.hash[ym]) map[ym]={tx:parsed.months[ym].tx, source:'sheet'};
+    const empty=fsHash(JSON.stringify({}));
+    for(const ym in old) if(!parsed.hash[ym] && old[ym]!==empty){ map[ym]={tx:{}, source:'sheet'}; parsed.hash[ym]=empty; }
+    const written=Object.keys(map).length;
+    if(written) await D.writeMonths(map);
+    const rep=fsReport(parsed, written);
+    await D.setSettings({importHash:parsed.hash, lastImportAt:rep.at, lastImport:rep});
+    FS_SETTINGS=Object.assign({}, S, {importHash:parsed.hash, lastImportAt:rep.at, lastImport:rep});
+    FS_LAST={ok:true, rep};
+    return rep;
+  }catch(e){ FS_LAST={ok:false, err:(e && (e.code||e.message)) || String(e)}; if(opt && opt.throw) throw e; return null; }
+  finally{ fsImportBusy=false; fsPanelRender(); }
+}
+/* after the first paint: background import when due, then plan sync */
+async function fsAfterBoot(){
+  const D=FS2.data; if(!D) return;
+  try{ FS_SETTINGS=await D.getSettings(); }catch(e){}
+  const S=FS_SETTINGS||{};
+  if(S.cutover!==true && Date.now()-(+S.lastImportAt||0) > IMPORT_EVERY){
+    const rep=await fsImport();
+    if(rep && rep.written){ dbAt=0; refreshDB(); }
+  }
+  fsPanelRender();
+}
+/* the Data panel under the header (opened from the account line) */
+function fsPanelRender(busy){
+  const p=document.getElementById('fsPanel'); if(!p || p.hidden) return;
+  const S=FS_SETTINGS||{}, rep=S.lastImport, rows=FS_CSV ? Math.max(0,(FS_CSV.match(/\n/g)||[]).length-1) : 0;
+  const when=t=>t ? new Date(t).toLocaleString() : 'never';
+  let h=`<div><b>Source:</b> Firebase · ${FS_MONTHS.size} months · ${rows.toLocaleString()} rows · ${FS_READS} reads this visit</div>`;
+  if(S.cutover===true) h+=`<div>Cutover done: the sheet is no longer imported.</div>`;
+  else{
+    h+=`<div><b>Last import from the sheet:</b> ${when(S.lastImportAt)} (auto every 12 h)</div>`;
+    if(rep) h+=`<div class="sub">${rep.rows.toLocaleString()} rows, ${rep.months} months, ${rep.written} written, biggest ${rep.biggestMonth} (${Math.round(rep.biggestBytes/1024)} KB)</div>`;
+    h+=`<div style="margin-top:6px"><button type="button" id="fsImportBtn"${fsImportBusy?' disabled':''}>${busy||fsImportBusy?'Importing…':'Import from sheet now'}</button></div>`;
+  }
+  if(FS_LAST && !FS_LAST.ok) h+=`<div style="color:#ff9a9a">Import failed: ${planEsc(FS_LAST.err)}</div>`;
+  else if(FS_LAST && FS_LAST.ok) h+=`<div style="color:var(--income)">Import done: ${FS_LAST.rep.written} month(s) changed.</div>`;
+  p.innerHTML=h;
+  const b=document.getElementById('fsImportBtn');
+  if(b) b.onclick=async()=>{ const rep=await fsImport(); if(rep && rep.written){ dbAt=0; refreshDB(); } };
 }
 
 /* ---- live ETF values: READ-ONLY GETs of the public gviz export, never a write ----
@@ -4861,8 +5063,8 @@ function showError(msg,timedOut){
   hideSkeleton();
   statusEl.style.display=''; statusEl.className='status err';
   statusEl.innerHTML = timedOut
-    ? `Loading timed out.<br>Check your connection and that the Google Sheet is shared as <b>“Anyone with the link → Viewer”</b> and has a tab named <b>DB</b>.`
-    : `Could not load the sheet: ${msg}<br>Make sure the Google Sheet is shared as <b>“Anyone with the link → Viewer”</b> and has a tab named <b>DB</b>.`;
+    ? `Loading timed out.<br>Check your connection and reload.`
+    : `Could not load your data from Firebase: ${planEsc(msg)}<br>${/permission/i.test(msg)?'This Google account is not allowed (check the Firestore rules uid).':'Check your connection and reload.'}`;
 }
 
 /* ---- boot: render cached data first, refresh live in the background ------ */
@@ -4926,7 +5128,20 @@ function autoTick(back){
      Measured 18 Oct 2026: the full parse + draw is ~110 ms on desktop, so waiting for the
      slim only pays off if it lands within ~70 ms, and a cold slim can take 10 s+. */
 const BOOT_GRACE_SHOWN=4000, BOOT_GRACE_BLANK=0;
+/* v2: the boot check reads Firestore. First open ever (no months in Firebase): import
+   from the sheet right away, then read. */
 async function bootCheck(shown){
+  let ans;
+  try{ ans=await fsFetch(); }
+  catch(e){
+    if(!(e && e.code==='empty')) throw e;
+    statusEl.style.display=''; statusEl.className='status'; statusEl.textContent='First open: copying your sheet into Firebase…';
+    await fsImport({throw:true});
+    ans=await fsFetch();
+  }
+  await takeDB(ans);
+}
+async function bootCheckSheet(shown){
   const ctl=typeof AbortController==='function' ? new AbortController() : null;
   const full=fetchFull(ctl && ctl.signal).then(csv=>tagged('F', csv));
   const slim=fetchSlim().then(csv=>tagged('S', csv));
@@ -4971,7 +5186,7 @@ function boot(){
     if(shown){ showBadge(cached.entry.retrievedAt,false); return; }        // keep cached data on screen
     if(cached.ok){ try{ applySnapshot(cached.entry); dbHash=cached.entry.hash; showBadge(cached.entry.retrievedAt,false); return; }catch(e){} }  // fall back to stale cache
     showError(err && err.message ? err.message : 'load failed');
-  }).finally(()=>{ dbBusy=false; syncTx(); });
+  }).finally(()=>{ dbBusy=false; syncTx(); fsAfterBoot(); planCloud(); });
 }
 /* tap/click away closes the hover preview and the detail panel (the panel itself
    stops propagation, and node clicks do too, so neither closes on its own click) */
@@ -4991,6 +5206,12 @@ const FS2={
 if(FS2.fake){ FS2.start(); }
 else { document.getElementById('gate').hidden=false; }
 window.FS2=FS2;
+document.getElementById('acctData').addEventListener('click',e=>{
+  e.stopPropagation();
+  const p=document.getElementById('fsPanel'), b=e.currentTarget;
+  p.hidden=!p.hidden; b.setAttribute('aria-expanded', String(!p.hidden)); fsPanelRender();
+});
+document.getElementById('fsPanel').addEventListener('click',e=>e.stopPropagation());
 
 /* ---- test-only export shim ------------------------------------------------
    Exposes the pure helpers to the Node test harness (fast-check).

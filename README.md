@@ -12,17 +12,50 @@ status: `Personal Finance\finance-v2-plan\PLAN.md`.
 | Phase | State |
 |---|---|
 | 0 Firebase project `finance-stefano` (Auth Google, Firestore eur3, Spark plan) | done 24 Oct 2026 |
-| 1 Skeleton + Google sign-in (this repo) | done 24 Oct 2026; data still read from the sheet |
-| 2 Import from sheet | todo |
-| 3 Read Firestore instead of the sheet | todo |
+| 1 Skeleton + Google sign-in (this repo) | done 24 Oct 2026 |
+| 2 Import from sheet | done 24 Oct 2026 |
+| 3 Read Firestore instead of the sheet | done 24 Oct 2026 |
+
+### Where the data comes from (phases 2-3)
+- **Firestore** `users/{uid}/months/{YYYY-MM}` = `{tx:{id:Tx}, updatedAt, source}`, one doc per
+  month (106 docs, biggest ~50 KB). Tx short keys: `d` date, `a` ACCOUNT, `v` VALUE, `l` LABEL,
+  `dt` DETAIL, `acd` ASSETCLASSDETAILS, `ac` ASSETCLASS, `var`, `liq`, `ty` TYPE, `av`
+  AVAILABLE, `c1`/`c2`/`c3` CATEGORY1-3, `acdf` ASSETCLASSDETAILSFORM, `o` row order in the
+  month, `live:true` on the CAPGAIN / ApprecTaxes row.
+- **Read path:** `fsFetch()` merges the months already in the Firestore offline cache (free)
+  with the months changed on the server since the newest `updatedAt` seen (one "changed
+  since" query: a warm open costs ~1 read). Once a week it re-reads all months
+  (`fs2-fsfull-v1`). It then rebuilds the DB tab as CSV text (`fsCSV()`, same 21 column
+  names) so `aggregate()`, `parseTx()` and every page are unchanged. `fetchDB()`,
+  `bootCheck()` and `fetchTx()` now call it (fingerprint prefix `X:`); the Query page uses
+  the same months (no second read). The old sheet readers stay in the file
+  (`bootCheckSheet`, `fetchTxSheet`, `fetchSlim`, `fetchFull`) for the test shim only.
+- **Import (sheet is still the truth):** `fsImport()` reads the DB tab as **gviz JSON**, not
+  CSV, because the CSV export rounds VALUE to whole euros (10 rows carry cents). Skips the
+  sheet's blank formula rows (year 1899 / #N/A). Deterministic ids (hash of
+  month | row in month | account | value | label | detail); a month is rewritten only when its
+  content hash changed (`meta/settings.importHash`), as a full overwrite. Runs by itself on the
+  very first open (empty Firebase) and in the background when the last import is older than
+  12 h; **Data** button in the header opens the panel with the source, the last import report
+  and **Import from sheet now**. Disabled for good once `meta/settings.cutover` is `true`.
+- **Live prices:** unchanged, still read from the sheet (`LIST`, `NETWORTH`) until phase 6.
+- **Plan page:** saved locally (instant) and to `users/{uid}/plan/current` (debounced 800 ms),
+  so phone and laptop share it. `planCloud()` after boot: newer cloud plan wins; newer local
+  edits are pushed up; a fresh auto-seeded plan never overwrites the cloud; first time, v1's
+  plan in the same browser (`finance-sankey-plan-v1`) is copied (v1 untouched).
+- **Parity (24 Oct 2026):** Net Worth, Savings, Compare and Years Paid show the same text as
+  v1; yearly income / expenses match to the cent. Two known, intended differences: v1's
+  Cash Flow year list has a stray "1899" (from the blank rows, v2 drops it) and the Query
+  all-time total can differ by €1 (v1 rounds each row, v2 keeps cents). Report:
+  `finance-v2-plan\reports\import-2026-10-24.md`. Check: `_verify_v2_parity.py` (untracked).
 
 - **Sign-in gate:** `#gate` covers the page until Firebase reports a signed-in user,
   then `FS2.start()` runs v1's `boot()`. Popup sign-in; falls back to a full-page
   redirect where popups are refused. The header shows the email, the **uid** (with Copy,
   needed once for the Firestore rules) and **Database: OK / locked**.
 - **Data layer `data.js`** (ES module): the only file that calls Firebase. Interface:
-  `signIn, signOut, onUser, loadMonths(sinceMs), writeMonths(map), loadPlan, savePlan,
-  getSettings, setSettings, checkAccess`, also on `window.FS2Data`. Firestore is opened
+  `signIn, signOut, onUser, loadMonths(sinceMs), loadCachedMonths(), writeMonths(map),
+  loadPlan, savePlan, getSettings, setSettings, checkAccess`, also on `window.FS2Data`. Firestore is opened
   with the persistent multi-tab offline cache. SDK pinned in one constant (`SDK`,
   Firebase JS **13.1.0**).
 - **`firebase-config.js`**: the web config. Not a secret; security is Google sign-in plus
