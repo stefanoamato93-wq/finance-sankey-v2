@@ -775,6 +775,15 @@
            white-space:normal; word-break:break-word; border-right:1px solid var(--grid);}
   .plan thead th.n{z-index:3;}
   .plan .ref{color:var(--muted); border-right:1px solid var(--grid);}
+  /* "This month" column: actual so far, a bar against the plan, a tick at today's pace */
+  .plan .am{border-right:1px solid var(--grid); min-width:84px; padding-top:4px; padding-bottom:4px;}
+  .plan .am .av{display:block; line-height:1.1;} .plan .am .ap{color:var(--muted); font-size:10px; font-weight:400;}
+  .plan .am .bar{position:relative; display:block; height:4px; margin-top:3px; background:#243049; border-radius:2px;}
+  .plan .am .bar i{position:absolute; left:0; top:0; bottom:0; border-radius:2px; background:var(--c,#7aa2f7);}
+  .plan .am .bar b{position:absolute; top:-2px; bottom:-2px; width:1px; background:#e7ecf5; opacity:.7;}
+  .plan .am.ok{--c:#5fc28a;} .plan .am.warn{--c:#e7c14a;} .plan .am.over{--c:#e58a8a;} .plan .am.over .av{color:#e58a8a;}
+  .plan .am.inc{--c:#5fa8e8;} .plan .am.none .av{color:var(--muted);}
+  .plan thead th.am small{display:block; font-weight:400; font-size:9.5px;}
   .plan .yt{font-weight:700;} .plan td.yt{background:#18223a;}
   .plan th button{background:none; border:0; color:var(--ink); font:inherit; font-weight:700; cursor:pointer; padding:2px 4px; border-radius:5px;}
   .plan th button:hover{background:#1d2840;}
@@ -4611,6 +4620,17 @@ function pvSet(on){
   PV_ON=!!on; try{ localStorage.setItem(PV_KEY, PV_ON?'1':'0'); }catch(e){}
   if(pvRefresh()) renderAll();
 }
+/* actuals of month mi per planKey (euros, spend positive), with the same keys as planRef();
+   read from the real data (PV_REAL), so the plan view never feeds the plan back to itself */
+function planActual(mi){
+  const R=PV_REAL||{data:DATA, detail:DETAIL}, a={};
+  R.data.forEach(([m,k,grp,leaf,val])=>{ if(m!==mi || k!=='I') return;
+    const key=leaf==='STOCKS' ? 'I:RSU|RSU' : 'I:'+leaf+'|'+leaf; a[key]=(a[key]||0)+val; });
+  R.detail.forEach(([m,leaf,dn,val])=>{ if(m!==mi) return; const key=leaf+'|'+(PLAN_ONE_ROW.includes(leaf)?leaf:dn); a[key]=(a[key]||0)+val; });
+  return a;
+}
+const PLAN_AM_KEY='fs2-plan-month-v1';
+let planAmOn=true; try{ planAmOn=localStorage.getItem(PLAN_AM_KEY)!=='0'; }catch(e){}
 function renderPlan(force){
   if(!pageOn('plan') || !controlsReady) return;
   const wrap=document.getElementById('planwrap'); if(!wrap) return;
@@ -4649,12 +4669,32 @@ function renderPlan(force){
       if(!L.has(it.r.l)) L.set(it.r.l,[]); L.get(it.r.l).push(it); });
     return t; };
   const fv=v=> Math.round(v) ? fmt(v) : '\u2013';
+  /* "This month" column: actual so far vs this month's plan. Bar = actual / plan; the white
+     tick = where you would be at today's pace (day / days in month). Expenses: green under
+     pace, amber past pace, red over the whole plan. Income: blue. INFLATION and SALARY RISE
+     have no actuals (plan only). */
+  const cm=planStart(), act=planActual(cm), dN=new Date(), dim=new Date(dN.getFullYear(), dN.getMonth()+1, 0).getDate();
+  const pace=dN.getDate()/dim, MONL=MON[cm%12]+' '+String(Math.floor(cm/12)).slice(2);
+  const actOf=it=> (it.ro==='infl' || it.ro==='sal') ? 0 : (act[planKey(it.r)]||0);
+  const plOf=it=> +it.r.m[cm]||0;
+  const amTd=(a,p,kind)=>{
+    if(!planAmOn) return '';
+    const none=!Math.round(a) && !Math.round(p);
+    const cls=none ? 'none' : kind==='I' ? 'inc' : kind==='S' ? (a<0 ? 'over' : 'inc')
+      : a>p+0.5 ? 'over' : a>p*pace+0.5 ? 'warn' : 'ok';
+    const w=p>0 ? Math.max(0,Math.min(100, a/p*100)) : (a>0 ? 100 : 0);
+    const pct=p>0 ? Math.round(a/p*100)+'% of plan' : 'no plan';
+    const tip=`${MONL} so far: ${fmt(a)} \u00b7 plan ${fmt(p)} \u00b7 ${pct}`+(kind==='E' && p>0 ? ` \u00b7 at today's pace: ${fmt(p*pace)}` : '');
+    return `<td class="am ${cls}" title="${planEsc(tip)}"><span class="av">${fv(a)} <span class="ap">/ ${fv(p)}</span></span>`+
+      (none ? '' : `<span class="bar"><i style="width:${w.toFixed(1)}%"></i>${kind!=='S' && p>0 ? `<b style="left:${(pace*100).toFixed(1)}%"></b>` : ''}</span>`)+`</td>`; };
+  const amL=L=>{ const k=L.length && L.every(it=>it.r.k==='I') ? 'I' : 'E';
+    return amTd(L.reduce((s,it)=>s+actOf(it),0), L.reduce((s,it)=>s+plOf(it),0), k); };
   const tdv=(v,yt)=> `<td class="${yt?'yt':''}${Math.round(v)<0?' neg':''}">${fv(v)}</td>`;
-  const sums=L=> `<td class="ref">${fv(refSum(L))}</td>`+cols.map(c=>tdv(sumOf(L,c), c.y!=null)).join('');
+  const sums=L=> `<td class="ref">${fv(refSum(L))}</td>`+amL(L)+cols.map(c=>tdv(sumOf(L,c), c.y!=null)).join('');
   const inputs=(it,name)=>{
-    if(it.ro) return `<td class="ref">${fv(refOf(it))}</td>`+cols.map(c=>tdv(cell(it,c), c.y!=null)).join('');
+    if(it.ro) return `<td class="ref">${fv(refOf(it))}</td>`+amL([it])+cols.map(c=>tdv(cell(it,c), c.y!=null)).join('');
     const r=it.r, ri=it.ri;
-    return `<td class="ref">${fv(refOf(it))}</td>`+cols.map(c=>{
+    return `<td class="ref">${fv(refOf(it))}</td>`+amL([it])+cols.map(c=>{
       const v=cell(it,c), when=c.mi!=null ? miLabel(c.mi) : 'year '+c.y;
       return `<td${c.y!=null?' class="yt"':''}><input class="pc" type="text" inputmode="decimal" autocomplete="off" `+
         `data-r="${ri}" ${c.mi!=null?'data-mi="'+c.mi+'"':'data-y="'+c.y+'"'} value="${v?grp(v):''}" placeholder="0" `+
@@ -4692,11 +4732,13 @@ function renderPlan(force){
     }
     return body; };
   const sav=`<tr class="tot sav"><td class="n">Savings</td><td class="ref">${fv(refSum(inc)-refSum(exp))}</td>`+
+    amTd(inc.reduce((s,it)=>s+actOf(it),0)-exp.reduce((s,it)=>s+actOf(it),0), inc.reduce((s,it)=>s+plOf(it),0)-exp.reduce((s,it)=>s+plOf(it),0), 'S')+
     cols.map(c=>tdv(sumOf(inc,c)-sumOf(exp,c), c.y!=null)).join('')+`</tr>`;
   const body=sav+
     `<tr class="tot"><td class="n">Total income</td>${sums(inc)}</tr>`+groupsHtml(tree(PLAN_IGROUPS.slice(0,2),inc), PLAN_IGROUPS.slice(0,2))+
     `<tr class="tot"><td class="n">Total expenses</td>${sums(exp)}</tr>`+groupsHtml(tree(PLAN_GROUPS.concat(['Inflation']),exp), PLAN_GROUPS);
   const head=`<tr><th class="n">Category</th><th class="ref" title="Average per month, last 12 complete months">Last 12M /m</th>`+
+    (planAmOn ? `<th class="am" title="This month: actual so far / plan. The white tick is today's pace.">${MONL} actual<small>day ${dN.getDate()} of ${dim}</small></th>` : '')+
     cols.map(c=> c.mi!=null ? `<th>${MON[c.mi%12]} ${String(Math.floor(c.mi/12)).slice(2)}</th>`
       : `<th class="yt"><button type="button" data-py="${c.y}" aria-expanded="${planOpenY.has(c.y)}" title="${planOpenY.has(c.y)?'Fold the months of '+c.y:'Show the months of '+c.y}">${planOpenY.has(c.y)?'&#9666;':'&#9656;'} ${c.y}</button></th>`).join('')+`</tr>`;
   const anyOpen=planOpenY.size>0, at=PLAN.at ? new Date(PLAN.at) : null;
@@ -4705,6 +4747,7 @@ function renderPlan(force){
   const sc=wrap.querySelector('.planscroll'), sl=sc?sc.scrollLeft:0, st=sc?sc.scrollTop:0;
   wrap.innerHTML=fcBoxHtml(fc, px, ms)+`<div class="plantools"><span class="planmsg" role="status">${msg}</span>`+
     `<button type="button" data-pa="years">${anyOpen?'Fold all years':'Show all months'}</button>`+
+    `<button type="button" data-pa="actual" aria-pressed="${planAmOn}" title="Show or hide this month's actual vs plan">${planAmOn?'Hide':'Show'} ${MONL} actual</button>`+
     `<button type="button" data-pa="undo"${planUndo.length?'':' disabled'}>Undo</button>`+
     `<button type="button" data-pa="export">Export</button>`+
     `<button type="button" data-pa="import">Import</button>`+
@@ -4855,7 +4898,8 @@ function planInit(){
     else if(ds.pa==='years'){ if(planOpenY.size) planOpenY.clear();
       else planMonths().forEach(mi=>planOpenY.add(Math.floor(mi/12))); renderPlan(true); }
     else if(ds.pa==='undo'){ if(!planUndo.length) return; PLAN.rows=JSON.parse(planUndo.pop()); planNote='Undone.'; planSave(); renderPlan(true); }
-    else if(ds.pa==='export') planExport();
+    else if(ds.pa==='actual'){ planAmOn=!planAmOn; try{ localStorage.setItem(PLAN_AM_KEY, planAmOn?'1':'0'); }catch(e){} renderPlan(true); }
+  else if(ds.pa==='export') planExport();
     else if(ds.pa==='import') file.click();
     else if(ds.pa==='restart'){ if(!window.confirm('Fill the whole plan again with your last-12-month averages?\nUndo brings your plan back.')) return;
       planPush(); PLAN.rows=planSeed().rows; PLAN.incSeeded=true; planNote='Filled again with your last-12-month averages.'; planSave(); renderPlan(true); }

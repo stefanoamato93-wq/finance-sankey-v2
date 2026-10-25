@@ -31,6 +31,10 @@ status: `Personal Finance\finance-v2-plan\PLAN.md`.
   expenses, dashed after Now. Saved per browser (`fs2-planview-v1`).
 - Plan menu extras: "Add an extra once a year…" (+amount on one month every year),
   HOLIDAYS planned as one row, Salary rise % (BASE + TFR) in Forecast settings.
+- Plan page **"Oct 26 actual"** column (after Last 12M): this month's actual so far / plan
+  per row, group and total (`planActual()`, real data only). Bar = actual / plan, white tick =
+  today's pace; expenses green under pace, amber past it, red over plan; income blue.
+  Hide / show button in the tools row (`fs2-plan-month-v1`).
 
 ### Live prices, gains and tax (phase 6, no Google Sheet)
 - **Shares held** box under the Net Worth tables: account, asset, ISIN, shares (decimals
