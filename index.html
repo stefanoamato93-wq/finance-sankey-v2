@@ -2565,7 +2565,7 @@ function rolling12(m, m0, m1){
 const niceStep=x=>{ if(!(x>0)) return 1; const p=Math.pow(10,Math.floor(Math.log10(x))), f=x/p;
   return (f<=1?1:f<=2?2:f<=2.5?2.5:f<=5?5:10)*p; };
 function renderRolling(svgEl, W, narrow, perMonth){
-  const m0=META.minMi, m1=lastCompleteMi(), N=m1-m0+1;
+  const m0=META.minMi, m1=pvOn() ? META.maxMi : lastCompleteMi(), N=m1-m0+1;   // plan view: to Dec of the plan's last year
   const el=(tag,attrs,txt)=>{ const e=document.createElementNS(NS,tag);
     for(const k in attrs) e.setAttribute(k,attrs[k]); if(txt!=null) e.textContent=txt; return e; };
   svgEl.innerHTML='';
@@ -2651,6 +2651,12 @@ function renderRolling(svgEl, W, narrow, perMonth){
     svgEl.appendChild(el('path',{d:'M'+top.join('L')+'L'+base.join('L')+'Z',fill:l.color,'fill-opacity':ov?.5:.62,stroke:'none'}));
     svgEl.appendChild(el('path',{d:'M'+top.join('L'),fill:'none',stroke:l.color,'stroke-width':1.4,'stroke-linejoin':'round'}));
   });
+  /* plan view: the planned months sit under a dark veil, with a dashed "Plan" line where they start */
+  if(pvOn() && META.planFromMi<=m1){ const pi=Math.max(0, META.planFromMi-m0), x0=xOf(Math.max(0,pi-1));
+    svgEl.appendChild(el('rect',{x:x0,y:ov?lineTop:plotTop,width:Math.max(0,W-padR-x0),height:plotBot-(ov?lineTop:plotTop),fill:'#0f1420','fill-opacity':.45}));
+    svgEl.appendChild(el('line',{x1:x0,x2:x0,y1:ov?lineTop:plotTop,y2:plotBot,stroke:'#e7c14a','stroke-width':1,'stroke-dasharray':'4 3'}));
+    svgEl.appendChild(el('text',{x:x0+4,y:plotTop+11,fill:'#e7c14a','font-size':fs,'font-weight':600},'Plan'));
+  }
   /* rolling savings % (overview): own band above the areas, last value labelled */
   if(ov){
     const all=[...rTot,...rSafe].filter(v=>v!=null);
@@ -2673,7 +2679,7 @@ function renderRolling(svgEl, W, narrow, perMonth){
   const pc=v=> v==null ? '\u2014' : Math.round(v)+'%';
   const sw=c=>`<i class="sw" style="background:${c}"></i>`, mut=s=>`<span style="color:#9aa6bd">${s}</span>`;
   const tipHtml=i=>{
-    let h=`<b>${miLabel(m0+i)}</b> ${mut('R12M'+(perMonth?' avg/m':''))}`+
+    let h=`<b>${pvMi(m0+i)?'Plan \u00b7 ':''}${miLabel(m0+i)}</b> ${mut('R12M'+(perMonth?' avg/m':''))}`+
       (deselected.size?` <span style="color:#e7c14a">${deselected.size} excluded</span>`:'');
     if(ov){
       const sideTxt=neg=>layers.filter(l=>l.neg===neg && l.r[i]).map(l=>`${sw(l.color)}${l.label} ${fmt(l.r[i])}`);
