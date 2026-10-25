@@ -40,6 +40,8 @@ status: `Personal Finance\finance-v2-plan\PLAN.md`.
   savings: fill = year outlook (actual Jan..this month + plan for the rest), white tick =
   target, dot = actual so far. "On / off track: X spare (or spend X less) by Dec, Y a month".
   Table per year to the plan end (`ytYears()`), rates green at or above target, red below.
+  Each year has its own safe / total target (`forecastj.tYears[YYYY] = {s, t}`, edited in its
+  row; grey dashed = the default), plus "Spare / cut" = safe income × (1 − target) − expenses.
 
 ### Live prices, gains and tax (phase 6, no Google Sheet)
 - **Shares held** box under the Net Worth tables: account, asset, ISIN, shares (decimals

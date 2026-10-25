@@ -825,6 +825,7 @@
   .ytmsg{margin:4px 0 8px; font-weight:600;} .ytmsg.ok{color:#5fc28a;} .ytmsg.over{color:#e58a8a;}
   .yttab td{text-align:right;} .yttab td:first-child{text-align:left;} .yttab small{color:var(--muted);}
   .yttab td.ok{color:#5fc28a; font-weight:700;} .yttab td.over{color:#e58a8a; font-weight:700;}
+  .yttab input.yti{width:44px; padding:2px 4px; text-align:right;} .yttab input.yti.dflt{color:var(--muted); border-style:dashed;}
   .ytchip{margin-left:6px; padding:0 6px; border-radius:8px; font-size:10.5px; font-weight:700;}
   .ytchip.ok{background:#1d3a2a; color:#5fc28a;} .ytchip.over{background:#3a1d22; color:#e58a8a;}
   @media (max-width:560px){ .ytm{grid-template-columns:80px 1fr;} .ytm .ytv{grid-column:1 / -1;} }
@@ -4359,10 +4360,13 @@ function fcNorm(o, nowYear){
      summed per month; replaces any test vests saved before it). rsuSeeded stays true after. */
   if(!o.rsuSeeded) rsu=FC_RSU_SEED.map(x=>({date:x[0], shares:x[1]}));
   rsu.sort((a,b)=> a.date<b.date?-1:a.date>b.date?1:0);
+  /* per-year savings targets {"2027":{s:0.22, t:0.3}}; a year without its own uses tSafe / tTot */
+  const tY={}; if(o.tYears && typeof o.tYears==='object') for(const y in o.tYears){ const v=o.tYears[y];
+    if(/^\d{4}$/.test(y) && v && typeof v==='object') tY[y]={s:n(v.s,0,1,null), t:n(v.t,0,1,null)}; }
   return {v:1, inflation:n(o.inflation,0,0.5,0.02), salary:n(o.salary,0,0.5,0), yield:n(o.yield,-0.5,0.5,0.08),
     endYear:Math.max(nowYear, Math.round(n(o.endYear,2000,2100,2030))),
     inflationFrom: ym(o.inflationFrom) ? o.inflationFrom : nowYear+'-01',
-    rsuNet:n(o.rsuNet,0,1,0.53), rsu, rsuSeeded:true, tSafe:n(o.tSafe,0,1,0.2), tTot:n(o.tTot,0,1,0)};
+    rsuNet:n(o.rsuNet,0,1,0.53), rsu, rsuSeeded:true, tSafe:n(o.tSafe,0,1,0.2), tTot:n(o.tTot,0,1,0), tYears:tY};
 }
 function fcGet(){
   if(FC) return FC;
@@ -4659,34 +4663,44 @@ function ytYears(real, plan, cm, y0, y1){
   }
   return out;
 }
+/* the targets of year y: its own (tYears) where set, else the defaults tSafe / tTot */
+function ytTarget(fc, y){ const o=(fc.tYears||{})[y]||{};
+  return {s: o.s!=null ? o.s : fc.tSafe, t: o.t!=null ? o.t : fc.tTot, own: o.s!=null || o.t!=null}; }
 function ytBoxHtml(fc, px){
   const cm=planStart(), y0=Math.floor(cm/12), real=(PV_REAL||{data:DATA}).data;
   const plan=planToData(PLAN.rows, fc, px, cm+1, planEnd()).data;
-  const Y=ytYears(real, plan, cm, y0, fc.endYear), cur=Y[0];
+  const Y=ytYears(real, plan, cm, y0, fc.endYear), cur=Y[0], T0=ytTarget(fc, y0);
   const pc=x=> x==null ? '\u2013' : String(Math.round(x*1000)/10).replace('.',',')+'%';
   const ok=(r,t)=> r==null || !t ? '' : r>=t ? 'ok' : 'over';
-  /* room left this year to still hit the safe target: safe income x (1 - target) - expenses */
-  const room=cur.safe*(1-fc.tSafe)-cur.exp, perM=cur.left ? room/cur.left : null;
-  const msg=!fc.tSafe ? '' : room>=0
-    ? `On track for ${pc(fc.tSafe)}: ${fmt(room)} spare by Dec${perM!=null?` (${fmt(perM)} a month)`:''}.`
-    : `Off track for ${pc(fc.tSafe)}: spend ${fmt(-room)} less by Dec${perM!=null?` (${fmt(-perM)} a month)`:''}.`;
-  const scale=Math.max(0.4, fc.tSafe+0.1, fc.tTot+0.1, ...[cur.safeRate, cur.totRate, cur.ytd&&cur.ytd.safeRate].filter(v=>v!=null).map(v=>v+0.05));
+  /* room left in a year to still hit its safe target: safe income x (1 - target) - expenses */
+  const roomOf=(e,t)=> e.safe*(1-t)-e.exp;
+  const room=roomOf(cur, T0.s), perM=cur.left ? room/cur.left : null;
+  const msg=!T0.s ? '' : room>=0
+    ? `On track for ${pc(T0.s)}: ${fmt(room)} spare by Dec${perM!=null?` (${fmt(perM)} a month)`:''}.`
+    : `Off track for ${pc(T0.s)}: spend ${fmt(-room)} less by Dec${perM!=null?` (${fmt(-perM)} a month)`:''}.`;
+  const scale=Math.max(0.4, T0.s+0.1, T0.t+0.1, ...[cur.safeRate, cur.totRate, cur.ytd&&cur.ytd.safeRate].filter(v=>v!=null).map(v=>v+0.05));
   const meter=(lab, ytd, out, t)=>{ const w=v=> (Math.max(0, Math.min(1, (v||0)/scale))*100).toFixed(1);
     return `<div class="ytm ${ok(out,t)}"><span class="ytl">${lab}</span>`+
       `<span class="ytbar" title="Bar = ${y0} outlook, white tick = target, dot = actual so far">`+
       `<i style="width:${w(out)}%"></i>${t?`<b style="left:${w(t)}%"></b>`:''}${ytd!=null?`<u style="left:${w(ytd)}%"></u>`:''}</span>`+
       `<span class="ytv">so far <b>${pc(ytd)}</b> \u00b7 outlook <b>${pc(out)}</b>${t?` \u00b7 target ${pc(t)}`:''}</span></div>`; };
-  const rows=Y.map(e=> `<tr><td>${e.y}${e.ytd?' <small>actual + plan</small>':' <small>plan</small>'}</td><td>${fmt(e.safe)}</td><td>${fmt(e.inc)}</td><td>${fmt(e.exp)}</td>`+
-    `<td class="${ok(e.safeRate,fc.tSafe)}">${pc(e.safeRate)}</td><td class="${ok(e.totRate,fc.tTot)}">${pc(e.totRate)}</td></tr>`).join('');
+  const tin=(f,y,v,own,lab)=>`<input class="fcin num yti${own?'':' dflt'}" data-fc="${f}" data-y="${y}" type="text" inputmode="decimal" value="${String(Math.round(v*1000)/10).replace('.',',')}" aria-label="${lab} ${y} %" title="${own?'Target for '+y:'Default target (type to set one for '+y+')'}">%`;
+  const rows=Y.map(e=>{ const T=ytTarget(fc, e.y), o=(fc.tYears||{})[e.y]||{}, r=T.s ? roomOf(e,T.s) : null, mo=e.left||12;
+    const rc=r==null ? '<td>\u2013</td>' : `<td class="${r>=0?'ok':'over'}" title="${r>=0?'Spare':'Spend less'}: ${fmt(Math.abs(r)/mo)} a month">${r>=0?'+':'\u2212'}${fmt(Math.abs(r))}</td>`;
+    return `<tr><td>${e.y}${e.ytd?' <small>actual + plan</small>':' <small>plan</small>'}</td><td>${fmt(e.safe)}</td><td>${fmt(e.exp)}</td>`+
+      `<td class="${ok(e.safeRate,T.s)}">${pc(e.safeRate)}</td><td>${tin('tys',e.y,T.s,o.s!=null,'Safe savings target')}</td>`+
+      `<td class="${ok(e.totRate,T.t)}">${pc(e.totRate)}</td><td>${tin('tyt',e.y,T.t,o.t!=null,'Total savings target')}</td>${rc}</tr>`; }).join('');
+  const nOn=Y.filter(e=>{ const T=ytTarget(fc,e.y); return T.s && e.safeRate!=null && e.safeRate>=T.s; }).length;
   const num=(f,v,lab)=>`<label>${lab} <input class="fcin num" data-fc="${f}" type="text" inputmode="decimal" value="${String(Math.round(v*1000)/10).replace('.',',')}" aria-label="${lab} %">%</label>`;
-  return `<details class="fcbox ytbox" id="ytbox"${ytOpen?' open':''}><summary>${y0} targets \u00b7 safe savings outlook ${pc(cur.safeRate)} vs ${pc(fc.tSafe)} `+
-    `<span class="ytchip ${ok(cur.safeRate,fc.tSafe)}">${cur.safeRate!=null && cur.safeRate>=fc.tSafe ? 'on track' : 'off track'}</span></summary>`+
-    `<div class="fcrow">${num('tSafe',fc.tSafe,'Safe savings target')}${num('tTot',fc.tTot,'Total savings target')}<span class="fcsub">0 = no target</span></div>`+
-    meter('Safe savings', cur.ytd && cur.ytd.safeRate, cur.safeRate, fc.tSafe)+
-    meter('Total savings', cur.ytd && cur.ytd.totRate, cur.totRate, fc.tTot)+
+  return `<details class="fcbox ytbox" id="ytbox"${ytOpen?' open':''}><summary>Savings targets \u00b7 ${y0} outlook ${pc(cur.safeRate)} vs ${pc(T0.s)} `+
+    `<span class="ytchip ${ok(cur.safeRate,T0.s)}">${cur.safeRate!=null && cur.safeRate>=T0.s ? 'on track' : 'off track'}</span> \u00b7 ${nOn} of ${Y.length} years on target</summary>`+
+    `<div class="fcrow">${num('tSafe',fc.tSafe,'Default safe target')}${num('tTot',fc.tTot,'Default total target')}<span class="fcsub">Used by every year without its own. 0 = no target.</span></div>`+
+    `<div class="fcsub"><b>${y0}</b></div>`+
+    meter('Safe savings', cur.ytd && cur.ytd.safeRate, cur.safeRate, T0.s)+
+    meter('Total savings', cur.ytd && cur.ytd.totRate, cur.totRate, T0.t)+
     (msg?`<div class="ytmsg ${room>=0?'ok':'over'}">${msg}</div>`:'')+
-    `<table class="fcvest yttab"><thead><tr><th>Year</th><th>Safe income</th><th>All income</th><th>Expenses</th><th>Safe %</th><th>Total %</th></tr></thead><tbody>${rows}</tbody></table>`+
-    `<div class="fcsub">Safe income = BASE + TFR + FOODTICKETS. Savings = income \u2212 all expenses (inflation included).</div></details>`;
+    `<table class="fcvest yttab"><thead><tr><th>Year</th><th>Safe income</th><th>Expenses</th><th>Safe %</th><th>Safe target</th><th>Total %</th><th>Total target</th><th title="Expenses you can still add (+) or must cut (\u2212) to hit the safe target">Spare / cut</th></tr></thead><tbody>${rows}</tbody></table>`+
+    `<div class="fcsub">Each year has its own targets: type in a row to change that year (grey = the default). Safe income = BASE + TFR + FOODTICKETS. Savings = income \u2212 all expenses (inflation included).</div></details>`;
 }
 let ytOpen=true; try{ ytOpen=localStorage.getItem('fs2-yt-open-v1')!=='0'; }catch(e){}
 /* actuals of month mi per planKey (euros, spend positive), with the same keys as planRef();
@@ -4851,6 +4865,10 @@ function fcField(t){
     const lim={inflation:[0,50], salary:[0,50], yield:[-50,50], rsuNet:[0,100], tSafe:[0,100], tTot:[0,100]}[f];
     if(!isFinite(num) || num<lim[0] || num>lim[1]) return bad(`Use a number from ${lim[0]} to ${lim[1]}.`);
     fc[f]=num/100;
+  } else if(f==='tys' || f==='tyt'){
+    if(!isFinite(num) || num<0 || num>100) return bad('Use a number from 0 to 100.');
+    const y=t.dataset.y, k=f==='tys'?'s':'t'; fc.tYears=fc.tYears||{}; fc.tYears[y]=Object.assign({s:null,t:null}, fc.tYears[y]);
+    fc.tYears[y][k]=num/100;
   } else if(f==='vdate'){ if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(t.value)) return bad('Pick a month.'); fc.rsu[+t.dataset.i].date=t.value; }
   else if(f==='vsh'){ if(!(num>0)) return bad('Shares must be more than 0. Use \u2715 to remove a vest.'); fc.rsu[+t.dataset.i].shares=num; }
   else return;
