@@ -4572,18 +4572,18 @@ function syncExclUI(){
    the browser quota, and still needed a full parse on every open; it is deleted.
    Nothing is transmitted anywhere except the existing public Google Sheets endpoint. */
 const SheetCache={
-  KEY:"fs2-cache-v2",
-  OLD_KEYS:["fs2-cache-v1"],
+  KEY:"fs2-cache-v3",            // v3 (25 Oct 2026): holdings carry `inflow` (gains cost base)
+  OLD_KEYS:["fs2-cache-v1","fs2-cache-v2"],
   available(){ try{ const k="__fs_probe__"; localStorage.setItem(k,"1"); localStorage.removeItem(k); return true; }catch(e){ return false; } },
   dropOld(){ try{ this.OLD_KEYS.forEach(k=>localStorage.removeItem(k)); }catch(e){} },
   read(){ try{ const raw=localStorage.getItem(this.KEY); if(!raw) return {ok:false};
       const entry=JSON.parse(raw);
-      if(!entry || entry.v!==2 || typeof entry.hash!=='string' || typeof entry.retrievedAt!=='number' ||
+      if(!entry || entry.v!==3 || typeof entry.hash!=='string' || typeof entry.retrievedAt!=='number' ||
          !Array.isArray(entry.data) || !entry.data.length || !Array.isArray(entry.hold) || !entry.meta) return {ok:false};
       return {ok:true, entry}; }catch(e){ return {ok:false}; } },
   /* snapshot of what is loaded right now (call after applyData / applySnapshot) */
   /* bump KEY (and v) whenever aggregate() changes the shape or meaning of what is stored */
-  write(hash,retrievedAt){ try{ localStorage.setItem(this.KEY, JSON.stringify({v:2, hash, retrievedAt,
+  write(hash,retrievedAt){ try{ localStorage.setItem(this.KEY, JSON.stringify({v:3, hash, retrievedAt,
       data:DATA, detail:DETAIL, hold:NWHOLD, meta:META})); return true; }catch(e){ return false; } },
   differs(entry,hash){ return !entry || entry.hash!==hash; }
 };
@@ -4949,9 +4949,10 @@ async function loadLive(){
    tax = TAX_RATE x the positive all-time gains, holding by holding. */
 function nwGains(holds, liveHold, nowMi, rate){
   const yMi=Math.floor(nowMi/12)*12;
-  const T={m:[0,0], y:[0,0], a:[0,0]}; let tax=0, n=0;
+  const T={m:[0,0], y:[0,0], a:[0,0]}; let tax=0, n=0, bad=false;
   (holds||[]).forEach(h=>{
     if(h.vary!=='VARIABLE') return;
+    if(!h.inflow){ bad=true; return; }   // a snapshot without the cost base: show no gains, never wrong ones
     let bal=0, balM=0, balY=0, inv=0, invM=0, invY=0;
     for(const k in h.flows){ const v=h.flows[k]; bal+=v; if(+k<nowMi) balM+=v; if(+k<yMi) balY+=v; }
     for(const k in (h.inflow||{})){ const v=h.inflow[k]; inv+=v; if(+k>=nowMi) invM+=v; if(+k>=yMi) invY+=v; }
@@ -4963,6 +4964,7 @@ function nwGains(holds, liveHold, nowMi, rate){
     if(gA>0) tax+=gA*rate;
   });
   const pc=(g,b)=> b>0.5 ? g/b : null;
+  if(bad) n=0;
   return {n, m:[T.m[0],pc(T.m[0],T.m[1])], y:[T.y[0],pc(T.y[0],T.y[1])], a:[T.a[0],pc(T.a[0],T.a[1])], tax};
 }
 /* the "Shares held" box under the Net Worth table (edit, add, remove, save) */
