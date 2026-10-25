@@ -35,6 +35,11 @@ status: `Personal Finance\finance-v2-plan\PLAN.md`.
   per row, group and total (`planActual()`, real data only). Bar = actual / plan, white tick =
   today's pace; expenses green under pace, amber past it, red over plan; income blue.
   Hide / show button in the tools row (`fs2-plan-month-v1`).
+- Plan page **"2026 targets"** box (top): safe savings target (20 % default) and total
+  savings target (0 = none), saved as `forecastj.tSafe / tTot`. Bars for safe and total
+  savings: fill = year outlook (actual Jan..this month + plan for the rest), white tick =
+  target, dot = actual so far. "On / off track: X spare (or spend X less) by Dec, Y a month".
+  Table per year to the plan end (`ytYears()`), rates green at or above target, red below.
 
 ### Live prices, gains and tax (phase 6, no Google Sheet)
 - **Shares held** box under the Net Worth tables: account, asset, ISIN, shares (decimals

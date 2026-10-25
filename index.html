@@ -814,6 +814,20 @@
   .plan tr.ro td{color:var(--muted); font-style:italic;}
   .plan tr.ro td.n small.ro{display:block; font-size:10px; font-style:normal; color:var(--muted);}
   .fcbox{margin:0 10px 10px; padding:6px 10px; border:1px solid var(--grid); border-radius:8px; font-size:12px;}
+  /* Year targets box */
+  .ytm{display:grid; grid-template-columns:96px minmax(120px,1fr) auto; align-items:center; gap:10px; margin:7px 0;}
+  .ytm .ytl{color:var(--muted);} .ytm .ytv{color:var(--muted); font-size:11.5px;} .ytm .ytv b{color:var(--ink);}
+  .ytbar{position:relative; height:8px; background:#243049; border-radius:4px;}
+  .ytbar i{position:absolute; left:0; top:0; bottom:0; border-radius:4px; background:#5fa8e8;}
+  .ytm.ok .ytbar i{background:#5fc28a;} .ytm.over .ytbar i{background:#e58a8a;}
+  .ytbar b{position:absolute; top:-3px; bottom:-3px; width:2px; margin-left:-1px; background:#e7ecf5;}
+  .ytbar u{position:absolute; top:1px; width:6px; height:6px; margin-left:-3px; border-radius:50%; background:#0f1420; border:1px solid #e7ecf5; text-decoration:none;}
+  .ytmsg{margin:4px 0 8px; font-weight:600;} .ytmsg.ok{color:#5fc28a;} .ytmsg.over{color:#e58a8a;}
+  .yttab td{text-align:right;} .yttab td:first-child{text-align:left;} .yttab small{color:var(--muted);}
+  .yttab td.ok{color:#5fc28a; font-weight:700;} .yttab td.over{color:#e58a8a; font-weight:700;}
+  .ytchip{margin-left:6px; padding:0 6px; border-radius:8px; font-size:10.5px; font-weight:700;}
+  .ytchip.ok{background:#1d3a2a; color:#5fc28a;} .ytchip.over{background:#3a1d22; color:#e58a8a;}
+  @media (max-width:560px){ .ytm{grid-template-columns:80px 1fr;} .ytm .ytv{grid-column:1 / -1;} }
   .fcbox summary{cursor:pointer; color:var(--muted); font-size:11.5px; padding:2px 0;}
   .fcbox[open] summary{color:var(--ink); margin-bottom:6px;}
   .fcrow{display:flex; align-items:center; gap:8px 14px; flex-wrap:wrap; margin:6px 0;}
@@ -4348,7 +4362,7 @@ function fcNorm(o, nowYear){
   return {v:1, inflation:n(o.inflation,0,0.5,0.02), salary:n(o.salary,0,0.5,0), yield:n(o.yield,-0.5,0.5,0.08),
     endYear:Math.max(nowYear, Math.round(n(o.endYear,2000,2100,2030))),
     inflationFrom: ym(o.inflationFrom) ? o.inflationFrom : nowYear+'-01',
-    rsuNet:n(o.rsuNet,0,1,0.53), rsu, rsuSeeded:true};
+    rsuNet:n(o.rsuNet,0,1,0.53), rsu, rsuSeeded:true, tSafe:n(o.tSafe,0,1,0.2), tTot:n(o.tTot,0,1,0)};
 }
 function fcGet(){
   if(FC) return FC;
@@ -4620,6 +4634,61 @@ function pvSet(on){
   PV_ON=!!on; try{ localStorage.setItem(PV_KEY, PV_ON?'1':'0'); }catch(e){}
   if(pvRefresh()) renderAll();
 }
+/* ---- Year targets (25 Oct 2026) ----------------------------------------------------
+   Savings-rate targets in Forecast settings: tSafe (safe savings = safe income BASE + TFR +
+   FOODTICKETS minus ALL expenses, over safe income; 20 % default) and tTot (savings over
+   total income; 0 = no target). Per year: the current year = actual Jan..this month (real
+   data) + plan for the months left; later years = plan only. */
+/* pure: DATA-shaped rows -> {inc, safe, exp} summed over from..to (exp positive) */
+function ytSums(rows, from, to){
+  const o={inc:0, safe:0, exp:0};
+  rows.forEach(([mi,k,g,leaf,v])=>{ if(mi<from || mi>to) return;
+    if(k==='I'){ o.inc+=v; if(CF_SAFE.has(leaf)) o.safe+=v; } else o.exp-=v; });
+  return o;
+}
+/* pure: one entry per year y0..y1: {y, inc, safe, exp, safeRate, totRate, ytd?, left}
+   ytd = the actual-only part of the current year (Jan..cm); left = months after cm */
+function ytYears(real, plan, cm, y0, y1){
+  const rate=(s,e)=> s>0 ? (s-e)/s : null, out=[];
+  for(let y=y0; y<=y1; y++){
+    const a=y*12, b=y*12+11, A=ytSums(real, a, Math.min(b, cm)), P=ytSums(plan, Math.max(a, cm+1), b);
+    const inc=A.inc+P.inc, safe=A.safe+P.safe, exp=A.exp+P.exp;
+    const e={y, inc, safe, exp, safeRate:rate(safe,exp), totRate:rate(inc,exp), left:Math.max(0, b-Math.max(cm, a-1))};
+    if(cm>=a && cm<=b) e.ytd={inc:A.inc, safe:A.safe, exp:A.exp, safeRate:rate(A.safe,A.exp), totRate:rate(A.inc,A.exp)};
+    out.push(e);
+  }
+  return out;
+}
+function ytBoxHtml(fc, px){
+  const cm=planStart(), y0=Math.floor(cm/12), real=(PV_REAL||{data:DATA}).data;
+  const plan=planToData(PLAN.rows, fc, px, cm+1, planEnd()).data;
+  const Y=ytYears(real, plan, cm, y0, fc.endYear), cur=Y[0];
+  const pc=x=> x==null ? '\u2013' : String(Math.round(x*1000)/10).replace('.',',')+'%';
+  const ok=(r,t)=> r==null || !t ? '' : r>=t ? 'ok' : 'over';
+  /* room left this year to still hit the safe target: safe income x (1 - target) - expenses */
+  const room=cur.safe*(1-fc.tSafe)-cur.exp, perM=cur.left ? room/cur.left : null;
+  const msg=!fc.tSafe ? '' : room>=0
+    ? `On track for ${pc(fc.tSafe)}: ${fmt(room)} spare by Dec${perM!=null?` (${fmt(perM)} a month)`:''}.`
+    : `Off track for ${pc(fc.tSafe)}: spend ${fmt(-room)} less by Dec${perM!=null?` (${fmt(-perM)} a month)`:''}.`;
+  const scale=Math.max(0.4, fc.tSafe+0.1, fc.tTot+0.1, ...[cur.safeRate, cur.totRate, cur.ytd&&cur.ytd.safeRate].filter(v=>v!=null).map(v=>v+0.05));
+  const meter=(lab, ytd, out, t)=>{ const w=v=> (Math.max(0, Math.min(1, (v||0)/scale))*100).toFixed(1);
+    return `<div class="ytm ${ok(out,t)}"><span class="ytl">${lab}</span>`+
+      `<span class="ytbar" title="Bar = ${y0} outlook, white tick = target, dot = actual so far">`+
+      `<i style="width:${w(out)}%"></i>${t?`<b style="left:${w(t)}%"></b>`:''}${ytd!=null?`<u style="left:${w(ytd)}%"></u>`:''}</span>`+
+      `<span class="ytv">so far <b>${pc(ytd)}</b> \u00b7 outlook <b>${pc(out)}</b>${t?` \u00b7 target ${pc(t)}`:''}</span></div>`; };
+  const rows=Y.map(e=> `<tr><td>${e.y}${e.ytd?' <small>actual + plan</small>':' <small>plan</small>'}</td><td>${fmt(e.safe)}</td><td>${fmt(e.inc)}</td><td>${fmt(e.exp)}</td>`+
+    `<td class="${ok(e.safeRate,fc.tSafe)}">${pc(e.safeRate)}</td><td class="${ok(e.totRate,fc.tTot)}">${pc(e.totRate)}</td></tr>`).join('');
+  const num=(f,v,lab)=>`<label>${lab} <input class="fcin num" data-fc="${f}" type="text" inputmode="decimal" value="${String(Math.round(v*1000)/10).replace('.',',')}" aria-label="${lab} %">%</label>`;
+  return `<details class="fcbox ytbox" id="ytbox"${ytOpen?' open':''}><summary>${y0} targets \u00b7 safe savings outlook ${pc(cur.safeRate)} vs ${pc(fc.tSafe)} `+
+    `<span class="ytchip ${ok(cur.safeRate,fc.tSafe)}">${cur.safeRate!=null && cur.safeRate>=fc.tSafe ? 'on track' : 'off track'}</span></summary>`+
+    `<div class="fcrow">${num('tSafe',fc.tSafe,'Safe savings target')}${num('tTot',fc.tTot,'Total savings target')}<span class="fcsub">0 = no target</span></div>`+
+    meter('Safe savings', cur.ytd && cur.ytd.safeRate, cur.safeRate, fc.tSafe)+
+    meter('Total savings', cur.ytd && cur.ytd.totRate, cur.totRate, fc.tTot)+
+    (msg?`<div class="ytmsg ${room>=0?'ok':'over'}">${msg}</div>`:'')+
+    `<table class="fcvest yttab"><thead><tr><th>Year</th><th>Safe income</th><th>All income</th><th>Expenses</th><th>Safe %</th><th>Total %</th></tr></thead><tbody>${rows}</tbody></table>`+
+    `<div class="fcsub">Safe income = BASE + TFR + FOODTICKETS. Savings = income \u2212 all expenses (inflation included).</div></details>`;
+}
+let ytOpen=true; try{ ytOpen=localStorage.getItem('fs2-yt-open-v1')!=='0'; }catch(e){}
 /* actuals of month mi per planKey (euros, spend positive), with the same keys as planRef();
    read from the real data (PV_REAL), so the plan view never feeds the plan back to itself */
 function planActual(mi){
@@ -4745,7 +4814,7 @@ function renderPlan(force){
   const msg=planNote ? `<b>${planEsc(planNote)}</b>` : fcErr ? `<b>${planEsc(fcErr)}</b>` :
     `Saved${at?' \u00b7 '+at.toLocaleDateString()+' '+at.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):''}. Export keeps a copy.`;
   const sc=wrap.querySelector('.planscroll'), sl=sc?sc.scrollLeft:0, st=sc?sc.scrollTop:0;
-  wrap.innerHTML=fcBoxHtml(fc, px, ms)+`<div class="plantools"><span class="planmsg" role="status">${msg}</span>`+
+  wrap.innerHTML=ytBoxHtml(fc, px)+fcBoxHtml(fc, px, ms)+`<div class="plantools"><span class="planmsg" role="status">${msg}</span>`+
     `<button type="button" data-pa="years">${anyOpen?'Fold all years':'Show all months'}</button>`+
     `<button type="button" data-pa="actual" aria-pressed="${planAmOn}" title="Show or hide this month's actual vs plan">${planAmOn?'Hide':'Show'} ${MONL} actual</button>`+
     `<button type="button" data-pa="undo"${planUndo.length?'':' disabled'}>Undo</button>`+
@@ -4778,8 +4847,8 @@ function fcBoxHtml(fc, px, ms){
 function fcField(t){
   const fc=JSON.parse(JSON.stringify(fcGet())), f=t.dataset.fc, num=parseFloat(String(t.value).replace(',','.').replace('%','').trim());
   const bad=m=>{ planNote=m; renderPlan(true); };
-  if(f==='inflation' || f==='salary' || f==='yield' || f==='rsuNet'){
-    const lim={inflation:[0,50], salary:[0,50], yield:[-50,50], rsuNet:[0,100]}[f];
+  if(f==='inflation' || f==='salary' || f==='yield' || f==='rsuNet' || f==='tSafe' || f==='tTot'){
+    const lim={inflation:[0,50], salary:[0,50], yield:[-50,50], rsuNet:[0,100], tSafe:[0,100], tTot:[0,100]}[f];
     if(!isFinite(num) || num<lim[0] || num>lim[1]) return bad(`Use a number from ${lim[0]} to ${lim[1]}.`);
     fc[f]=num/100;
   } else if(f==='vdate'){ if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(t.value)) return bad('Pick a month.'); fc.rsu[+t.dataset.i].date=t.value; }
@@ -4904,7 +4973,8 @@ function planInit(){
     else if(ds.pa==='restart'){ if(!window.confirm('Fill the whole plan again with your last-12-month averages?\nUndo brings your plan back.')) return;
       planPush(); PLAN.rows=planSeed().rows; PLAN.incSeeded=true; planNote='Filled again with your last-12-month averages.'; planSave(); renderPlan(true); }
   });
-  wrap.addEventListener('toggle',e=>{ if(e.target && e.target.id==='fcbox') fcOpen=e.target.open; }, true);
+  wrap.addEventListener('toggle',e=>{ if(e.target && e.target.id==='fcbox') fcOpen=e.target.open;
+    if(e.target && e.target.id==='ytbox'){ ytOpen=e.target.open; try{ localStorage.setItem('fs2-yt-open-v1', ytOpen?'1':'0'); }catch(_){} } }, true);
   wrap.addEventListener('focusin',e=>{ const t=e.target; if(!t.classList || !t.classList.contains('pc')) return;
     planFocus={r:+t.dataset.r, mi:t.dataset.mi!=null ? +t.dataset.mi : null}; t.dataset.o=t.value; try{ t.select(); }catch(x){} });
   wrap.addEventListener('change',e=>{
