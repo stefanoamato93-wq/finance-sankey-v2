@@ -868,6 +868,8 @@
   .ficard .k{color:var(--muted); font-size:11px;} .ficard .v{font-size:18px; font-weight:700; font-variant-numeric:tabular-nums;}
   .ficard .v.ok{color:#5fc28a;} .ficard .v.warn{color:#e7c14a;} .ficard .v.bad{color:#e58a8a;}
   .fiheat canvas{display:block; width:100%; height:200px; image-rendering:pixelated; cursor:pointer; border-radius:4px;}
+  .fiscroll{overflow:auto; max-height:62vh;} .fiscroll thead th{position:sticky; top:0; background:var(--panel);}
+  .fitools select{background:var(--bg); color:var(--ink); border:1px solid var(--grid); border-radius:6px; padding:4px 6px; font:inherit; max-width:100%;}
   .fiheat .leg{display:flex; justify-content:space-between; color:var(--muted); font-size:11px; margin-top:4px;}
   .fiparams details{border-top:1px solid var(--grid); padding:6px 0;} .fiparams details:first-of-type{border-top:0;}
   .fiparams summary{cursor:pointer; font-weight:600; padding:2px 0;}
@@ -5684,7 +5686,7 @@ function initControlsOnce(){
    cash >= 0 is invested (cost base grows), cash < 0 is sold grossed up for the tax on the gain
    share; nw <= 0 = broke, it stays 0. Shown values = nw minus the tax on its open gains. */
 const FIRE_KEY='fs2-fire-v1', FIRE_VIEW_KEY='fs2-fire-view-v1';
-const FIRE_DEF={v:1, birth:'1993-01', fireAge:45, endAge:100, mean:0.1005, sd:0.2, sdBy:[], clamp:[-0.8,0.8], dist:'normal', n:100, seed:12345, stress:false, incGrowth:0.02, passion:0, passionEnd:0, pensionAge:72, pensionMinYears:20, pension:2964, workFrom:2018, expAfterFire:1, oneOffs:[], tax:0.26, target:0.9, swr:0.04, nwOverride:null, gainOverride:null};
+const FIRE_DEF={v:2, birth:'1993-01', fireAge:45, endAge:100, mean:0.1005, sd:0.2, sdBy:[], clamp:[-0.8,0.8], dist:'normal', n:100, seed:12345, stress:false, incGrowth:0.02, passion:0, passionEnd:0, pensionAge:72, pensionPct:0.6, salaryOverride:null, expAfterFire:1, oneOffs:[], tax:0.26, target:0.9, gainOverride:null};
 /* pure: any stored object -> valid FIRE settings (bad or missing fields take the defaults) */
 function fireNorm(o){
   o=(o && typeof o==='object') ? o : {}; const D=FIRE_DEF;
@@ -5698,14 +5700,14 @@ function fireNorm(o){
   const cl=Array.isArray(o.clamp) ? o.clamp : [];
   const oneOffs=(Array.isArray(o.oneOffs)?o.oneOffs:[]).map(x=>({year:int(x&&x.year,2000,2200,0), amount:n(x&&x.amount,-1e8,1e8,0)}))
     .filter(x=>x.year && x.amount).sort((a,b)=>a.year-b.year).slice(0,50);
-  return {v:1, birth, fireAge, endAge, mean:n(o.mean,-0.5,0.5,D.mean), sd:n(o.sd,0,1,D.sd), sdBy,
+  /* always 100 scenarios (one can be picked and followed year by year) */
+  return {v:2, birth, fireAge, endAge, mean:n(o.mean,-0.5,0.5,D.mean), sd:n(o.sd,0,1,D.sd), sdBy,
     clamp:[n(cl[0],-0.99,0,D.clamp[0]), n(cl[1],0,5,D.clamp[1])], dist:o.dist==='t' ? 't' : 'normal',
-    n:[100,500,1000].includes(Number(o.n)) ? Number(o.n) : D.n, seed:int(o.seed,1,2147483646,D.seed), stress:o.stress===true,
+    n:D.n, seed:int(o.seed,1,2147483646,D.seed), stress:o.stress===true,
     incGrowth:n(o.incGrowth,-0.2,0.5,D.incGrowth), passion:n(o.passion,0,1e6,0), passionEnd:int(o.passionEnd,0,120,0),
-    pensionAge:int(o.pensionAge,40,90,D.pensionAge), pensionMinYears:int(o.pensionMinYears,0,50,D.pensionMinYears),
-    pension:n(o.pension,0,1e5,D.pension), workFrom:int(o.workFrom,1950,2100,D.workFrom), expAfterFire:n(o.expAfterFire,0,3,1),
-    oneOffs, tax:n(o.tax,0,0.6,D.tax), target:n(o.target,0.01,1,D.target), swr:n(o.swr,0.005,0.2,D.swr),
-    nwOverride:n(o.nwOverride,-1e9,1e9,null), gainOverride:n(o.gainOverride,0,0.99,null)};
+    pensionAge:int(o.pensionAge,40,90,D.pensionAge), pensionPct:n(o.pensionPct,0,2,D.pensionPct),
+    salaryOverride:n(o.salaryOverride,0,1e6,null), expAfterFire:n(o.expAfterFire,0,3,1),
+    oneOffs, tax:n(o.tax,0,0.6,D.tax), target:n(o.target,0.01,1,D.target), gainOverride:n(o.gainOverride,0,0.99,null)};
 }
 let FIRE=null, fireErr='', fireLoading=false;
 function fireGet(){
@@ -5788,14 +5790,14 @@ function fireStats(run, inp){
      and expenses x (1+inflation) each new year;
    - from fireMi: no work income, expenses x "spending after FIRE", passion income (today's EUR,
      grows with inflation, until its end age);
-   - state pension from the pension age when years worked (fireMi year - workFrom) >= the minimum,
-     typed in EUR of its first year, then grows with inflation;
+   - state pension from the pension age, worked or not: pensionPct x today's monthly salary (BASE in the
+     plan's first month, or salaryOverride), grown with inflation every year from today;
    - one-offs: amount in January of their year (positive = spend, negative = money in). */
 function fireInputs(P, B, fireMi){
   const m0=B.m0, birthMi=ymMi(P.birth), endMi=birthMi+12*P.endAge-1, n=Math.max(1, endMi-m0+1), infl=B.infl||0;
   if(fireMi==null) fireMi=birthMi+12*P.fireAge;
   const fireIdx=Math.max(0, fireMi-m0), pensionMi=birthMi+12*P.pensionAge;
-  const pensionOn=P.pension>0 && fireMi/12-P.workFrom>=P.pensionMinYears;
+  const sal=P.salaryOverride!=null ? P.salaryOverride : (B.salary||0), pension0=P.pensionPct*sal, pensionOn=pension0>0;
   const plan=B.plan||[], pe=m0+plan.length-1, yr=mi=>Math.floor(mi/12);
   let bi=0, be=0, bn=0;
   for(let k=0;k<plan.length;k++) if(yr(m0+k)===yr(pe)){ bi+=plan[k].inc; be+=plan[k].exp; bn++; }
@@ -5808,7 +5810,7 @@ function fireInputs(P, B, fireMi){
     else { const k=yr(mi)-yr(pe); a=bi*Math.pow(1+P.incGrowth, k); e=be*Math.pow(1+infl, k); }
     if(mi>=fireMi){ a=0; e*=P.expAfterFire;
       if(P.passion && (!P.passionEnd || mi<birthMi+12*P.passionEnd)) a=P.passion*Math.pow(1+infl, yr(mi)-yr(m0)); }
-    const p=pensionOn && mi>=pensionMi ? P.pension*Math.pow(1+infl, yr(mi)-yr(pensionMi)) : 0;
+    const p=pensionOn && mi>=pensionMi ? pension0*Math.pow(1+infl, yr(mi)-yr(m0)) : 0;
     e+=one[mi]||0;
     inc[i]=a; exp[i]=e; pen[i]=p; cash[i]=a+p-e;
   }
@@ -5819,8 +5821,8 @@ function fireInputs(P, B, fireMi){
     sdBy[k]=r ? r.sd : P.sd; meanBy[k]=r && r.mean!=null ? r.mean : P.mean;
   }
   const g0=P.gainOverride!=null ? P.gainOverride : (B.share||0);
-  const nw0=P.nwOverride!=null ? P.nwOverride/(1-P.tax*g0) : (B.gross||0);
-  return {m0, n, birthMi, endAge:P.endAge, fireMi, fireIdx, pensionMi, pensionOn, planEndIdx:plan.length-1,
+  const nw0=B.gross||0;
+  return {m0, n, birthMi, endAge:P.endAge, fireMi, fireIdx, pensionMi, pensionOn, pension0, planEndIdx:plan.length-1,
     cash, inc, exp, pen, years, meanBy, sdBy, nw0, basis0:nw0*(1-g0), g0, tax:P.tax, infl};
 }
 /* pure: everything for one parameter set; avg = the same engine with every year at the mean */
@@ -5847,55 +5849,59 @@ function fireSolveAge(P, B){
   while(lo<hi){ const m=(lo+hi)>>1; if(ok(m)) hi=m; else lo=m+1; }
   return lo;
 }
-/* pure: EUR short form: € 2,1M / € 450K / € 9.500 */
+/* pure: EUR short form: € 1,2B / € 2,1M / € 450K / € 9.500 */
 function fireMoney(v){
   const a=Math.abs(v), s=v<0 ? '\u2212' : '';
   if(!isFinite(a)) return '\u2013';
+  if(a>=1e9) return s+'\u20ac '+(Math.round(a/1e8)/10).toFixed(1).replace('.',',')+'B';
   if(a>=1e6) return s+'\u20ac '+(Math.round(a/1e5)/10).toFixed(1).replace('.',',')+'M';
   if(a>=1e4) return s+'\u20ac '+Math.round(a/1e3)+'K';
   return s+'\u20ac '+String(Math.round(a)).replace(/\B(?=(\d{3})+(?!\d))/g,'.');
 }
 const firePc=(v,d)=> v==null || !isFinite(v) ? '\u2013' : String(Math.round(v*100*Math.pow(10,d||0))/Math.pow(10,d||0)).replace('.',',')+' %';
-function fireNice(v){ if(!(v>0)) return 1; const p=Math.pow(10, Math.floor(Math.log10(v))), x=v/p;
-  return (x<=1?1:x<=2?2:x<=2.5?2.5:x<=5?5:10)*p; }
-const FIRE_G={W:900, H:300, L:56, R:10, T:16, B:24};
-/* pure: deflator of month index i (Real EUR = today's money), 1 when nominal */
+const FIRE_G={W:900, H:340, L:62, R:10, T:16, B:26};
+/* pure: deflator of month index i (Real EUR = today's money), 1 when nominal; i < 0 = the past */
 const fireDef=(inp, real, i)=> real ? Math.pow(1+inp.infl, (i+1)/12) : 1;
-/* pure: the fan chart as an SVG string. o = {real, all, hl (scenario index or null)} */
-function fireChartSvg(res, o){
+/* pure: scenario colour (golden-angle hues, so neighbours differ) */
+const fireCol=s=> `hsl(${Math.round((s*137.508)%360)},62%,58%)`;
+/* pure: the chart as an SVG string, log scale like the sheet: the past net worth (B.hist, white),
+   every scenario (one colour each), the median (thick green), the Avg line (dashed), the picked
+   scenario (thick yellow). o = {real, hl}. Values at or below EUR 10K sit on the bottom line. */
+function fireChartSvg(res, o, hist){
   const {inp, st, run, avg}=res, n=inp.n, G=FIRE_G, w=G.W-G.L-G.R, h=G.H-G.T-G.B;
-  const step=Math.max(1, Math.round(n/240)), idx=[]; for(let i=0;i<n;i+=step) idx.push(i); if(idx[idx.length-1]!==n-1) idx.push(n-1);
+  hist=hist||[]; const i0=-hist.length, span=Math.max(1, n-1-i0);
   const d=i=> fireDef(inp, o.real, i);
-  let top=0; idx.forEach(i=>{ top=Math.max(top, st.p75[i]/d(i), avg.nw[i]/d(i)); });
-  const yMax=fireNice(top*1.15 || 1);
-  const X=i=> (G.L + (n>1 ? i/(n-1) : 0)*w).toFixed(1), Yv=v=> (G.T + h - Math.max(0, Math.min(1.02, v/yMax))*h).toFixed(1);
-  const line=a=> idx.map((i,j)=>(j?'L':'M')+X(i)+' '+Yv(a(i)/d(i))).join('');
-  const band=(lo,hi)=> idx.map((i,j)=>(j?'L':'M')+X(i)+' '+Yv(hi[i]/d(i))).join('')+
-    idx.slice().reverse().map(i=>'L'+X(i)+' '+Yv(lo[i]/d(i))).join('')+'Z';
-  const ageOf=i=> (inp.m0+i-inp.birthMi)/12;
+  const step=Math.max(1, Math.round(n/160)), idx=[]; for(let i=0;i<n;i+=step) idx.push(i); if(idx[idx.length-1]!==n-1) idx.push(n-1);
+  let top=1e5; idx.forEach(i=>{ for(let s=0;s<run.nScen;s++) top=Math.max(top, run.nw[s*n+i]/d(i)); top=Math.max(top, avg.nw[i]/d(i)); });
+  hist.forEach((v,j)=>{ top=Math.max(top, v/d(j+i0)); });
+  const lo=4, hi=Math.min(12, Math.ceil(Math.log10(top)));
+  const X=i=> (G.L+(i-i0)/span*w).toFixed(1);
+  const Y=v=> (G.T+h-(v>1e4 ? Math.min(1.01, (Math.log10(v)-lo)/(hi-lo)) : 0)*h).toFixed(1);
+  const path=(f, pts)=> pts.map((i,j)=>(j?'L':'M')+X(i)+' '+Y(f(i)/d(i))).join('');
   let g='';
-  for(let k=0;k<=4;k++){ const v=yMax*k/4, y=Yv(v); g+=`<line x1="${G.L}" x2="${G.W-G.R}" y1="${y}" y2="${y}" stroke="#243049" stroke-width="1"/>`+
-    `<text x="${G.L-6}" y="${(+y+4).toFixed(1)}" text-anchor="end">${fireMoney(v)}</text>`; }
-  for(let a=Math.ceil(ageOf(0)/10)*10; a<=inp.endAge; a+=10){ const i=inp.birthMi+12*a-inp.m0; if(i<0 || i>n-1) continue;
-    g+=`<text x="${X(i)}" y="${G.H-6}" text-anchor="middle">${a}</text>`; }
+  for(let e=lo;e<=hi;e++){ const y=Y(Math.pow(10,e)*1.0000001); g+=`<line x1="${G.L}" x2="${G.W-G.R}" y1="${y}" y2="${y}" stroke="#243049"/>`+
+    `<text x="${G.L-6}" y="${(+y+4).toFixed(1)}" text-anchor="end">${e===lo ? '\u2264 ' : ''}${fireMoney(Math.pow(10,e))}</text>`; }
+  const y0=Math.floor((inp.m0+i0)/12), y1=Math.floor((inp.m0+n-1)/12);
+  for(let y=Math.ceil(y0/10)*10; y<=y1; y+=10){ const i=y*12-inp.m0; if(i<i0) continue;
+    g+=`<line x1="${X(i)}" x2="${X(i)}" y1="${G.T}" y2="${G.T+h}" stroke="#1b2438"/><text x="${X(i)}" y="${G.H-8}" text-anchor="middle">${y} (${y-Math.floor(inp.birthMi/12)})</text>`; }
   let lines='';
-  if(o.all){ const N=Math.min(run.nScen, 100), pts=idx.filter((_, j)=>j%2===0 || j===idx.length-1);
-    for(let s=0;s<N;s++){ const off=s*n; lines+=`<path d="${pts.map((i,j)=>(j?'L':'M')+X(i)+' '+Yv(run.nw[off+i]/d(i))).join('')}" fill="none" stroke="#9aa6bd" stroke-opacity=".18" stroke-width="1"/>`; } }
-  const hl=o.hl!=null && o.hl<run.nScen ? `<path d="${line(i=>run.nw[o.hl*n+i])}" fill="none" stroke="#e7c14a" stroke-width="2"/>` : '';
-  const mark=(i,lab,col)=> i<0 || i>n-1 ? '' : `<line x1="${X(i)}" x2="${X(i)}" y1="${G.T}" y2="${G.T+h}" stroke="${col}" stroke-dasharray="3 3" stroke-width="1"/>`+
+  for(let s=0;s<run.nScen;s++){ const off=s*n; let pts=idx;
+    if(run.broke[s]>=0){ const b=run.broke[s]; pts=idx.filter(i=>i<b).concat([b]); }
+    lines+=`<path d="${path(i=>run.nw[off+i], pts)}" fill="none" stroke="${fireCol(s)}" stroke-opacity=".5" stroke-width="1"/>`; }
+  const past=hist.length ? `<path d="${hist.map((v,j)=>(j?'L':'M')+X(j+i0)+' '+Y(v/d(j+i0))).join('')}L${X(0)} ${Y(run.nw[0]/d(0))}" fill="none" stroke="#e7ecf5" stroke-width="2.4"/>` : '';
+  const hl=o.hl!=null && o.hl<run.nScen ? `<path d="${path(i=>run.nw[o.hl*n+i], run.broke[o.hl]>=0 ? idx.filter(i=>i<run.broke[o.hl]).concat([run.broke[o.hl]]) : idx)}" fill="none" stroke="#e7c14a" stroke-width="3"/>` : '';
+  const mark=(i,lab,col)=> i<0 || i>n-1 ? '' : `<line x1="${X(i)}" x2="${X(i)}" y1="${G.T}" y2="${G.T+h}" stroke="${col}" stroke-dasharray="3 3"/>`+
     `<text x="${(+X(i)+3).toFixed(1)}" y="${G.T-4}" style="fill:${col}">${lab}</text>`;
-  const marks=mark(inp.fireIdx, 'FIRE '+Math.floor(ageOf(inp.fireIdx)), '#e7c14a')+(inp.pensionOn ? mark(inp.pensionMi-inp.m0, 'Pension', '#5fa8e8') : '')+
-    (inp.planEndIdx>=0 && inp.planEndIdx<n-1 ? mark(inp.planEndIdx, 'Plan ends', '#9aa6bd') : '');
-  return `<svg viewBox="0 0 ${G.W} ${G.H}" role="img" aria-label="Net worth fan chart, ${run.nScen} scenarios">`+
-    `<defs><clipPath id="fiClip"><rect x="${G.L}" y="${G.T-2}" width="${w}" height="${h+2}"/></clipPath></defs>${g}`+
-    `<g clip-path="url(#fiClip)">${lines}<path d="${band(st.p10, st.p90)}" fill="#3aa86a" fill-opacity=".16"/>`+
-    `<path d="${band(st.p25, st.p75)}" fill="#3aa86a" fill-opacity=".3"/>`+
-    `<path d="${line(i=>st.p50[i])}" fill="none" stroke="#5fc28a" stroke-width="2"/>`+
-    `<path d="${line(i=>avg.nw[i])}" fill="none" stroke="#e7ecf5" stroke-width="1.4" stroke-dasharray="6 4"/>${hl}</g>${marks}`+
+  const ageOf=i=> Math.floor((inp.m0+i-inp.birthMi)/12);
+  const marks=mark(0,'Today','#e7ecf5')+mark(inp.fireIdx, 'FIRE '+ageOf(inp.fireIdx), '#e7c14a')+(inp.pensionOn ? mark(inp.pensionMi-inp.m0, 'Pension', '#5fa8e8') : '');
+  return `<svg viewBox="0 0 ${G.W} ${G.H}" role="img" aria-label="Net worth, log scale, ${run.nScen} scenarios">`+
+    `<defs><clipPath id="fiClip"><rect x="${G.L}" y="${G.T-2}" width="${w}" height="${h+4}"/></clipPath></defs>${g}`+
+    `<g clip-path="url(#fiClip)">${lines}${past}<path d="${path(i=>st.p50[i], idx)}" fill="none" stroke="#1f7a46" stroke-width="4"/>`+
+    `<path d="${path(i=>avg.nw[i], idx)}" fill="none" stroke="#e7ecf5" stroke-width="1.4" stroke-dasharray="6 4"/>${hl}</g>${marks}`+
     `<line id="fiCur" x1="0" x2="0" y1="${G.T}" y2="${G.T+h}" stroke="#e7ecf5" stroke-opacity=".6" visibility="hidden"/>`+
     `<rect id="fiOv" x="${G.L}" y="${G.T}" width="${w}" height="${h}" fill="transparent"/></svg>`;
 }
-/* pure: one row per scenario for the table and the heat strip */
+/* pure: one row per scenario for the picker and the table */
 function fireRows(res){
   const {inp, R, run, st}=res, n=inp.n, Y=inp.years, out=[];
   for(let s=0;s<run.nScen;s++){
@@ -5908,12 +5914,46 @@ function fireRows(res){
   }
   return out;
 }
-/* pure: scenario order for the heat strip: worst first (broke earliest, then lowest final) */
+/* pure: scenario order worst -> best (broke earliest first, then the lowest final value) */
 function fireHeatOrder(rows){
   return rows.slice().sort((a,b)=> (a.broke!=null)!==(b.broke!=null) ? (a.broke!=null ? -1 : 1)
     : a.broke!=null ? a.broke-b.broke : a.final-b.final).map(r=>r.s);
 }
-/* pure: the scenario table (sorted by k / dir, first 100 rows) */
+/* pure: one scenario year by year, the same steps as fireRun (so its year ends match run.nw).
+   Per year: start / end value (after the tax on open gains), return, growth, work income,
+   pension + passion, expenses, tax paid on sales, gain share of the net worth at the end. */
+function fireTrace(inp, R, s){
+  const n=inp.n, Y=inp.years, tax=inp.tax, out=[]; let v=inp.nw0, b=inp.basis0;
+  const shown=()=> v>0 ? v-tax*Math.max(0, v-b) : 0;
+  for(let k=0;k<Y;k++){
+    const r=R[s*Y+k], f=Math.pow(1+r, 1/12), a=k*12, z=Math.min(n, a+12);
+    const row={k, mi:inp.m0+a, last:z-1, ret:r, start:shown(), growth:0, work:0, other:0, exp:0, taxPaid:0, end:0, gain:0, broke:false};
+    for(let i=a;i<z;i++){
+      const gr=v*(f-1); v+=gr; row.growth+=gr;
+      if(i<inp.fireIdx) row.work+=inp.inc[i]; else row.other+=inp.inc[i];
+      row.other+=inp.pen[i]; row.exp+=inp.exp[i];
+      const c=inp.cash[i];
+      if(c>=0){ v+=c; b+=c; }
+      else { const g=v>0 ? Math.min(1, Math.max(0, 1-b/v)) : 0, need=-c/(1-tax*g); row.taxPaid+=need+c; b-=need*(1-g); v-=need; }
+      if(!(v>0)){ row.broke=true; row.last=i; v=0; break; }
+    }
+    row.end=shown(); row.gain=v>0 ? Math.min(1, Math.max(0, 1-b/v)) : 0;
+    out.push(row); if(row.broke) break;
+  }
+  return out;
+}
+/* pure: the year-by-year table of one scenario (money / deflator of each year's last month) */
+function fireTraceHtml(inp, rows, real){
+  const m=(v,r)=> fireMoney(v/fireDef(inp, real, r.last-0));
+  return `<div class="fiscroll"><table class="fitab"><thead><tr><th>Year</th><th>Age</th><th>Return</th><th>Start</th><th>Growth</th><th>Work income</th>`+
+    `<th>Pension + passion</th><th>Expenses</th><th>Tax on sales</th><th>End</th><th>Gain share</th></tr></thead><tbody>`+
+    rows.map(r=>{ const y=Math.floor(r.mi/12); return `<tr${r.broke ? ' class="hl"' : ''}><td>${y}</td><td>${Math.floor((r.mi-inp.birthMi)/12)}</td>`+
+      `<td class="${r.ret<0 ? 'bad' : ''}">${firePc(r.ret,1)}</td><td>${m(r.start,r)}</td><td class="${r.growth<0 ? 'bad' : ''}">${m(r.growth,r)}</td>`+
+      `<td>${m(r.work,r)}</td><td>${m(r.other,r)}</td><td>${m(-r.exp,r)}</td><td>${m(-r.taxPaid,r)}</td>`+
+      `<td class="${r.broke ? 'bad' : ''}">${r.broke ? 'broke' : m(r.end,r)}</td><td>${firePc(r.gain,0)}</td></tr>`; }).join('')+
+    `</tbody></table></div>`;
+}
+/* pure: the scenario table (sorted by k / dir) */
 function fireTableHtml(rows, sort, hl){
   const k=sort.k, dir=sort.dir, val=r=> k==='broke' ? (r.broke==null ? 1e9 : r.broke) : r[k];
   const list=rows.slice().sort((a,b)=> (val(a)-val(b))*dir).slice(0,100);
@@ -5921,46 +5961,51 @@ function fireTableHtml(rows, sort, hl){
   return `<table class="fitab"><thead><tr>${th('s','#')}${th('avg','Avg return')}${th('worst5','Worst 5 years')}${th('atFire','At FIRE')}${th('broke','Broke at')}${th('final','At the end')}</tr></thead><tbody>`+
     list.map(r=>`<tr data-s="${r.s}"${r.s===hl ? ' class="hl"' : ''}><td>${r.s+1}</td><td>${firePc(r.avg,1)}</td><td>${firePc(r.worst5,0)}</td>`+
       `<td>${fireMoney(r.atFire)}</td><td class="${r.broke!=null ? 'bad' : ''}">${r.broke!=null ? 'age '+Math.floor(r.broke) : 'never'}</td><td>${fireMoney(r.final)}</td></tr>`).join('')+
-    `</tbody></table>`+(rows.length>100 ? `<div class="fimsg">First 100 of ${rows.length} (sorted). Values in nominal EUR.</div>` : `<div class="fimsg">Values in nominal EUR.</div>`);
+    `</tbody></table><div class="fimsg">Values in nominal EUR.</div>`;
 }
-/* live inputs: next month, the forecast's monthly incomes / expenses to the plan end, the net
-   worth of the Net Worth page (NW_BASE) plus the tax on its gains (= value before tax) */
+/* live inputs, all from Firebase data (never the sheet): next month, the forecast's monthly
+   incomes / expenses to the plan end, today's salary (BASE rows of the plan's first month), the
+   Net Worth page's value (NW_BASE) plus the tax on its gains (= value before tax), its gain
+   share, and the past month-end net worth (hist) for the chart */
 function fireBase(){
   if(NW_BASE==null || !isFinite(NW_BASE)) return null;
   const m0=planStart()+1, fc=fcGet();
-  let plan=[];
-  if(planEnsure()) plan=fcForecast(0, m0, planEnd(), PLAN.rows, fc, amznPrice()).map(p=>({inc:p.inc+p.rise+p.rsu, exp:p.exp+p.infl}));
+  let plan=[], salary=0;
+  if(planEnsure()){ plan=fcForecast(0, m0, planEnd(), PLAN.rows, fc, amznPrice()).map(p=>({inc:p.inc+p.rise+p.rsu, exp:p.exp+p.infl}));
+    PLAN.rows.forEach(r=>{ if(r.k==='I' && r.l==='BASE') salary+=+r.m[m0]||0; }); }
   const G=nwGains(NWHOLD, LIVE && LIVE.hold, m0-1, TAX_RATE), tax=G.n ? G.tax : 0, pos=TAX_RATE ? tax/TAX_RATE : 0, gross=NW_BASE+tax;
-  return {m0, plan, infl:fc.inflation, gross, share:gross>0 ? Math.min(0.99, pos/gross) : 0, nwAfter:NW_BASE};
+  const minMi=((PV_REAL && PV_REAL.meta) || META).minMi, byMi={}, hist=[];
+  (NWHOLD||[]).forEach(h=>{ for(const k in h.flows) byMi[k]=(byMi[k]||0)+h.flows[k]; });
+  const ks=Object.keys(byMi).map(Number).sort((a,b)=>a-b); let c=0, j=0;
+  for(let mi=minMi; mi<m0 && isFinite(minMi); mi++){ while(j<ks.length && ks[j]<=mi) c+=byMi[ks[j++]]; hist.push(c); }
+  if(hist.length) hist[hist.length-1]=NW_BASE;
+  return {m0, plan, salary, infl:fc.inflation, gross, share:gross>0 ? Math.min(0.99, pos/gross) : 0, nwAfter:NW_BASE, hist};
 }
 /* ---- FIRE page UI ---- */
-let FIRE_V={real:true, all:false}; try{ Object.assign(FIRE_V, JSON.parse(localStorage.getItem(FIRE_VIEW_KEY)||'{}')); }catch(e){}
+let FIRE_V={real:true}; try{ Object.assign(FIRE_V, JSON.parse(localStorage.getItem(FIRE_VIEW_KEY)||'{}')); }catch(e){}
 let FIRE_HL=null, FIRE_SORT={k:'final', dir:1}, FIRE_RES=null, FIRE_FP='', FIRE_EXTRA=null, fireTimer=0;
+const FIRE_OPEN=new Set(['You','Start']);
 const FIRE_FIELDS=[
   ['You', [['birth','Birth month','month','Your age comes from this.'],
     ['fireAge','FIRE age (stop working)','int','Sheet "FU age". Work income stops on this birthday month.'],
     ['endAge','Money must last to age','int','Sheet "Target broke age". Success = never broke before it.']]],
-  ['Start', [['nwOverride','Start net worth','eurOpt','Blank = today\'s net worth from the Net Worth page.'],
-    ['gainOverride','Gain share of net worth','pcOpt','Blank = from your entries. Only this share is taxed when you sell.']]],
+  ['Start', [['gainOverride','Gain share today','pcOpt','Blank = from your entries. The part of the net worth that is gain; it rises as the money grows. 26 % tax on that part when you sell.']]],
   ['Returns', [['mean','Mean yearly return','pc','Sheet: 10,05 %. Every year of a scenario gets its own random return.'],
     ['sd','Spread (std dev)','pc','Sheet: 20 %. Higher = wilder good and bad years.'],
-    ['clamp0','Worst year floor','pc','No year loses more than this.'],
-    ['clamp1','Best year cap','pc','No year gains more than this.'],
-    ['dist','Shape of returns','sel:normal=Normal|t=Fat tails (more extreme years)',''],
-    ['n','Scenarios','sel:100=100|500=500|1000=1000','More = smoother, slower.'],
-    ['seed','Dice number','int','Same number = same results on every device. "New dice" picks another.'],
+    ['clamp0','Worst year floor','pc','Sheet: \u221280 %. No year loses more than this.'],
+    ['clamp1','Best year cap','pc','Sheet: +80 %. No year gains more than this.'],
+    ['dist','Shape of returns','sel:normal=Normal (like the sheet)|t=Fat tails (more extreme years)',''],
+    ['seed','Dice number','int','Same number = same 100 scenarios on every device. "New dice" picks another.'],
     ['stress','Bad first 5 years','chk','Forces the first 5 years into the worst 10 % (sequence risk).']]],
-  ['Income', [['incGrowth','Income growth a year','pc','After the plan ends, until FIRE. Sheet: 2 %.'],
+  ['Income', [['incGrowth','Income growth a year','pc','Sheet: 2 %. After the plan ends, until FIRE.'],
     ['passion','Passion income after FIRE','eur','A month, today\'s EUR; grows with inflation.'],
     ['passionEnd','Passion income ends at age','int','0 = never ends.'],
-    ['pensionAge','State pension from age','int','Sheet: 72.'],
-    ['workFrom','Started working (year)','int','Years worked = FIRE year minus this.'],
-    ['pensionMinYears','Min years worked for a pension','int','Fewer years = no pension.'],
-    ['pension','Monthly state pension','eur','EUR in its first year (sheet: 2.964), then grows with inflation.']]],
+    ['pensionAge','State pension from age','int','Paid from this age, even if you stopped working.'],
+    ['pensionPct','Pension = % of today\'s salary','pc','60 % of today\'s monthly salary, grown with inflation from today.'],
+    ['salaryOverride','Salary today (monthly)','eurOpt','Blank = BASE in your plan this month.']]],
   ['Expenses', [['expAfterFire','Spending after FIRE','pc','100 % = same as before; 90 % = spend less once retired.']]],
-  ['Tax and targets', [['tax','Tax on gains when selling','pc','Max 60 %.'],
-    ['target','Success target','pc','Sheet "confidence target": 90 % of scenarios must last.'],
-    ['swr','Safe withdrawal rate','pc','Info only: FIRE number = yearly spending / this.']]]];
+  ['Tax and target', [['tax','Tax on gains when selling','pc','26 %, only on the gain share of what you sell. Max 60 %.'],
+    ['target','Success target','pc','Sheet "confidence target": 90 % of scenarios must last.']]]];
 function fireNumIn(s){ s=String(s==null?'':s).trim().replace(/[€\s%]/g,'').replace(/\u2212/g,'-'); if(s==='') return null;
   s=/,/.test(s) ? s.replace(/\./g,'').replace(',','.') : (/^-?\d{1,3}(\.\d{3})+$/.test(s) ? s.replace(/\./g,'') : s);
   const v=parseFloat(s); return isFinite(v) ? v : NaN; }
@@ -5968,14 +6013,14 @@ const fireShow=(t,v)=> v==null ? '' : t==='pc' || t==='pcOpt' ? String(Math.roun
   : t==='eur' || t==='eurOpt' ? String(Math.round(v)).replace(/\B(?=(\d{3})+(?!\d))/g,'.') : String(v);
 function fireFieldVal(P, f){ return f==='clamp0' ? P.clamp[0] : f==='clamp1' ? P.clamp[1] : P[f]; }
 function fireParamsHtml(P, B){
-  const esc=planEsc, g0=B ? B.share : 0;
+  const esc=planEsc;
   const one=([f,lab,t,hint])=>{
     const v=fireFieldVal(P, f); let ctl;
     if(t==='month') ctl=`<input type="month" data-f="${f}" data-t="${t}" value="${esc(v)}" aria-label="${esc(lab)}">`;
     else if(t==='chk') ctl=`<input type="checkbox" data-f="${f}" data-t="${t}"${v?' checked':''} aria-label="${esc(lab)}" style="width:auto">`;
     else if(t.startsWith('sel:')) ctl=`<select data-f="${f}" data-t="sel" aria-label="${esc(lab)}">${t.slice(4).split('|').map(x=>{ const [k,l]=x.split('=');
       return `<option value="${esc(k)}"${String(v)===k?' selected':''}>${esc(l)}</option>`; }).join('')}</select>`;
-    else { const ph=f==='nwOverride' && B ? fireShow('eur', B.nwAfter) : f==='gainOverride' ? fireShow('pc', g0) : '';
+    else { const ph=f==='gainOverride' && B ? fireShow('pc', B.share) : f==='salaryOverride' && B ? fireShow('eur', B.salary) : '';
       ctl=`<input class="num" type="text" inputmode="decimal" data-f="${f}" data-t="${t}" value="${esc(fireShow(t, v))}" placeholder="${esc(ph)}" aria-label="${esc(lab)}${t.startsWith('pc')?' %':''}">`; }
     return `<div class="row"><label>${esc(lab)}${t.startsWith('pc')?' (%)':t.startsWith('eur')?' (\u20ac)':''}</label>${ctl}<span class="h">${esc(hint)}</span></div>`;
   };
@@ -5987,6 +6032,7 @@ function fireParamsHtml(P, B){
     `<td><input class="num" data-oo="amount" value="${fireShow('eur', r.amount)}" inputmode="decimal" aria-label="Amount EUR"></td>`+
     `<td><button type="button" data-del="oneOffs" data-i="${i}" aria-label="Remove">\u2715</button></td></tr>`).join('');
   const extra={
+    Start:`<div class="row"><label>Start net worth</label><b>${B ? fireMoney(B.nwAfter) : '\u2013'}</b><span class="h">Your net worth today from the Net Worth page (after the 26 % tax on today's gains). Not editable here.</span></div>`,
     Returns:`<div class="fimsg" style="margin-top:6px"><b>Spread by age</b> (glide path): from that age on, use this spread and mean (blank mean = the one above).</div>`+
       `<table id="fiSd"><thead><tr><th>From age</th><th>Spread %</th><th>Mean %</th><th></th></tr></thead><tbody>${sdRows}</tbody></table>`+
       `<button type="button" data-add="sdBy">Add an age step</button> <button type="button" id="fiDice">New dice</button>`,
@@ -5995,7 +6041,7 @@ function fireParamsHtml(P, B){
       `<table id="fiOo"><thead><tr><th>Year</th><th>Amount \u20ac</th><th></th></tr></thead><tbody>${ooRows}</tbody></table>`+
       `<button type="button" data-add="oneOffs">Add a one-off</button>`};
   return `<h3>Parameters <span class="fimsg${fireErr?' err':''}" id="fiSaveMsg">${esc(fireErr||'Saved to your account on every change.')}</span></h3>`+
-    FIRE_FIELDS.map(([grp, list], gi)=>`<details${gi<2?' open':''} data-g="${grp}"><summary>${grp}</summary>${list.map(one).join('')}${extra[grp]||''}</details>`).join('');
+    FIRE_FIELDS.map(([grp, list])=>`<details${FIRE_OPEN.has(grp)?' open':''} data-g="${grp}"><summary>${grp}</summary>${extra[grp]||''}${list.map(one).join('')}${grp==='Returns' || grp==='Expenses' ? '' : ''}</details>`).join('');
 }
 /* read the parameters panel back into a settings object (unparsable fields keep their value) */
 function fireReadParams(root, P){
@@ -6014,7 +6060,7 @@ function fireReadParams(root, P){
   return o;
 }
 function fireCompute(P, B){
-  const fp=JSON.stringify(P)+'|'+[B.m0, Math.round(B.gross), B.share.toFixed(4), B.infl, B.plan.length, Math.round(B.plan.reduce((a,p)=>a+p.inc-p.exp,0))].join('|');
+  const fp=JSON.stringify(P)+'|'+[B.m0, Math.round(B.gross), B.share.toFixed(4), B.infl, Math.round(B.salary), B.plan.length, Math.round(B.plan.reduce((a,p)=>a+p.inc-p.exp,0))].join('|');
   if(fp===FIRE_FP && FIRE_RES) return FIRE_RES;
   const t0=Date.now();
   const res=fireSim(P, B);
@@ -6025,56 +6071,54 @@ function fireCompute(P, B){
   return res;
 }
 function fireHeroHtml(res, B){
-  const {P, inp, st, avg}=res, cls=v=> v>=P.target ? 'ok' : v>=P.target-0.15 ? 'warn' : 'bad';
+  const {P, inp, st, avg}=res;
   const d=i=> fireDef(inp, FIRE_V.real, i), ageNow=Math.floor((inp.m0-inp.birthMi)/12);
   const ab=avg.broke[0], avgTxt=ab<0 ? 'lasts to '+P.endAge : 'broke at age '+Math.floor((inp.m0+ab-inp.birthMi)/12);
-  const fy=Math.floor(inp.fireMi/12), fe=inp.fireIdx<inp.n ? inp.exp[inp.fireIdx]*12/fireDef(inp, true, inp.fireIdx) : null;
-  const unit=FIRE_V.real ? 'today\'s EUR' : 'nominal EUR';
-  return `<div><div class="big ${cls(st.success)}">${firePc(st.success)}</div></div>`+
+  const fy=Math.floor(inp.fireMi/12), unit=FIRE_V.real ? 'today\'s EUR' : 'nominal EUR';
+  return `<div><div class="big">${firePc(st.success)}</div></div>`+
     `<div><div class="lead">of ${P.n} scenarios last to age ${P.endAge} if you stop at ${P.fireAge} (${fy})</div>`+
-    `<div class="sub">Target ${firePc(P.target)} \u00b7 age today ${ageNow} \u00b7 ${P.n} dice rolls, not a promise \u00b7 values in ${unit}</div></div>`+
+    `<div class="sub">Target ${firePc(P.target)} \u00b7 age today ${ageNow} \u00b7 100 dice rolls, not a promise \u00b7 values in ${unit}</div></div>`+
     `<div class="facts"><span>Net worth today</span><b>${fireMoney(B.nwAfter)}</b>`+
+    `<span>Gain share today (taxed 26 % when sold)</span><b>${firePc(inp.g0,1)}</b>`+
     `<span>Median at FIRE age ${P.fireAge}</span><b>${fireMoney(st.medFire/d(st.fireAt))}</b>`+
     `<span>Avg line (every year = mean)</span><b>${avgTxt}</b>`+
     `<span>Earliest FIRE age at ${firePc(P.target)}</span><b>${res.solve==null ? 'none before '+P.endAge : res.solve}</b>`+
-    `<span>FIRE number (spend / ${firePc(P.swr,1)})</span><b>${fe!=null ? fireMoney(fe/P.swr) : '\u2013'}</b></div>`;
+    `<span>State pension from ${P.pensionAge}</span><b>${inp.pensionOn ? fireMoney(inp.pension0)+' a month in today\'s EUR' : 'none'}</b></div>`;
 }
 function fireCardsHtml(res){
-  const {P, st}=res, N=P.n, cls=v=> v>=P.target ? 'ok' : v>=P.target-0.15 ? 'warn' : 'bad';
-  return st.hist.map(h=>`<div class="ficard"><div class="k">Broke before ${h.age}</div><div class="v ${h.n ? (h.n/N>1-P.target ? 'bad' : 'warn') : 'ok'}">${h.n} <small>of ${N}</small></div></div>`).join('')+
-    `<div class="ficard"><div class="k">Stop working today</div><div class="v ${cls(res.today)}">${firePc(res.today)}</div></div>`+
-    `<div class="ficard"><div class="k">Stop in 1 year</div><div class="v ${cls(res.in1)}">${firePc(res.in1)}</div></div>`;
+  const {P, st}=res, N=P.n;
+  return st.hist.map(h=>`<div class="ficard"><div class="k">Broke before ${h.age}</div><div class="v">${h.n} <small>of ${N}</small></div></div>`).join('')+
+    `<div class="ficard"><div class="k">Stop working today</div><div class="v">${firePc(res.today)}</div></div>`+
+    `<div class="ficard"><div class="k">Stop in 1 year</div><div class="v">${firePc(res.in1)}</div></div>`;
 }
-const fireHue=r=>{ const t=Math.max(0, Math.min(1, (r+0.3)/0.6)); return `hsl(${Math.round(t*120)},62%,${Math.round(34+8*Math.abs(t-0.5))}%)`; };
-function fireDrawHeat(res){
-  const cv=document.getElementById('fiHeat'); if(!cv || !cv.getContext) return;
-  const Y=res.inp.years, ord=res.order, rows=Math.min(100, ord.length), stp=ord.length/rows;
-  cv.width=Y; cv.height=rows; const c=cv.getContext('2d');
-  for(let r=0;r<rows;r++){ const s=ord[Math.floor(r*stp)];
-    for(let k=0;k<Y;k++){ c.fillStyle=fireHue(res.R[s*Y+k]); c.fillRect(k, r, 1, 1); } }
-  if(FIRE_HL!=null){ const r=ord.indexOf(FIRE_HL); if(r>=0 && Math.floor(r/stp)<rows){ c.strokeStyle='#e7c14a'; c.lineWidth=1; c.strokeRect(0.5, Math.floor(r/stp)+0.5, Y-1, 0); } }
-  cv.onclick=e=>{ const b=cv.getBoundingClientRect(), r=Math.floor((e.clientY-b.top)/b.height*rows), s=ord[Math.floor(Math.max(0,Math.min(rows-1,r))*stp)];
-    FIRE_HL= FIRE_HL===s ? null : s; fireDrawResults(); };
+function firePickHtml(res){
+  const r=res.rows, lab=x=> `#${x.s+1} \u00b7 ${x.broke!=null ? 'broke at '+Math.floor(x.broke) : fireMoney(x.final)+' at '+res.P.endAge} \u00b7 avg ${firePc(x.avg,1)}`;
+  return `<option value="">Pick one of the 100 scenarios\u2026</option>`+res.order.map((s,j)=>`<option value="${s}"${s===FIRE_HL?' selected':''}>${j+1}. ${planEsc(lab(r[s]))}</option>`).join('');
 }
 function fireDrawResults(){
   const res=FIRE_RES, B=FIRE_EXTRA; if(!res || !B) return;
   const q=id=>document.getElementById(id);
   if(q('fiHero')) q('fiHero').innerHTML=fireHeroHtml(res, B);
-  if(q('fiChart')) q('fiChart').innerHTML=fireChartSvg(res, {real:FIRE_V.real, all:FIRE_V.all, hl:FIRE_HL});
+  if(q('fiChart')) q('fiChart').innerHTML=fireChartSvg(res, {real:FIRE_V.real, hl:FIRE_HL}, B.hist);
   if(q('fiCards')) q('fiCards').innerHTML=fireCardsHtml(res);
   if(q('fiTab')) q('fiTab').innerHTML=fireTableHtml(res.rows, FIRE_SORT, FIRE_HL);
-  if(q('fiNote')) q('fiNote').textContent=`Bands: middle 50 % (dark) and 80 % (light) of scenarios; green line = median; dashed = every year at the mean.`+
+  if(q('fiPick')) q('fiPick').innerHTML=firePickHtml(res);
+  if(q('fiTrace')) q('fiTrace').innerHTML= FIRE_HL==null ? '<div class="fimsg">Pick a scenario (list, Worst / Median / Best, or a row of the table below) to see its net worth year by year.</div>'
+    : fireTraceHtml(res.inp, fireTrace(res.inp, res.R, FIRE_HL), FIRE_V.real)+`<div class="fimsg">Scenario ${FIRE_HL+1}, values in ${FIRE_V.real ? 'today\'s' : 'nominal'} EUR. Start / End = net worth after the tax on its open gains. Tax on sales = 26 % of the gain share of what was sold to pay the bills.</div>`;
+  if(q('fiNote')) q('fiNote').textContent=`Log scale: each step up = 10 times more. White = your real net worth so far; thin lines = the 100 scenarios; thick green = median; dashed = every year at the mean.`+
     (FIRE_HL!=null ? ` Yellow = scenario ${FIRE_HL+1}.` : '')+` ${res.P.n} scenarios in ${res.ms} ms.`;
-  fireDrawHeat(res); fireWireChart(res);
+  fireWireChart(res, B);
 }
-function fireWireChart(res){
+function fireWireChart(res, B){
   const svg=document.querySelector('#fiChart svg'), out=document.getElementById('fiScrub'); if(!svg || !out) return;
-  const G=FIRE_G, inp=res.inp, n=inp.n, cur=svg.querySelector('#fiCur');
+  const G=FIRE_G, inp=res.inp, n=inp.n, i0=-(B.hist||[]).length, span=Math.max(1, n-1-i0), cur=svg.querySelector('#fiCur');
   const at=e=>{ const b=svg.getBoundingClientRect(), x=(e.clientX-b.left)/b.width*G.W;
-    const i=Math.max(0, Math.min(n-1, Math.round((x-G.L)/(G.W-G.L-G.R)*(n-1)))), d=fireDef(inp, FIRE_V.real, i), mi=inp.m0+i;
-    const xs=(G.L+(n>1 ? i/(n-1) : 0)*(G.W-G.L-G.R)).toFixed(1); cur.setAttribute('x1',xs); cur.setAttribute('x2',xs); cur.setAttribute('visibility','visible');
-    out.textContent=`Age ${Math.floor((mi-inp.birthMi)/12)} \u00b7 ${Math.floor(mi/12)} \u00b7 P10 ${fireMoney(res.st.p10[i]/d)} \u00b7 P50 ${fireMoney(res.st.p50[i]/d)} \u00b7 P90 ${fireMoney(res.st.p90[i]/d)}`+
-      (FIRE_HL!=null ? ` \u00b7 #${FIRE_HL+1} ${fireMoney(res.run.nw[FIRE_HL*n+i]/d)}` : ''); };
+    const i=Math.max(i0, Math.min(n-1, Math.round(i0+(x-G.L)/(G.W-G.L-G.R)*span))), d=fireDef(inp, FIRE_V.real, i), mi=inp.m0+i;
+    const xs=(G.L+(i-i0)/span*(G.W-G.L-G.R)).toFixed(1); cur.setAttribute('x1',xs); cur.setAttribute('x2',xs); cur.setAttribute('visibility','visible');
+    const head=`${miLabel(mi)} \u00b7 age ${Math.floor((mi-inp.birthMi)/12)}`;
+    out.textContent= i<0 ? `${head} \u00b7 actual ${fireMoney(B.hist[i-i0]/d)}`
+      : `${head} \u00b7 P10 ${fireMoney(res.st.p10[i]/d)} \u00b7 median ${fireMoney(res.st.p50[i]/d)} \u00b7 P90 ${fireMoney(res.st.p90[i]/d)}`+
+        (FIRE_HL!=null ? ` \u00b7 #${FIRE_HL+1} ${fireMoney(res.run.nw[FIRE_HL*n+i]/d)}` : ''); };
   svg.addEventListener('pointermove', at); svg.addEventListener('pointerdown', at);
   svg.addEventListener('pointerleave', ()=>{ cur.setAttribute('visibility','hidden'); out.textContent=''; });
 }
@@ -6097,13 +6141,14 @@ function renderFire(force){
   if(!document.getElementById('fiParams')){
     wrap.innerHTML=`<div class="fibox fihero" id="fiHero"></div>`+
       `<div class="fibox"><div class="fitools"><label class="pill"><input type="checkbox" id="fiReal"${FIRE_V.real?' checked':''}>Real \u20ac (today's money)</label>`+
-      `<label class="pill"><input type="checkbox" id="fiAll"${FIRE_V.all?' checked':''}>Show all lines</label><span class="scrub" id="fiScrub" aria-live="polite"></span></div>`+
+      `<span class="scrub" id="fiScrub" aria-live="polite"></span></div>`+
       `<div class="fichart" id="fiChart"></div><div class="fimsg" id="fiNote"></div></div>`+
+      `<div class="fibox"><h3>Follow one scenario, year by year</h3><div class="fitools"><select id="fiPick" aria-label="Scenario"></select>`+
+      `<button type="button" data-pick="0">Worst</button><button type="button" data-pick="50">Median</button><button type="button" data-pick="99">Best</button><button type="button" data-pick="">Clear</button></div>`+
+      `<div id="fiTrace"></div></div>`+
       `<div class="fibox"><h3>When does the money run out?</h3><div class="ficards" id="fiCards"></div></div>`+
-      `<div class="fibox fiheat"><h3>Returns by year, one row per scenario (worst at the top). Tap a row to follow it.</h3>`+
-      `<canvas id="fiHeat" aria-label="Yearly returns per scenario"></canvas><div class="leg"><span>today \u2192 age ${P.endAge}</span><span><span style="color:#e58a8a">\u25a0</span> \u221230 % \u00b7 0 \u00b7 +30 % <span style="color:#5fc28a">\u25a0</span></span></div></div>`+
       `<div class="fibox fiparams" id="fiParams"></div>`+
-      `<details class="fibox" id="fiTabBox"><summary>Scenario table (tap a header to sort, a row to follow it)</summary><div id="fiTab"></div></details>`;
+      `<details class="fibox" id="fiTabBox"><summary>All 100 scenarios (tap a header to sort, a row to follow it)</summary><div id="fiTab"></div></details>`;
     fireWire(wrap);
   }
   if(force || !typing) document.getElementById('fiParams').innerHTML=fireParamsHtml(P, B);
@@ -6112,6 +6157,7 @@ function renderFire(force){
 function fireWire(wrap){
   const par=wrap.querySelector('#fiParams');
   const live=()=>{ clearTimeout(fireTimer); fireTimer=setTimeout(()=>fireApply(fireReadParams(par, fireGet()), false), 300); };
+  par.addEventListener('toggle', e=>{ const d=e.target; if(d.dataset && d.dataset.g){ if(d.open) FIRE_OPEN.add(d.dataset.g); else FIRE_OPEN.delete(d.dataset.g); } }, true);
   par.addEventListener('input', e=>{ if(e.target.matches('input[type="text"],input:not([type])')) live(); });
   par.addEventListener('change', e=>{ if(e.target.matches('select,input[type="checkbox"],input[type="month"]')){ clearTimeout(fireTimer); fireApply(fireReadParams(par, fireGet()), false); }
     else if(e.target.matches('input')){ clearTimeout(fireTimer); fireApply(fireReadParams(par, fireGet()), true); } });   // leaving a box shows the cleaned value
@@ -6123,10 +6169,13 @@ function fireWire(wrap){
     else if(b.dataset.add==='oneOffs'){ P.oneOffs.push({year:new Date().getFullYear()+1, amount:10000}); }
     else if(b.dataset.del){ P[b.dataset.del].splice(+b.dataset.i, 1); }
     else return;
+    const g=b.closest('details[data-g]'); if(g) FIRE_OPEN.add(g.dataset.g);   // the group stays open after the redraw
     clearTimeout(fireTimer); fireApply(P, true);
   });
   wrap.querySelector('#fiReal').addEventListener('change', e=>{ FIRE_V.real=e.target.checked; fireViewSave(); fireDrawResults(); });
-  wrap.querySelector('#fiAll').addEventListener('change', e=>{ FIRE_V.all=e.target.checked; fireViewSave(); fireDrawResults(); });
+  wrap.querySelector('#fiPick').addEventListener('change', e=>{ FIRE_HL= e.target.value==='' ? null : +e.target.value; fireDrawResults(); });
+  wrap.querySelectorAll('[data-pick]').forEach(b=>b.addEventListener('click', ()=>{
+    FIRE_HL= b.dataset.pick==='' || !FIRE_RES ? null : FIRE_RES.order[+b.dataset.pick]; fireDrawResults(); }));
   wrap.querySelector('#fiTab').addEventListener('click', e=>{
     const th=e.target.closest('th[data-k]'), tr=e.target.closest('tr[data-s]');
     if(th){ const k=th.dataset.k; FIRE_SORT= FIRE_SORT.k===k ? {k, dir:-FIRE_SORT.dir} : {k, dir:1}; }

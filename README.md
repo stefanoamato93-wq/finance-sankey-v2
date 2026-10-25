@@ -22,56 +22,50 @@ status: `Personal Finance\finance-v2-plan\PLAN.md`.
 
 ### FIRE page (Monte Carlo, 25 Oct 2026)
 Tab **FIRE** after Plan. Question: if I stop working at the FIRE age, does the money last to
-the target age? Handoff and design: `finance-v2-plan\PLAN-fire.md`.
+the target age? Handoff and design: `finance-v2-plan\PLAN-fire.md`. Runs on its own in the
+browser: it reads only Firebase data (net worth, plan, forecast settings), never the sheet.
 
-- **Hero:** success rate (share of scenarios never broke before the target age; green at or
-  above the target, amber within 15 points, red below), net worth today, median at FIRE age,
-  the Avg line (every year at the mean), the earliest FIRE age that reaches the target
-  (`fireSolveAge`, binary search), FIRE number = first FIRE year's spending ÷ SWR.
-- **Fan chart:** P10–P90 (light) and P25–P75 (dark) bands, median (green), Avg line (dashed),
-  markers FIRE / Pension / Plan ends, ages on the x axis. "Real €" (default, today's money =
-  ÷ (1+inflation)^(years)) or nominal; "Show all lines" (first 100 scenarios). Hover / touch =
-  age, year, P10 / P50 / P90 (and the followed scenario).
-- **Cards:** broke before 60 / 70 / 80 / 90 / 100 (and the target age), success if you stop
-  today, and in 1 year.
-- **Heat strip:** canvas, one row per scenario (100 shown), one cell per year, red −30 % →
-  green +30 %, worst scenarios at the top. Tap a row = follow it (yellow line in the chart).
-- **Scenario table** (folded): #, avg yearly return (geometric), worst 5 years, net worth at
-  FIRE, broke age, at the end. Tap a header to sort, a row to follow it. First 100 rows.
-- **Parameters** (folded groups, saved on every change, 300 ms debounce, to
-  `meta/settings.firej` + `fs2-fire-v1`): birth month (default 1993-01, from the sheet: FU
-  month 241 = Jan 2038 at 45), FIRE age 45, target age 100, start net worth override, gain
-  share override, mean 10,05 %, spread 20 %, worst-year floor −80 %, best-year cap +80 %,
-  Normal or fat tails (Student-t 5 dof, scaled to the same spread), scenarios 100 / 500 / 1000,
-  dice number (seed, "New dice"), "Bad first 5 years" (stress: first 5 years drawn from the
-  worst 10 %), spread by age table (glide path: from age, spread, optional mean), income
-  growth 2 %, passion income + end age, pension age 72, started working 2018, min years 20,
-  monthly pension € 2.964 (EUR of its first year), spending after FIRE 100 %, one-offs (year +
-  EUR, January; negative = money in, e.g. TFR), tax on gains 26 % (max 60 %), success target
-  90 %, SWR 4 %. Inflation is read from Forecast settings (one source). View toggles per
-  browser (`fs2-fire-view-v1`). Results are never stored.
+- **Hero:** success rate (share of the 100 scenarios never broke before the target age), net
+  worth today, gain share today, median at FIRE age, the Avg line (every year at the mean), the
+  earliest FIRE age that reaches the target (`fireSolveAge`), state pension a month.
+- **Chart (log scale, like the sheet):** your real month-end net worth so far (white), all 100
+  scenarios (one colour each), median (thick green), Avg line (dashed), the followed scenario
+  (thick yellow). Markers Today / FIRE / Pension, x axis = year (age). Values ≤ € 10K sit on the
+  bottom line. "Real €" (default, today's money) or nominal. Hover / touch = month, age,
+  P10 / median / P90 (or the actual value in the past).
+- **Follow one scenario:** pick 1 of the 100 (list sorted worst → best, or Worst / Median /
+  Best). Table per year (`fireTrace`, same steps as the engine): return, start, growth, work
+  income, pension + passion, expenses, tax on sales, end, gain share.
+- **Cards:** broke before 60 / 70 / 80 / 90 / 100, success if you stop today, and in 1 year.
+- **All 100 scenarios** table (folded, sortable, tap a row to follow it).
+- **Parameters** (folded groups that stay open after an edit, saved on every change, 300 ms
+  debounce, to `meta/settings.firej` v2 + `fs2-fire-v1`): birth month (1993-01), FIRE age 45,
+  target age 100; start net worth = the Net Worth page (read-only), gain share today (blank =
+  from your entries); mean 10,05 %, spread 20 %, floor −80 %, cap +80 % (all as the sheet),
+  Normal or fat tails, dice number (seed, "New dice"), "Bad first 5 years", spread by age;
+  income growth 2 % (sheet), passion income + end age, **state pension from 72 = 60 % of
+  today's monthly salary** (BASE in the plan this month, or a typed salary), grown with
+  inflation from today, paid even if you stop working early; spending after FIRE 100 %,
+  one-offs (year + EUR in January; negative = money in); tax 26 % on the gain share of what is
+  sold (max 60 %); success target 90 %. Always 100 scenarios. Inflation from Forecast settings.
 - **Engine rules** (pure functions, `fireInputs` → `fireReturns` → `fireRun` → `fireStats`):
   start = Net Worth page value + the tax on its gains (gross), cost base = gross × (1 − gain
-  share). Months from next month to the month before the target age. To the plan end the
-  incomes / expenses are the forecast's (`fcForecast`: rows, RSU, salary rise, INFLATION);
+  share today). The gain share then rises by itself as the money grows (savings add cost base,
+  growth adds gain). To the plan end the incomes / expenses are the forecast's (`fcForecast`);
   after it the plan's last year as a monthly average, income × (1+growth) and expenses ×
   (1+inflation) each January. From the FIRE month: no work income, expenses × the after-FIRE
-  factor, passion income (today's EUR, grows with inflation). Pension from its age if years
-  worked (FIRE year − start year) ≥ the minimum, then grows with inflation. One random yearly
-  return per scenario and year (mulberry32 + Box–Muller), monthly factor (1+R)^(1/12). Savings
-  are invested (cost base grows); a shortfall is sold grossed up for the tax on the gain share.
-  Net worth ≤ 0 = broke, it stays 0. Shown values = net worth − tax on its open gains.
-- **Check vs the sheet (step 9):** sheet-like inputs (income € 7.089 / expenses € 3.709 a
-  month, both +2 %/yr, net worth € 463K, gain share 26,8 %, FU 45, pension € 2.964 at 72):
-  mean net worth at 45 ≈ € 1,9–2,0M vs the sheet's "FU average" € 2,29M; success 84 % (100
-  dice) / 80 % (1000) vs the sheet's 96 % (4 broke before 100, if it has 100 columns).
-  Expected gap: different dice, monthly steps, and the sheet's € 7.089 / € 3.709 are "at
-  horizon" amounts while the check applied them from today. Same direction, same scale.
-- Tests: `finance-v2-plan\tools\test_fire.js` (19 Node tests: seed, sd = 0 = Avg line, clamp,
-  broke month and tax gross-up by hand, inputs vs `fcForecast`, pension / passion / one-offs,
-  glide path, stress, solver vs brute force, no NaN in the chart / table) and
-  `_verify_fire.py` (headless Edge, untracked: page, chart, cards, heat strip, every control
-  saves). 1000 scenarios to age 100 ≈ 55 ms in Node.
+  factor, passion income. One random yearly return per scenario and year (mulberry32 +
+  Box–Muller), monthly factor (1+R)^(1/12). Savings are invested; a shortfall is sold grossed
+  up for 26 % × the gain share. Net worth ≤ 0 = broke. Shown values = net worth − 26 % of its
+  open gains (same as the Net Worth page).
+- **Check vs the sheet (step 9):** sheet-like inputs gave a mean net worth at 45 of about
+  € 1,9–2,0M vs the sheet's "FU average" € 2,29M, and 80–84 % success vs about 96 %. Expected
+  gap: other dice, monthly steps, and the sheet's € 7.089 / € 3.709 are "at horizon" amounts.
+- Tests: `finance-v2-plan\tools\test_fire.js` (20 Node tests incl. the year-by-year trace
+  matching the engine) and `_verify_fire.py` (headless Edge, untracked).
+- Removed after Stefano's review (25 Oct 2026): returns heat strip, coloured cards, 500 / 1000
+  scenarios, safe withdrawal rate, start net worth override, pension typed in EUR with a
+  min-years rule.
 
 ### Plan view to 2030 (forecast step 7, 25 Oct 2026)
 - **Plan** pill next to K (Cash Flow, Savings, Compare, Years Paid): adds the planned months
