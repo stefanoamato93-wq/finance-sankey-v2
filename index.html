@@ -797,6 +797,23 @@
   #planMenu button{background:none; border:0; color:var(--ink); font:inherit; font-size:12.5px; text-align:left; padding:8px 10px; border-radius:6px; cursor:pointer;}
   #planMenu button:hover,#planMenu button:focus-visible{background:#1d2840; outline:none;}
   #planMenu button.del{color:#e58a8a;}
+  .plan td.neg{color:#e58a8a;}
+  .plan tr.sav td{background:#15263a;}
+  .plan tr.ro td{color:var(--muted); font-style:italic;}
+  .plan tr.ro td.n small.ro{display:block; font-size:10px; font-style:normal; color:var(--muted);}
+  .fcbox{margin:0 10px 10px; padding:6px 10px; border:1px solid var(--grid); border-radius:8px; font-size:12px;}
+  .fcbox summary{cursor:pointer; color:var(--muted); font-size:11.5px; padding:2px 0;}
+  .fcbox[open] summary{color:var(--ink); margin-bottom:6px;}
+  .fcrow{display:flex; align-items:center; gap:8px 14px; flex-wrap:wrap; margin:6px 0;}
+  .fcbox input.fcin{background:var(--bg); color:var(--ink); border:1px solid var(--grid); border-radius:6px; padding:4px 6px; font:inherit;}
+  .fcbox input.num{width:58px; text-align:right;}
+  .fcbox button{background:var(--bg); color:var(--ink); border:1px solid var(--grid); border-radius:7px; padding:5px 10px; font:inherit; font-size:11.5px; cursor:pointer;}
+  .fcbox button:disabled{opacity:.4; cursor:default;}
+  .fcsub{color:var(--muted); font-size:11px; margin-top:8px;}
+  table.fcvest{border-collapse:collapse; margin-top:4px; font-variant-numeric:tabular-nums;}
+  table.fcvest th{color:var(--muted); font-size:10.5px; font-weight:600; text-align:left; padding:3px 6px;}
+  table.fcvest td{padding:2px 6px;} table.fcvest td.v{text-align:right; min-width:70px;}
+  table.fcvest tr.past td{opacity:.5;}
   @media (max-width:680px){
     .planwrap{margin:8px 8px 30px;}
     .plan .n{width:140px; min-width:140px; max-width:140px;}
@@ -1066,7 +1083,7 @@
      this browser only (Export / Import keep a copy); filled by renderPlan() -->
 <section class="page" id="pg-plan" data-page="plan" hidden>
 <div class="nwhead planhead" id="planhead" style="display:none">
-  <h2>Future Expenses</h2>
+  <h2>Plan: Income &amp; Expenses</h2>
   <span class="hdtools"><span class="tgslot"></span></span>
 </div>
 <div class="planwrap framed" id="planwrap" style="display:none"></div>
@@ -4228,21 +4245,95 @@ function qInit(){
   syncQControls();
 }
 
-/* ---- PAGE Plan (Future Expenses) -----------------------------------------
-   An editable plan of future expenses: one amount per detail per month, from this month
-   to Dec 2030. Rows are group > label > detail, with the sheet's own names. Each year
+/* ---- PAGE Plan (income and expenses, v2 25 Oct 2026) ------------------------
+   An editable plan of future income and expenses: one amount per detail per month, from
+   this month to Dec of the plan's end year (Forecast settings, default 2030). Rows are group > label > detail, with the sheet's own names. Each year
    folds to one total; open a year to see and edit its months. Typing into a folded year
    spreads the amount evenly over its months. The first open fills every detail with its
    average over the last 12 complete months. The plan is kept ONLY in this browser
    (localStorage PLAN_KEY): nothing is sent anywhere. Export / Import move it to another
    device or keep a backup. Amounts are spend, in full euros (K changes only the totals). */
-const PLAN_KEY='fs2-plan-v1', PLAN_END=2030*12+11;
+const PLAN_KEY='fs2-plan-v1';
 const PLAN_GROUPS=['Needs','Wants','Liberality','Taxes','Other'];
-const PLAN_GC={Needs:'var(--needs)',Wants:'var(--wants)',Liberality:'var(--liberality)',Taxes:'var(--taxes)'};
+const PLAN_IGROUPS=['Work income','Non-work income','Other income'];   // same names as INCGRP (+ aggregate()'s fallback)
+const PLAN_GC={Needs:'var(--needs)',Wants:'var(--wants)',Liberality:'var(--liberality)',Taxes:'var(--taxes)',
+  'Work income':'var(--income)','Non-work income':'var(--income)','Other income':'var(--income)',Inflation:'#e7c14a'};
 let PLAN=null, planUndo=[], planNote='', planFocus=null, planMenuR=null;
 const planOpenY=new Set(), planShutG=new Set(), planOpenL=new Set();
 const planStart=()=>{ const d=new Date(); return d.getFullYear()*12+d.getMonth(); };
-function planMonths(){ const a=[]; for(let m=planStart(); m<=PLAN_END; m++) a.push(m); return a; }
+function planMonths(){ const a=[], e=planEnd(); for(let m=planStart(); m<=e; m++) a.push(m); return a; }
+const planKindOf=g=> PLAN_IGROUPS.includes(g) ? 'I' : 'E';
+const planKey=r=> (r.k==='I'?'I:':'')+r.l+'|'+r.d;            // planRef() key of a row
+
+/* ---- Forecast settings (meta/settings.forecastj, 25 Oct 2026) ---------------------
+   {v, inflation, yield, endYear, inflationFrom:"YYYY-MM", rsuNet, rsu:[{date:"YYYY-MM", shares}]}
+   inflation: yearly rate on every planned expense, one step each January from
+     inflationFrom's year (2 % default). Shown as its own INFLATION line, base amounts stay flat.
+   yield: yearly return on the whole net worth for the forecast (8 % default).
+   endYear: last year of the plan (Dec). "Add a year" = +1 (rows carry Dec's value forward).
+   rsu: Amazon stock vests; each is sold at once, so planned income in its month =
+     shares x live AMZN EUR price x rsuNet (the part kept after tax, 53 % default).
+   Saved through FS2.data.setSettings (merge) + a localStorage copy (fs2-forecast-v1). */
+const FC_KEY='fs2-forecast-v1', AMZN_ISIN='US0231351067';
+let FC=null, fcErr='', fcOpen=false, fcLoading=false, AMZN_PX=null, amznBusy=false;
+/* pure: any stored object -> valid settings (bad or missing fields take the defaults) */
+function fcNorm(o, nowYear){
+  o=(o && typeof o==='object') ? o : {};
+  const n=(x,lo,hi,d)=>{ x=Number(x); return (x!=null && isFinite(x) && x>=lo && x<=hi) ? x : d; };
+  const ym=s=> typeof s==='string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(s);
+  const rsu=(Array.isArray(o.rsu)?o.rsu:[]).filter(x=>x && ym(x.date) && Number(x.shares)>0)
+    .map(x=>({date:x.date, shares:Number(x.shares)})).sort((a,b)=> a.date<b.date?-1:a.date>b.date?1:0);
+  return {v:1, inflation:n(o.inflation,0,0.5,0.02), yield:n(o.yield,-0.5,0.5,0.08),
+    endYear:Math.max(nowYear, Math.round(n(o.endYear,2000,2100,2030))),
+    inflationFrom: ym(o.inflationFrom) ? o.inflationFrom : nowYear+'-01',
+    rsuNet:n(o.rsuNet,0,1,0.53), rsu};
+}
+function fcGet(){
+  if(FC) return FC;
+  let raw=null;
+  if(typeof FS_SETTINGS!=='undefined' && FS_SETTINGS && FS_SETTINGS.forecastj){ try{ raw=JSON.parse(FS_SETTINGS.forecastj); }catch(e){} }
+  if(!raw){ try{ raw=JSON.parse(localStorage.getItem(FC_KEY)||'null'); }catch(e){} }
+  const fc=fcNorm(raw, new Date().getFullYear());
+  if((typeof FS_SETTINGS!=='undefined' && FS_SETTINGS) || !FS2.data) FC=fc;   // cloud copy known (or none): keep it
+  return fc;
+}
+async function fcSave(next){
+  FC=fcNorm(next, new Date().getFullYear()); const j=JSON.stringify(FC);
+  try{ localStorage.setItem(FC_KEY, j); }catch(e){}
+  FS_SETTINGS=Object.assign({}, FS_SETTINGS||{}, {forecastj:j});
+  const D=FS2.data; if(!D) return;
+  try{ await D.setSettings({forecastj:j}); fcErr=''; }catch(e){ fcErr='Not saved to the cloud: '+((e&&(e.code||e.message))||e); }
+}
+const planEnd=()=> fcGet().endYear*12+11;
+const ymMi=s=> +s.slice(0,4)*12 + (+s.slice(5,7)) - 1;
+const miYm=mi=> Math.floor(mi/12)+'-'+String(mi%12+1).padStart(2,'0');
+/* pure: rows get the months fromEnd+1..toEnd (a new year), each at the row's value in
+   fromEnd (December of the old last year), else its last month; months already there stay */
+function planExtendRows(rows, fromEnd, toEnd){
+  rows.forEach(r=>{
+    let v=r.m[fromEnd];
+    if(v==null){ const ks=Object.keys(r.m).map(Number).filter(k=>k<=fromEnd).sort((a,b)=>a-b); v=ks.length ? r.m[ks[ks.length-1]] : 0; }
+    for(let mi=fromEnd+1; mi<=toEnd; mi++) if(r.m[mi]==null) r.m[mi]=+v||0;
+  });
+}
+/* pure: inflation factor of month mi = (1+rate)^years - 1, one step every January after
+   inflationFrom's year (from 2026-xx: 2026 = 0, 2027 = 2 %, 2028 = 4,04 %) */
+function fcInflF(mi, fc){ const n=Math.max(0, Math.floor(mi/12) - Math.floor(ymMi(fc.inflationFrom)/12)); return Math.pow(1+fc.inflation, n)-1; }
+/* pure: net RSU income per month {mi: euros} for the vests in fromMi..toMi */
+function fcRsuByMi(fc, price, fromMi, toMi){
+  const o={}; if(!(price>0)) return o;
+  fc.rsu.forEach(x=>{ const mi=ymMi(x.date); if(mi<fromMi || mi>toMi) return; o[mi]=(o[mi]||0)+x.shares*price*fc.rsuNet; });
+  return o;
+}
+/* live AMZN EUR price: the DIRECTA|AMZN holding if it is priced, else one onvista read */
+function amznPrice(){
+  const k=LIVE && LIVE.hold ? Object.keys(LIVE.hold).find(x=>x.endsWith('|AMZN')) : null, L=k ? LIVE.hold[k] : null;
+  if(L && L.price>0) return L.price;
+  if(AMZN_PX) return AMZN_PX;
+  if(!amznBusy){ amznBusy=true;
+    priceOf({isin:AMZN_ISIN, t:'STOCK'}).then(p=>{ if(p && p.price>0){ AMZN_PX=p.price; renderPlan(true); } }).catch(()=>{}).finally(()=>{ amznBusy=false; }); }
+  return null;
+}
 const planEsc=s=> String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 /* "1.200" / "1200" / "1,2K" / "€ 950" -> whole euros (always spend, so the sign is dropped); NaN if not a number */
 function planNum(s){
@@ -4252,12 +4343,19 @@ function planNum(s){
   const v=parseFloat(s)*k; return isFinite(v) ? Math.round(Math.abs(v)) : NaN;
 }
 function planLoad(){
-  try{ const s=JSON.parse(localStorage.getItem(PLAN_KEY)||'null'); if(planValid(s)) return s; }catch(e){}
+  try{ const s=JSON.parse(localStorage.getItem(PLAN_KEY)||'null'); if(planValid(s)) return planMigrate(s); }catch(e){}
   return null;
 }
 function planValid(s){
-  return !!s && s.v===1 && Array.isArray(s.rows) && s.rows.every(r=> r && typeof r.g==='string' &&
-    typeof r.l==='string' && typeof r.d==='string' && r.m && typeof r.m==='object');
+  return !!s && (s.v===1 || s.v===2) && Array.isArray(s.rows) && s.rows.every(r=> r && typeof r.g==='string' &&
+    typeof r.l==='string' && typeof r.d==='string' && r.m && typeof r.m==='object' && (r.k==null || r.k==='I' || r.k==='E'));
+}
+/* pure: plan v1 (expenses only) -> v2: every row gets a kind, k:'E' when missing. The income
+   rows are added once by renderPlan() (incSeeded), when the data is there to seed them. */
+function planMigrate(s){
+  if(!s) return s;
+  s.v=2; s.rows.forEach(r=>{ if(r.k!=='I') r.k='E'; });
+  return s;
 }
 function planSave(seed){
   PLAN.at=Date.now();
@@ -4298,96 +4396,147 @@ async function planCloud(){
     if(planValid(v1)){ take=v1; push=true; note='Copied your plan from v1 in this browser. It is now shared across your devices.'; }
     else if(local) push=true;
   }
-  if(take){ PLAN=take; delete PLAN.seed; try{ localStorage.setItem(PLAN_KEY, JSON.stringify(PLAN)); }catch(e){} if(note) planNote=note; }
+  if(take){ PLAN=planMigrate(take); delete PLAN.seed; try{ localStorage.setItem(PLAN_KEY, JSON.stringify(PLAN)); }catch(e){} if(note) planNote=note; }
   planCloudReady=true;
   if(push && (PLAN||local)){ if(!PLAN) PLAN=local; planCloudSave(); }
   if(take) renderPlan(true);
 }
 function planPush(){ planUndo.push(JSON.stringify(PLAN.rows)); if(planUndo.length>30) planUndo.shift(); }
-/* last-12-complete-month average per "LABEL|detail" (spend per month) + each label's main group */
+/* last-12-complete-month average per row key (planKey: "LABEL|detail" for spend,
+   "I:LEAF|LEAF" for income) + each label's main group (expense labels, income leaves).
+   Income leaves skip STOCKS (the vests): the stock plans replace them ("I:RSU|RSU"). */
 function planRef(){
-  const m1=lastCompleteMi(), m0=m1-11, gAmt={}, ref={}, grpOf={};
-  DATA.forEach(([mi,k,grp,leaf,val])=>{ if(k!=='E') return;
+  const m1=lastCompleteMi(), m0=m1-11, gAmt={}, ref={}, grpOf={}, incOf={};
+  DATA.forEach(([mi,k,grp,leaf,val])=>{
+    if(k==='I'){ if(mi<m0||mi>m1) return;
+      const key=leaf==='STOCKS' ? 'I:RSU|RSU' : 'I:'+leaf+'|'+leaf; ref[key]=(ref[key]||0)+val/12;
+      const g=incOf[leaf]||(incOf[leaf]={}); g[grp]=(g[grp]||0)+Math.abs(val); return; }
     const g=gAmt[leaf]||(gAmt[leaf]={}); g[grp]=(g[grp]||0)+Math.abs(val); });
   DETAIL.forEach(([mi,leaf,dn,val])=>{ if(mi<m0||mi>m1) return; const key=leaf+'|'+dn; ref[key]=(ref[key]||0)+val/12; });
   for(const leaf in gAmt){ const g=gAmt[leaf]; grpOf[leaf]=Object.keys(g).sort((a,b)=>g[b]-g[a])[0]; }
-  return {ref, grpOf};
+  const incGrp={}; for(const leaf in incOf){ const g=incOf[leaf]; incGrp[leaf]=Object.keys(g).sort((a,b)=>g[b]-g[a])[0]; }
+  return {ref, grpOf, incGrp};
+}
+/* income rows of a new plan: one per income leaf with a positive average (STOCKS left out) */
+function planSeedInc(){
+  const {ref,incGrp}=planRef(), ms=planMonths(), rows=[];
+  for(const key in ref){
+    if(key.slice(0,2)!=='I:' || key==='I:RSU|RSU') continue;
+    const v=Math.round(ref[key]/10)*10; if(v<=0) continue;
+    const l=key.slice(2, key.indexOf('|')), m={};
+    ms.forEach(mi=>{ m[mi]=v; });
+    rows.push({k:'I', g:incGrp[l]||'Other income', l, d:l, m});
+  }
+  return rows;
 }
 function planSeed(){
   const {ref,grpOf}=planRef(), ms=planMonths(), rows=[];
   for(const key in ref){
+    if(key.slice(0,2)==='I:') continue;
     const v=Math.round(ref[key]/10)*10; if(v<=0) continue;           // rounded to tens; refunds-only rows are left out
     const i=key.indexOf('|'), l=key.slice(0,i), d=key.slice(i+1), m={};
     ms.forEach(mi=>{ m[mi]=v; });
-    rows.push({g:grpOf[l]||'Other', l, d, m});
+    rows.push({k:'E', g:grpOf[l]||'Other', l, d, m});
   }
-  return {v:1, at:Date.now(), rows};
+  return {v:2, at:Date.now(), incSeeded:true, rows:planSeedInc().concat(rows)};
 }
 function renderPlan(force){
   if(!pageOn('plan') || !controlsReady) return;
   const wrap=document.getElementById('planwrap'); if(!wrap) return;
   const ae=document.activeElement;
   if(!force && ae && ae.tagName==='INPUT' && wrap.contains(ae)) return;   // a data refresh never steals the cell being typed in
+  /* the forecast settings live in meta/settings: read them once if nobody did yet */
+  if(!FC && FS2.data && !FS_SETTINGS && !fcLoading){ fcLoading=true;
+    Promise.resolve(FS2.data.getSettings()).then(s=>{ if(!FS_SETTINGS) FS_SETTINGS=s||{}; FC=null; renderPlan(true); })
+      .catch(()=>{}).finally(()=>{ fcLoading=false; }); }
   if(!PLAN){ PLAN=planLoad();
     if(!PLAN){ if(!DATA.length) return; PLAN=planSeed(); planSave(true);
       planNote='Filled with your averages of the last 12 months. Change any amount.'; } }
-  const ms=planMonths(), y0=Math.floor(ms[0]/12), {ref}=planRef();
+  /* v2: a v1 plan (expenses only) gets its income rows once. `at` is left alone, so a newer
+     cloud plan still wins in planCloud() (it is then given its incomes the same way) */
+  if(!PLAN.incSeeded && DATA.length){ const inc=planSeedInc(); PLAN.rows=inc.concat(PLAN.rows); PLAN.incSeeded=true; PLAN.v=2;
+    try{ localStorage.setItem(PLAN_KEY, JSON.stringify(PLAN)); }catch(e){} planCloudSave();
+    if(inc.length) planNote='Added your incomes (last-12-month averages). Stock vests go under Forecast settings.'; }
+  const fc=fcGet(), ms=planMonths(), y0=Math.floor(ms[0]/12), {ref}=planRef();
   const MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const cols=[];
-  for(let y=y0; y<=2030; y++){
+  for(let y=y0; y<=fc.endYear; y++){
     if(planOpenY.has(y)) ms.forEach(mi=>{ if(Math.floor(mi/12)===y) cols.push({mi}); });
     cols.push({y});
   }
-  const cell=(r,c)=> c.mi!=null ? (+r.m[c.mi]||0) : ms.reduce((a,mi)=> Math.floor(mi/12)===c.y ? a+(+r.m[mi]||0) : a, 0);
-  const sumOf=(ris,c)=> ris.reduce((a,ri)=>a+cell(PLAN.rows[ri],c),0);
-  const refOf=ri=>{ const r=PLAN.rows[ri]; return ref[r.l+'|'+r.d]||0; };
-  const refSum=ris=> ris.reduce((a,ri)=>a+refOf(ri),0);
-  const tree=new Map(); PLAN_GROUPS.forEach(g=>tree.set(g,new Map()));
-  PLAN.rows.forEach((r,ri)=>{ if(!tree.has(r.g)) tree.set(r.g,new Map()); const L=tree.get(r.g);
-    if(!L.has(r.l)) L.set(r.l,[]); L.get(r.l).push(ri); });
-  const all=PLAN.rows.map((r,i)=>i);
-  const fv=v=> v ? fmt(v) : '\u2013';
-  const sums=(ris,cls)=> `<td class="ref">${fv(Math.round(refSum(ris)))}</td>`+
-    cols.map(c=>`<td${c.y!=null?' class="yt"':''}>${fv(sumOf(ris,c))}</td>`).join('');
-  const inputs=(ri,name)=>{ const r=PLAN.rows[ri];
-    return `<td class="ref">${fv(Math.round(refOf(ri)))}</td>`+cols.map(c=>{
-      const v=cell(r,c), when=c.mi!=null ? miLabel(c.mi) : 'year '+c.y;
+  /* two computed, read-only lines next to the typed rows:
+     RSU       (Work income) = the stock plans x live AMZN price x the part kept;
+     INFLATION (own group)   = every planned expense x the inflation factor of its month */
+  const px=amznPrice(), rsu=fcRsuByMi(fc, px, ms[0], ms[ms.length-1]), infl={};
+  ms.forEach(mi=>{ const f=fcInflF(mi, fc); if(!f) return; let s=0;
+    PLAN.rows.forEach(r=>{ if(r.k!=='I') s+=+r.m[mi]||0; }); if(s) infl[mi]=s*f; });
+  const items=PLAN.rows.map((r,ri)=>({r,ri}));
+  items.push({r:{k:'I', g:'Work income', l:'RSU', d:'RSU', m:rsu}, ri:null, ro:'rsu'});
+  items.push({r:{k:'E', g:'Inflation', l:'INFLATION', d:'INFLATION', m:infl}, ri:null, ro:'infl'});
+  const cell=(it,c)=> c.mi!=null ? (+it.r.m[c.mi]||0) : ms.reduce((a,mi)=> Math.floor(mi/12)===c.y ? a+(+it.r.m[mi]||0) : a, 0);
+  const sumOf=(L,c)=> L.reduce((a,it)=>a+cell(it,c),0);
+  const refOf=it=> ref[planKey(it.r)]||0;
+  const refSum=L=> L.reduce((a,it)=>a+refOf(it),0);
+  const inc=items.filter(it=>it.r.k==='I'), exp=items.filter(it=>it.r.k!=='I');
+  const tree=(groups,L0)=>{ const t=new Map(); groups.forEach(g=>t.set(g,new Map()));
+    L0.forEach(it=>{ const g=it.r.g; if(!t.has(g)) t.set(g,new Map()); const L=t.get(g);
+      if(!L.has(it.r.l)) L.set(it.r.l,[]); L.get(it.r.l).push(it); });
+    return t; };
+  const fv=v=> Math.round(v) ? fmt(v) : '\u2013';
+  const tdv=(v,yt)=> `<td class="${yt?'yt':''}${Math.round(v)<0?' neg':''}">${fv(v)}</td>`;
+  const sums=L=> `<td class="ref">${fv(refSum(L))}</td>`+cols.map(c=>tdv(sumOf(L,c), c.y!=null)).join('');
+  const inputs=(it,name)=>{
+    if(it.ro) return `<td class="ref">${fv(refOf(it))}</td>`+cols.map(c=>tdv(cell(it,c), c.y!=null)).join('');
+    const r=it.r, ri=it.ri;
+    return `<td class="ref">${fv(refOf(it))}</td>`+cols.map(c=>{
+      const v=cell(it,c), when=c.mi!=null ? miLabel(c.mi) : 'year '+c.y;
       return `<td${c.y!=null?' class="yt"':''}><input class="pc" type="text" inputmode="decimal" autocomplete="off" `+
         `data-r="${ri}" ${c.mi!=null?'data-mi="'+c.mi+'"':'data-y="'+c.y+'"'} value="${v?grp(v):''}" placeholder="0" `+
         `aria-label="${planEsc(name+', '+when)}"></td>`; }).join(''); };
-  const tools=(ri,name)=>`<button type="button" data-pt="${ri}" aria-haspopup="menu" title="Row tools" aria-label="${planEsc('Tools for '+name)}">&#8943;</button>`;
-  let body=`<tr class="tot"><td class="n">Total expenses</td>${sums(all)}</tr>`;
-  for(const [g,L] of tree){
-    const gr=[...L.values()].flat(), shut=planShutG.has(g), gq=planEsc(g);
-    body+=`<tr class="g" style="--gc:${PLAN_GC[g]||'var(--budget)'}"><td class="n"><span class="nm">`+
-      `<button type="button" class="tw" data-pg="${gq}" aria-expanded="${!shut}" aria-label="${(shut?'Open ':'Close ')+gq}">${shut?'&#9656;':'&#9662;'}</button>`+
-      `<span>${gq}</span><button type="button" data-padd="${gq}" title="Add a label" aria-label="Add a label to ${gq}">+</button></span></td>${sums(gr)}</tr>`;
-    if(shut) continue;
-    const labels=[...L.keys()].sort((a,b)=> refSum(L.get(b))-refSum(L.get(a)) || (a<b?-1:1));
-    for(const l of labels){
-      const ris=L.get(l).slice().sort((a,b)=> refOf(b)-refOf(a) || (PLAN.rows[a].d<PLAN.rows[b].d?-1:1));
-      const lq=planEsc(l), lk=g+'|'+l;
-      if(ris.length===1 && norm(PLAN.rows[ris[0]].d)===norm(l)){      // a label without details: edited on its own row
-        body+=`<tr class="l"><td class="n"><span class="nm"><span>${lq}</span>`+
-          `<button type="button" data-paddl="${planEsc(lk)}" title="Split into details" aria-label="Add a detail to ${lq}">+</button>${tools(ris[0],l)}</span></td>${inputs(ris[0],l)}</tr>`;
-        continue;
+  const tools=(it,name)=> it.ro ? '' : `<button type="button" data-pt="${it.ri}" aria-haspopup="menu" title="Row tools" aria-label="${planEsc('Tools for '+name)}">&#8943;</button>`;
+  const roNote={rsu:`stock plans \u00d7 AMZN ${px?'\u20ac'+px.toFixed(2).replace('.',','):'(price loading)'} \u00d7 ${Math.round(fc.rsuNet*100)}% kept`,
+                infl:`${String(Math.round(fc.inflation*1000)/10).replace('.',',')}% a year, from Jan ${Math.floor(ymMi(fc.inflationFrom)/12)+1}`};
+  const groupsHtml=(t, base)=>{ let body='';
+    for(const [g,L] of t){
+      if(!L.size && !base.includes(g)) continue;
+      const all=[...L.values()].flat(), shut=planShutG.has(g), gq=planEsc(g), canAdd=g!=='Inflation';
+      body+=`<tr class="g" style="--gc:${PLAN_GC[g]||'var(--budget)'}"><td class="n"><span class="nm">`+
+        `<button type="button" class="tw" data-pg="${gq}" aria-expanded="${!shut}" aria-label="${(shut?'Open ':'Close ')+gq}">${shut?'&#9656;':'&#9662;'}</button>`+
+        `<span>${gq}</span>${canAdd?`<button type="button" data-padd="${gq}" title="Add a label" aria-label="Add a label to ${gq}">+</button>`:''}</span></td>${sums(all)}</tr>`;
+      if(shut) continue;
+      const labels=[...L.keys()].sort((a,b)=> refSum(L.get(b))-refSum(L.get(a)) || (a<b?-1:1));
+      for(const l of labels){
+        const its=L.get(l).slice().sort((a,b)=> refOf(b)-refOf(a) || (a.r.d<b.r.d?-1:1));
+        const lq=planEsc(l), lk=g+'|'+l;
+        if(its.length===1 && norm(its[0].r.d)===norm(l)){      // a label without details: edited on its own row
+          const it=its[0], note=it.ro ? `<small class="ro">${planEsc(roNote[it.ro])}</small>` : '';
+          body+=`<tr class="l${it.ro?' ro':''}"><td class="n"><span class="nm"><span>${lq}${note}</span>`+
+            (it.ro ? '' : `<button type="button" data-paddl="${planEsc(lk)}" title="Split into details" aria-label="Add a detail to ${lq}">+</button>`)+
+            `${tools(it,l)}</span></td>${inputs(it,l)}</tr>`;
+          continue;
+        }
+        const open=planOpenL.has(lk);
+        body+=`<tr class="l"><td class="n"><span class="nm">`+
+          `<button type="button" class="tg" data-pl="${planEsc(lk)}" aria-expanded="${open}"><span class="tw">${open?'&#9662;':'&#9656;'}</span>${lq} <small>(${its.length})</small></button>`+
+          `<button type="button" data-paddl="${planEsc(lk)}" title="Add a detail" aria-label="Add a detail to ${lq}">+</button></span></td>${sums(its)}</tr>`;
+        if(open) its.forEach(it=>{ const d=it.r.d;
+          body+=`<tr class="d"><td class="n"><span class="nm"><span>${planEsc(d)}</span>${tools(it,l+' '+d)}</span></td>${inputs(it,l+' '+d)}</tr>`; });
       }
-      const open=planOpenL.has(lk);
-      body+=`<tr class="l"><td class="n"><span class="nm">`+
-        `<button type="button" class="tg" data-pl="${planEsc(lk)}" aria-expanded="${open}"><span class="tw">${open?'&#9662;':'&#9656;'}</span>${lq} <small>(${ris.length})</small></button>`+
-        `<button type="button" data-paddl="${planEsc(lk)}" title="Add a detail" aria-label="Add a detail to ${lq}">+</button></span></td>${sums(ris)}</tr>`;
-      if(open) ris.forEach(ri=>{ const d=PLAN.rows[ri].d;
-        body+=`<tr class="d"><td class="n"><span class="nm"><span>${planEsc(d)}</span>${tools(ri,l+' '+d)}</span></td>${inputs(ri,l+' '+d)}</tr>`; });
     }
-  }
+    return body; };
+  const sav=`<tr class="tot sav"><td class="n">Savings</td><td class="ref">${fv(refSum(inc)-refSum(exp))}</td>`+
+    cols.map(c=>tdv(sumOf(inc,c)-sumOf(exp,c), c.y!=null)).join('')+`</tr>`;
+  const body=sav+
+    `<tr class="tot"><td class="n">Total income</td>${sums(inc)}</tr>`+groupsHtml(tree(PLAN_IGROUPS.slice(0,2),inc), PLAN_IGROUPS.slice(0,2))+
+    `<tr class="tot"><td class="n">Total expenses</td>${sums(exp)}</tr>`+groupsHtml(tree(PLAN_GROUPS.concat(['Inflation']),exp), PLAN_GROUPS);
   const head=`<tr><th class="n">Category</th><th class="ref" title="Average per month, last 12 complete months">Last 12M /m</th>`+
     cols.map(c=> c.mi!=null ? `<th>${MON[c.mi%12]} ${String(Math.floor(c.mi/12)).slice(2)}</th>`
       : `<th class="yt"><button type="button" data-py="${c.y}" aria-expanded="${planOpenY.has(c.y)}" title="${planOpenY.has(c.y)?'Fold the months of '+c.y:'Show the months of '+c.y}">${planOpenY.has(c.y)?'&#9666;':'&#9656;'} ${c.y}</button></th>`).join('')+`</tr>`;
   const anyOpen=planOpenY.size>0, at=PLAN.at ? new Date(PLAN.at) : null;
-  const msg=planNote ? `<b>${planEsc(planNote)}</b>` :
-    `Saved in this browser only${at?' \u00b7 '+at.toLocaleDateString()+' '+at.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):''}. Export keeps a copy.`;
+  const msg=planNote ? `<b>${planEsc(planNote)}</b>` : fcErr ? `<b>${planEsc(fcErr)}</b>` :
+    `Saved${at?' \u00b7 '+at.toLocaleDateString()+' '+at.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):''}. Export keeps a copy.`;
   const sc=wrap.querySelector('.planscroll'), sl=sc?sc.scrollLeft:0, st=sc?sc.scrollTop:0;
-  wrap.innerHTML=`<div class="plantools"><span class="planmsg" role="status">${msg}</span>`+
+  wrap.innerHTML=fcBoxHtml(fc, px, ms)+`<div class="plantools"><span class="planmsg" role="status">${msg}</span>`+
     `<button type="button" data-pa="years">${anyOpen?'Fold all years':'Show all months'}</button>`+
     `<button type="button" data-pa="undo"${planUndo.length?'':' disabled'}>Undo</button>`+
     `<button type="button" data-pa="export">Export</button>`+
@@ -4395,6 +4544,52 @@ function renderPlan(force){
     `<button type="button" data-pa="restart" title="Fill every row again with the last-12-month averages">Restart</button></div>`+
     `<div class="planscroll"><table class="plan"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
   const sc2=wrap.querySelector('.planscroll'); sc2.scrollLeft=sl; sc2.scrollTop=st;
+}
+/* the "Forecast settings" box on top of the Plan page */
+function fcBoxHtml(fc, px, ms){
+  const pc=x=> String(Math.round(x*1000)/10).replace('.',',');
+  const now=new Date().getFullYear(), first=ms[0];
+  const vests=fc.rsu.map((x,i)=>{ const mi=ymMi(x.date), past=mi<first, net=px ? x.shares*px*fc.rsuNet : null;
+    return `<tr${past?' class="past"':''}><td><input type="month" class="fcin" data-fc="vdate" data-i="${i}" value="${x.date}" aria-label="Vest month"></td>`+
+      `<td><input class="fcin num" data-fc="vsh" data-i="${i}" type="text" inputmode="decimal" value="${String(x.shares).replace('.',',')}" aria-label="Shares"></td>`+
+      `<td class="v">${past ? 'past' : net==null ? '\u2013' : fmt(net)}</td>`+
+      `<td><button type="button" data-fca="delvest" data-i="${i}" aria-label="Remove the vest of ${planEsc(x.date)}">&#10005;</button></td></tr>`; }).join('');
+  const num=(f,v,lab)=>`<label>${lab} <input class="fcin num" data-fc="${f}" type="text" inputmode="decimal" value="${pc(v)}" aria-label="${lab} %">%</label>`;
+  return `<details class="fcbox" id="fcbox"${fcOpen?' open':''}><summary>Forecast settings \u00b7 inflation ${pc(fc.inflation)}% \u00b7 yield ${pc(fc.yield)}% \u00b7 to ${fc.endYear} \u00b7 ${fc.rsu.length} stock vest${fc.rsu.length===1?'':'s'}</summary>`+
+    `<div class="fcrow">${num('inflation',fc.inflation,'Inflation a year')}${num('yield',fc.yield,'Yield a year')}${num('rsuNet',fc.rsuNet,'Stock kept after tax')}</div>`+
+    `<div class="fcrow"><span>Plan ends in Dec <b>${fc.endYear}</b></span>`+
+    `<button type="button" data-fca="addyear">Add ${fc.endYear+1}</button>`+
+    `<button type="button" data-fca="dropyear"${fc.endYear<=now?' disabled':''}>Remove ${fc.endYear}</button></div>`+
+    `<div class="fcsub">Amazon stock vests (sold at once). Value = shares \u00d7 AMZN ${px?'\u20ac'+px.toFixed(2).replace('.',','):'price loading'} \u00d7 ${pc(fc.rsuNet)}%.</div>`+
+    `<table class="fcvest"><thead><tr><th>Month</th><th>Shares</th><th>Net \u20ac</th><th></th></tr></thead><tbody>${vests}</tbody></table>`+
+    `<div class="fcrow"><button type="button" data-fca="addvest">Add a vest</button></div></details>`;
+}
+/* a change in the settings box: check it, save it, redraw */
+function fcField(t){
+  const fc=JSON.parse(JSON.stringify(fcGet())), f=t.dataset.fc, num=parseFloat(String(t.value).replace(',','.').replace('%','').trim());
+  const bad=m=>{ planNote=m; renderPlan(true); };
+  if(f==='inflation' || f==='yield' || f==='rsuNet'){
+    const lim={inflation:[0,50], yield:[-50,50], rsuNet:[0,100]}[f];
+    if(!isFinite(num) || num<lim[0] || num>lim[1]) return bad(`Use a number from ${lim[0]} to ${lim[1]}.`);
+    fc[f]=num/100;
+  } else if(f==='vdate'){ if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(t.value)) return bad('Pick a month.'); fc.rsu[+t.dataset.i].date=t.value; }
+  else if(f==='vsh'){ if(!(num>0)) return bad('Shares must be more than 0. Use \u2715 to remove a vest.'); fc.rsu[+t.dataset.i].shares=num; }
+  else return;
+  planNote=''; fcSave(fc).then(()=>renderPlan(true)); renderPlan(true);
+}
+function fcAct(a, i){
+  const fc=JSON.parse(JSON.stringify(fcGet()));
+  if(a==='addyear'){ const from=fc.endYear*12+11; fc.endYear++;
+    planPush(); planExtendRows(PLAN.rows, from, fc.endYear*12+11); planSave();
+    planNote=`Added ${fc.endYear}: each row carries its Dec ${fc.endYear-1} amount.`; }
+  else if(a==='dropyear'){ if(fc.endYear<=new Date().getFullYear()) return;
+    if(!window.confirm(`Take ${fc.endYear} out of the plan?\nIts amounts are kept and come back if you add the year again.`)) return;
+    fc.endYear--; planNote=`The plan now ends in Dec ${fc.endYear}.`; }
+  else if(a==='addvest'){ const mi=fc.rsu.length ? ymMi(fc.rsu[fc.rsu.length-1].date)+3 : planStart()+1;
+    fc.rsu.push({date:miYm(mi), shares:1}); fcOpen=true; planNote='Vest added: set its month and shares.'; }
+  else if(a==='delvest'){ fc.rsu.splice(i,1); planNote='Vest removed.'; }
+  else return;
+  fcSave(fc).then(()=>renderPlan(true)); renderPlan(true);
 }
 /* redraw, then put the cursor back in the cell that had it (same row, same column) */
 function planRedraw(){
@@ -4412,7 +4607,7 @@ function planOpenMenu(btn, ri){
   const m=document.getElementById('planMenu'), r=PLAN.rows[ri]; if(!m || !r) return;
   const ms=planMonths(), f=(planFocus && planFocus.r===ri && planFocus.mi!=null) ? planFocus.mi : ms[0];
   planMenuR=ri;
-  m.innerHTML=`<button type="button" role="menuitem" data-pm="repeat" data-mi="${f}">Repeat ${miLabel(f)} to Dec 2030</button>`+
+  m.innerHTML=`<button type="button" role="menuitem" data-pm="repeat" data-mi="${f}">Repeat ${miLabel(f)} to Dec ${fcGet().endYear}</button>`+
     `<button type="button" role="menuitem" data-pm="set">Same amount every month\u2026</button>`+
     `<button type="button" role="menuitem" data-pm="grow">Grow by % each year\u2026</button>`+
     `<button type="button" role="menuitem" data-pm="clear">Set to zero</button>`+
@@ -4448,7 +4643,7 @@ function planAdd(g, l){
   if(PLAN.rows.some(r=> r.g===g && r.l===L && norm(r.d)===norm(d))){ planNote=`${name} is already in the plan.`; renderPlan(true); return; }
   planPush();
   /* a label without details keeps its own row, which then shows as its first detail */
-  PLAN.rows.push({g, l:L, d, m:{}});
+  PLAN.rows.push({k:planKindOf(g), g, l:L, d, m:{}});
   if(l!=null) planOpenL.add(g+'|'+l);
   planShutG.delete(g); planNote=`${name} added. Type its amounts.`; planSave(); renderPlan(true);
   const ri=PLAN.rows.length-1, el=document.querySelector('#planwrap input.pc[data-r="'+ri+'"]'); if(el) el.focus();
@@ -4464,7 +4659,7 @@ function planImport(file){
   const fr=new FileReader();
   fr.onload=()=>{ let s=null; try{ s=JSON.parse(fr.result); }catch(e){}
     if(!planValid(s)){ planNote='That file is not a plan exported from this page.'; renderPlan(true); return; }
-    if(PLAN) planPush(); PLAN=s; planNote=`Imported ${s.rows.length} rows. Undo brings the old plan back.`; planSave(); renderPlan(true); };
+    if(PLAN) planPush(); PLAN=planMigrate(s); planNote=`Imported ${s.rows.length} rows. Undo brings the old plan back.`; planSave(); renderPlan(true); };
   fr.readAsText(file);
 }
 function planInit(){
@@ -4473,6 +4668,7 @@ function planInit(){
   wrap.addEventListener('click',e=>{
     const t=e.target.closest ? e.target.closest('button') : null; if(!t || !wrap.contains(t)) return;
     const ds=t.dataset;
+    if(ds.fca!=null){ fcAct(ds.fca, ds.i!=null ? +ds.i : null); return; }
     if(ds.py!=null){ const y=+ds.py; planOpenY.has(y)?planOpenY.delete(y):planOpenY.add(y); renderPlan(true); }
     else if(ds.pg!=null){ planShutG.has(ds.pg)?planShutG.delete(ds.pg):planShutG.add(ds.pg); renderPlan(true); }
     else if(ds.pl!=null){ planOpenL.has(ds.pl)?planOpenL.delete(ds.pl):planOpenL.add(ds.pl); renderPlan(true); }
@@ -4485,12 +4681,14 @@ function planInit(){
     else if(ds.pa==='export') planExport();
     else if(ds.pa==='import') file.click();
     else if(ds.pa==='restart'){ if(!window.confirm('Fill the whole plan again with your last-12-month averages?\nUndo brings your plan back.')) return;
-      planPush(); PLAN.rows=planSeed().rows; planNote='Filled again with your last-12-month averages.'; planSave(); renderPlan(true); }
+      planPush(); PLAN.rows=planSeed().rows; PLAN.incSeeded=true; planNote='Filled again with your last-12-month averages.'; planSave(); renderPlan(true); }
   });
+  wrap.addEventListener('toggle',e=>{ if(e.target && e.target.id==='fcbox') fcOpen=e.target.open; }, true);
   wrap.addEventListener('focusin',e=>{ const t=e.target; if(!t.classList || !t.classList.contains('pc')) return;
     planFocus={r:+t.dataset.r, mi:t.dataset.mi!=null ? +t.dataset.mi : null}; t.dataset.o=t.value; try{ t.select(); }catch(x){} });
   wrap.addEventListener('change',e=>{
-    const t=e.target; if(!t.classList || !t.classList.contains('pc')) return;
+    const t=e.target; if(t.dataset && t.dataset.fc!=null){ fcField(t); return; }
+    if(!t.classList || !t.classList.contains('pc')) return;
     const ri=+t.dataset.r, r=PLAN && PLAN.rows[ri]; if(!r) return;
     const v=planNum(t.value);
     if(isNaN(v)){ planNote='That is not a number.'; setTimeout(planRedraw,0); return; }

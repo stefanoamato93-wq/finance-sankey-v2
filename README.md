@@ -119,7 +119,7 @@ pages. Only the page on screen is shown **and drawn**:
 | **Compare** | `#compare` | **Period Comparison** with a drill-down **waterfall** of the changes (see below). |
 | **Years Paid** | `#life` | **Years of Life Paid** (see below). |
 | **Query** | `#query` | **Query** of past transactions, modelled on the sheet's QUERY tab (see below). |
-| **Plan** | `#plan` | **Future Expenses**: an editable plan per group > label > detail, by month to Dec 2030 (see below). |
+| **Plan** | `#plan` | **Income & Expenses** plan: editable per group > label > detail, by month to Dec of the end year (default 2030), with stock vests, inflation and forecast settings (see below). |
 
 - **Navigation:** desktop = a sticky tab row under the title (the Cash Flow controls
   stick right under it, `--tabsh`); phone (<=680px) = a fixed bottom tab bar with seven
@@ -171,6 +171,37 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   exported file; Undo brings the old plan back). K applies to the shown values.
 - Code: `PLAN_KEY`, `planSeed()`, `planRef()`, `renderPlan()`, `planInit()`,
   `planMenuAct()`, `planAdd()`. Check: `_verify_plan.py [shot]` (untracked).
+
+#### v2 Plan: incomes, stock vests, inflation, settings (25 Oct 2026)
+- **Incomes too.** Rows carry a kind `k: 'I' | 'E'` (plan `v: 2`; a v1 plan is migrated on
+  load, `k` missing = `'E'`). On top: **Savings** (income − expenses, red when negative),
+  **Total income** with *Work income* / *Non-work income* (one row per income leaf, seeded
+  with its last-12-month average, rounded to tens), then **Total expenses** and the expense
+  groups as before. A v1 plan gets its income rows once (`incSeeded`), without moving its
+  `at`, so a newer cloud plan still wins. `+` on an income group adds an income label.
+  `STOCKS` (past vests) is not seeded: the stock plans below replace it.
+- **Forecast settings** box on top of the page (`meta/settings.forecastj`, merged with
+  `setSettings`, copy in `fs2-forecast-v1`): `{v, inflation, yield, endYear, inflationFrom,
+  rsuNet, rsu:[{date:"YYYY-MM", shares}]}`. Inflation % (default 2), Yield % (default 8,
+  used by the net worth forecast), Stock kept after tax % (default 53). Bad values are
+  refused with a note. `fcNorm()` cleans whatever is stored.
+- **Plan length:** `planEnd()` = Dec of `endYear` (default 2030). **Add YYYY** adds a year:
+  every row gets the new 12 months at its December amount (`planExtendRows()`, months already
+  there are kept). **Remove YYYY** shortens the plan; the amounts stay and return if the year
+  is added again.
+- **RSU** (read-only line in Work income): for each vest, shares × live AMZN EUR price ×
+  the part kept. Price = the `…|AMZN` holding's live price, else one onvista read
+  (`amznPrice()`, ISIN US0231351067). Stefano sells the shares at once, so it is cash income.
+  Vests before this month show as `past` and count nothing.
+- **INFLATION** (read-only line, own group): for every month, all planned expenses ×
+  ((1 + rate)^years − 1), one step every January after the year of `inflationFrom`
+  (this year = 0, next year = 2 %, then 4,04 %…; `fcInflF()`). Base amounts stay flat.
+  Incomes are not inflated.
+- Code: `fcNorm`, `fcGet`, `fcSave`, `planEnd`, `planExtendRows`, `fcInflF`, `fcRsuByMi`,
+  `amznPrice`, `planMigrate`, `planSeedInc`, `fcBoxHtml`, `fcField`, `fcAct`.
+  Checks: `node ..\finance-v2-plan\tools\test_forecast.js` (pure helpers),
+  `py _verify_forecast.py` (untracked, headless Edge: migration, incomes, RSU, inflation,
+  settings saved, add / remove a year).
 
 ### Query (past transactions, filters, ranked views, drill-down)
 The **Query** page, added 10 Oct 2026, modelled on the sheet's `QUERY` tab (its criteria
