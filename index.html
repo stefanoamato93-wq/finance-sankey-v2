@@ -4812,13 +4812,34 @@ function fsPanelRender(busy){
   else{
     h+=`<div><b>Last import from the sheet:</b> ${when(S.lastImportAt)} (auto every 12 h)</div>`;
     if(rep) h+=`<div class="sub">${rep.rows.toLocaleString()} rows, ${rep.months} months, ${rep.written} written, biggest ${rep.biggestMonth} (${Math.round(rep.biggestBytes/1024)} KB)</div>`;
-    h+=`<div style="margin-top:6px"><button type="button" id="fsImportBtn"${fsImportBusy?' disabled':''}>${busy||fsImportBusy?'Importing…':'Import from sheet now'}</button></div>`;
+    h+=`<div style="margin-top:6px"><button type="button" id="fsImportBtn"${fsImportBusy?' disabled':''}>${busy||fsImportBusy?'Importing…':'Import from sheet now'}</button>
+      <button type="button" id="fsCutBtn"${fsImportBusy?' disabled':''}>Switch to Firebase for good</button></div>`;
   }
   if(FS_LAST && !FS_LAST.ok) h+=`<div style="color:#ff9a9a">Import failed: ${planEsc(FS_LAST.err)}</div>`;
   else if(FS_LAST && FS_LAST.ok) h+=`<div style="color:var(--income)">Import done: ${FS_LAST.rep.written} month(s) changed.</div>`;
   p.innerHTML=h;
   const b=document.getElementById('fsImportBtn');
   if(b) b.onclick=async()=>{ const rep=await fsImport(); if(rep && rep.written){ dbAt=0; refreshDB(); } };
+  const c=document.getElementById('fsCutBtn');
+  if(c) c.onclick=()=>fsCutover();
+}
+/* Cutover (phase 5): one last import from the sheet, then meta/settings.cutover=true.
+   After this the sheet is never imported again (an import overwrites whole month docs,
+   which would wipe rows the tracker saves), and expense-tracker-v2 saves to "months"
+   instead of its sandbox. The sheet itself is not touched: it stays as a backup. */
+async function fsCutover(){
+  const D=FS2.data; if(!D || fsImportBusy) return;
+  if(!confirm('Switch to Firebase for good?\n\nOne last copy of the sheet is made now. After that the sheet is never copied again, and Expense Tracker v2 saves to your real data.\n\nThe Google Sheet is not changed.')) return;
+  const rep=await fsImport();
+  if(!rep){ alert('The last copy from the sheet failed, so nothing was switched. Try again.'); return; }
+  try{
+    await D.setSettings({cutover:true, cutoverAt:Date.now()});
+    FS_SETTINGS=Object.assign({}, FS_SETTINGS||{}, {cutover:true, cutoverAt:Date.now()});
+    FS_LAST=null;
+    if(rep.written){ dbAt=0; refreshDB(); }
+    fsPanelRender();
+    alert('Done. Reopen Expense Tracker v2: the yellow test line is gone and it saves to your real data.');
+  }catch(e){ alert('Could not save the switch: '+((e && (e.code||e.message))||e)); }
 }
 
 /* ---- live ETF values: READ-ONLY GETs of the public gviz export, never a write ----

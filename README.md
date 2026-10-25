@@ -16,6 +16,7 @@ status: `Personal Finance\finance-v2-plan\PLAN.md`.
 | 2 Import from sheet | done 24 Oct 2026 |
 | 3 Read Firestore instead of the sheet | done 24 Oct 2026 |
 | 4 Expense tracker v2 writes Firestore (repo `expense-tracker-v2`) | built 25 Oct 2026 |
+| 5 Cutover: **Data → Switch to Firebase for good** (`fsCutover()`: last import, then `meta/settings.cutover=true`; the sheet stays online as a backup, untouched) | button added 25 Oct 2026 |
 
 ### Where the data comes from (phases 2-3)
 - **Firestore** `users/{uid}/months/{YYYY-MM}` = `{txj:"<JSON of {id:Tx}>", n, updatedAt, source}`,
