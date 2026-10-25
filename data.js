@@ -26,7 +26,7 @@ const {
 const {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
   collection, doc, getDoc, getDocs, getDocsFromCache, setDoc, query, where, writeBatch,
-  serverTimestamp, Timestamp, onSnapshot
+  serverTimestamp, Timestamp, onSnapshot, documentId
 } = await import(`${SDK}/firebase-firestore.js`);
 const { firebaseConfig } = await import("./firebase-config.js");
 
@@ -66,8 +66,8 @@ export function onUser(cb) { return onAuthStateChanged(auth, cb); }
 // ---- months -------------------------------------------------------------------------
 // Effective rows of a month doc: txj (sheet import, one JSON string) + tx (rows written by
 // expense-tracker-v2, one map field per row; tx wins on the same id) - del (deleted ids).
-const monthOf = d => {
-  const x = d.data();
+const monthOf = (d, est) => {
+  const x = est === true ? d.data({ serverTimestamps: "estimate" }) : d.data();   // est: only from watchChanges (map passes an index)
   let tx = {};
   if (typeof x.txj === "string") { try { tx = JSON.parse(x.txj) || {}; } catch (e) { tx = {}; } }
   Object.assign(tx, x.tx || {});
@@ -112,16 +112,15 @@ export async function writeMonths(map) {
   return ids.length;
 }
 
-// Live: cb(n) each time the server reports n months changed after sinceMs (an entry saved
-// in expense-tracker-v2, on any device). Costs 1 read per changed month; nothing while
-// idle. The first answer (what already changed) is passed on only if it is not empty.
-export function watchChanges(sinceMs, cb) {
-  const q = query(monthsCol(), where("updatedAt", ">", Timestamp.fromMillis(sinceMs || Date.now())));
+// Live: cb([{month, tx, updatedAt, source}]) with the recent months (doc id >= fromYm, e.g.
+// 2 months back) every time one of them changes, on any device or in another tab (same way
+// expense-tracker-v2 watches). Pending writes from another tab count too, so a change shows
+// at once. Costs ~1 read per watched month when it opens, then 1 per change.
+export function watchChanges(fromYm, cb) {
+  const q = query(monthsCol(), where(documentId(), ">=", fromYm));
   return onSnapshot(q, snap => {
-    if (snap.metadata.hasPendingWrites || snap.metadata.fromCache) return;
-    const n = snap.docChanges().length;
-    if (n) cb(n);
-  }, () => {});
+    cb(snap.docs.map(d => monthOf(d, true)));
+  }, err => { console.warn("watchChanges", err && (err.code || err.message)); });
 }
 
 // ---- plan ---------------------------------------------------------------------------

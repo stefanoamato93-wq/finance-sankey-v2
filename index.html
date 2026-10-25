@@ -4974,7 +4974,11 @@ async function fsFetch(){
   FS_READS+=Math.max(1, fresh.length); fsMerge(fresh);
   if(full || !FS_MONTHS.size){ try{ localStorage.setItem(FS_FULL_KEY, String(Date.now())); }catch(e){} }
   if(!FS_MONTHS.size){ const e=new Error('no data in Firebase yet'); e.code='empty'; throw e; }
-  const fp='X:'+csvHash([...FS_MONTHS.values()].map(m=>m.month+'@'+(m.updatedAt||0)).sort().join(','));
+  return fsAnswer();
+}
+/* the months in memory -> the DB answer every page is built from (rebuilt only on change) */
+function fsAnswer(){
+  const fp='X:'+csvHash([...FS_MONTHS.values()].map(m=>m.month+'@'+(m.updatedAt||0)+'.'+(m.rev||0)).sort().join(','));
   if(fp!==FS_FP){ FS_CSV=fsCSV(FS_MONTHS.values()); FS_FP=fp; }
   fsPanelRender();
   return {csv:FS_CSV, src:'X', h:FS_FP};
@@ -5492,14 +5496,28 @@ async function refreshDB(){
   catch(e){ /* keep what is on screen; the next tick retries */ }
   finally{ dbBusy=false; syncTx(); }
 }
-/* live updates (25 Oct 2026): Firestore tells us when a month changes on the server (an entry
-   saved in expense-tracker-v2, on any device), then the normal refresh reads just that month.
-   While the tab is hidden refreshDB() waits; coming back runs it at once (dbAt = 0). */
-let fsUnwatch=null;
+/* live updates (25 Oct 2026): a Firestore listener on the recent months (this month and the
+   2 before, like expense-tracker-v2 does) hands over their rows whenever one changes, on any
+   device or in another tab; they replace those months in memory and the pages redraw
+   (takeDB: nothing happens when the content is the same). Older months still come in with
+   the 10-minute poll. A redraw waits while the tab is hidden or a range-bar drag is on. */
+let fsUnwatch=null, fsLivePend=null, fsLiveAt=0;
 function fsWatch(){
   const D=FS2.data; if(fsUnwatch || !D || !D.watchChanges) return;
-  const go=()=>{ dbAt=0; if(dbBusy){ setTimeout(go,1500); return; } refreshDB(); };
-  try{ fsUnwatch=D.watchChanges(FS_MAX || Date.now(), go); }catch(e){ fsUnwatch=null; }
+  const d=new Date(), from=new Date(d.getFullYear(), d.getMonth()-2, 1);
+  const fromYm=from.getFullYear()+'-'+String(from.getMonth()+1).padStart(2,'0');
+  const apply=()=>{
+    if(!fsLivePend) return;
+    if(dbBusy || document.hidden){ setTimeout(apply, 1500); return; }
+    const list=fsLivePend; fsLivePend=null;
+    list.forEach(m=>{ const old=FS_MONTHS.get(m.month);
+      const same=old && JSON.stringify(old.tx)===JSON.stringify(m.tx), rev=((old&&old.rev)||0)+(same?0:1);
+      FS_MONTHS.set(m.month, Object.assign({}, m, {rev, updatedAt: m.updatedAt||(old&&old.updatedAt)||0})); });
+    if(!FS_MONTHS.size) return;
+    fsLiveAt=Date.now(); dbBusy=true;
+    takeDB(fsAnswer()).catch(()=>{}).finally(()=>{ dbBusy=false; syncTx(); });
+  };
+  try{ fsUnwatch=D.watchChanges(fromYm, list=>{ fsLivePend=list; setTimeout(apply, 300); }); }catch(e){ fsUnwatch=null; }
 }
 function autoTick(back){
   if(document.hidden) return;
