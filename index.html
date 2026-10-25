@@ -4378,10 +4378,20 @@ function planValid(s){
     typeof r.l==='string' && typeof r.d==='string' && r.m && typeof r.m==='object' && (r.k==null || r.k==='I' || r.k==='E'));
 }
 /* pure: plan v1 (expenses only) -> v2: every row gets a kind, k:'E' when missing. The income
-   rows are added once by renderPlan() (incSeeded), when the data is there to seed them. */
+   rows are added once by renderPlan() (incSeeded), when the data is there to seed them.
+   Labels in PLAN_ONE_ROW (HOLIDAYS) are planned as one generic row: their detail rows
+   are merged into one (amounts added up per month), kept where the first one was. */
+const PLAN_ONE_ROW=['HOLIDAYS'];
 function planMigrate(s){
   if(!s) return s;
   s.v=2; s.rows.forEach(r=>{ if(r.k!=='I') r.k='E'; });
+  const keep=[], one={};
+  s.rows.forEach(r=>{
+    if(r.k==='I' || !PLAN_ONE_ROW.includes(r.l)){ keep.push(r); return; }
+    const o=one[r.l]; if(!o){ r.d=r.l; one[r.l]=r; keep.push(r); return; }
+    for(const mi in r.m) o.m[mi]=(+o.m[mi]||0)+(+r.m[mi]||0);
+  });
+  s.rows=keep;
   return s;
 }
 function planSave(seed){
@@ -4439,7 +4449,7 @@ function planRef(){
       const key=leaf==='STOCKS' ? 'I:RSU|RSU' : 'I:'+leaf+'|'+leaf; ref[key]=(ref[key]||0)+val/12;
       const g=incOf[leaf]||(incOf[leaf]={}); g[grp]=(g[grp]||0)+Math.abs(val); return; }
     const g=gAmt[leaf]||(gAmt[leaf]={}); g[grp]=(g[grp]||0)+Math.abs(val); });
-  DETAIL.forEach(([mi,leaf,dn,val])=>{ if(mi<m0||mi>m1) return; const key=leaf+'|'+dn; ref[key]=(ref[key]||0)+val/12; });
+  DETAIL.forEach(([mi,leaf,dn,val])=>{ if(mi<m0||mi>m1) return; const key=leaf+'|'+(PLAN_ONE_ROW.includes(leaf)?leaf:dn); ref[key]=(ref[key]||0)+val/12; });
   for(const leaf in gAmt){ const g=gAmt[leaf]; grpOf[leaf]=Object.keys(g).sort((a,b)=>g[b]-g[a])[0]; }
   const incGrp={}; for(const leaf in incOf){ const g=incOf[leaf]; incGrp[leaf]=Object.keys(g).sort((a,b)=>g[b]-g[a])[0]; }
   return {ref, grpOf, incGrp};
@@ -4577,7 +4587,7 @@ function renderPlan(force){
         if(its.length===1 && norm(its[0].r.d)===norm(l)){      // a label without details: edited on its own row
           const it=its[0], note=it.ro ? `<small class="ro">${planEsc(roNote[it.ro])}</small>` : '';
           body+=`<tr class="l${it.ro?' ro':''}"><td class="n"><span class="nm"><span>${lq}${note}</span>`+
-            (it.ro ? '' : `<button type="button" data-paddl="${planEsc(lk)}" title="Split into details" aria-label="Add a detail to ${lq}">+</button>`)+
+            (it.ro || PLAN_ONE_ROW.includes(l) ? '' : `<button type="button" data-paddl="${planEsc(lk)}" title="Split into details" aria-label="Add a detail to ${lq}">+</button>`)+
             `${tools(it,l)}</span></td>${inputs(it,l)}</tr>`;
           continue;
         }
@@ -4677,7 +4687,7 @@ function planOpenMenu(btn, ri){
   m.innerHTML=`<button type="button" role="menuitem" data-pm="repeat" data-mi="${f}">Repeat ${miLabel(f)} to Dec ${fcGet().endYear}</button>`+
     `<button type="button" role="menuitem" data-pm="set">Same amount every month\u2026</button>`+
     `<button type="button" role="menuitem" data-pm="grow">Grow by % each year\u2026</button>`+
-    `<button type="button" role="menuitem" data-pm="yearly" data-mi="${f}">Only every ${MON_L[f%12]}, once a year\u2026</button>`+
+    `<button type="button" role="menuitem" data-pm="yearly" data-mi="${f}">Add an extra once a year\u2026</button>`+
     `<button type="button" role="menuitem" data-pm="clear">Set to zero</button>`+
     `<button type="button" role="menuitem" class="del" data-pm="del">Delete row</button>`;
   m.hidden=false;
@@ -4700,10 +4710,14 @@ function planMenuAct(act, mi0){
     planChange(ri,()=>{ const y0=Math.floor(ms[0]/12);
       ms.forEach(mi=>{ if(Math.floor(mi/12)===y0) return; const prev=mi-12>=ms[0] ? (+r.m[mi-12]||0) : (+r.m[ms[0]]||0);
         r.m[mi]=Math.round(prev*(1+p/100)); }); }, `${name}: +${p}% each year from ${Math.floor(ms[0]/12)+1}.`); }
-  else if(act==='yearly'){ const mo=mi0%12, cur=+r.m[mi0]||0;
-    const s=window.prompt(`${name}\nAmount every ${MON_L[mo]} (euros). All other months become 0:`, grp(cur || ms.reduce((a,mi)=> Math.floor(mi/12)===Math.floor(ms[ms.length-1]/12) ? a+(+r.m[mi]||0) : a, 0))); if(s==null) return;
-    const v=planNum(s); if(isNaN(v)){ planNote='That is not a number.'; renderPlan(true); return; }
-    planChange(ri,()=>{ ms.forEach(mi=>{ r.m[mi]= mi%12===mo ? v : 0; }); }, `${name}: ${grp(v)} every ${MON_L[mo]}, 0 in the other months.`); }
+  else if(act==='yearly'){
+    /* a yearly one-off (car insurance every June): +amount on top of that month, every year */
+    const sm=window.prompt(`${name}\nWhich month, every year? (1-12 or a name, for example 6 or June)`, MON_L[mi0%12]); if(sm==null) return;
+    const t=String(sm).trim().toLowerCase(), mo=/^\d{1,2}$/.test(t) ? +t-1 : MON_L.findIndex(x=>t.length>=3 && x.toLowerCase().startsWith(t));
+    if(!(mo>=0 && mo<=11)){ planNote='That is not a month.'; renderPlan(true); return; }
+    const s=window.prompt(`${name}\nExtra amount every ${MON_L[mo]}, on top of that month (euros):`, ''); if(s==null) return;
+    const v=planNum(s); if(isNaN(v) || !v){ planNote='That is not a number.'; renderPlan(true); return; }
+    planChange(ri,()=>{ ms.forEach(mi=>{ if(mi%12===mo) r.m[mi]=(+r.m[mi]||0)+v; }); }, `${name}: +${grp(v)} every ${MON_L[mo]}. Undo takes it off.`); }
   else if(act==='clear'){ planChange(ri,()=>{ ms.forEach(mi=>{ r.m[mi]=0; }); }, `${name}: set to zero.`); }
   else if(act==='del'){ if(!window.confirm(`Delete "${name}" from the plan?\nUndo brings it back.`)) return;
     planChange(ri,()=>{ PLAN.rows.splice(ri,1); }, `${name}: deleted.`); }
