@@ -41,9 +41,10 @@ browser: it reads only Firebase data (net worth, plan, forecast settings), never
 - **Parameters** (folded groups that stay open after an edit, saved on every change, 300 ms
   debounce, to `meta/settings.firej` v2 + `fs2-fire-v1`): birth month (1993-01), FIRE age 45,
   target age 100; start net worth = the Net Worth page (read-only), gain share today (blank =
-  from your entries); mean 10,05 %, spread 20 %, floor −80 %, cap +80 % (all as the sheet),
+  from your entries); **mean return = the yield in Forecast settings (Plan page, 8 %), read-only**;
+  spread 20 %, floor −80 %, cap +80 % (as the sheet),
   Normal or fat tails, dice number (seed, "New dice"), "Bad first 5 years", spread by age;
-  income growth 2 % (sheet), passion income + end age, **state pension from 72 = 60 % of
+  **income growth = the salary rise in Forecast settings**, read-only; passion income + end age, **state pension from 72 = 60 % of
   today's monthly salary** (BASE in the plan this month, or a typed salary), grown with
   inflation from today, paid even if you stop working early; spending after FIRE 100 %,
   one-offs (year + EUR in January; negative = money in); tax 26 % on the gain share of what is
