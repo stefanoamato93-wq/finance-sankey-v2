@@ -5492,6 +5492,15 @@ async function refreshDB(){
   catch(e){ /* keep what is on screen; the next tick retries */ }
   finally{ dbBusy=false; syncTx(); }
 }
+/* live updates (25 Oct 2026): Firestore tells us when a month changes on the server (an entry
+   saved in expense-tracker-v2, on any device), then the normal refresh reads just that month.
+   While the tab is hidden refreshDB() waits; coming back runs it at once (dbAt = 0). */
+let fsUnwatch=null;
+function fsWatch(){
+  const D=FS2.data; if(fsUnwatch || !D || !D.watchChanges) return;
+  const go=()=>{ dbAt=0; if(dbBusy){ setTimeout(go,1500); return; } refreshDB(); };
+  try{ fsUnwatch=D.watchChanges(FS_MAX || Date.now(), go); }catch(e){ fsUnwatch=null; }
+}
 function autoTick(back){
   if(document.hidden) return;
   const now=Date.now();
@@ -5573,7 +5582,7 @@ function boot(){
     if(shown){ showBadge(cached.entry.retrievedAt,false); return; }        // keep cached data on screen
     if(cached.ok){ try{ applySnapshot(cached.entry); dbHash=cached.entry.hash; showBadge(cached.entry.retrievedAt,false); return; }catch(e){} }  // fall back to stale cache
     showError(err && err.message ? err.message : 'load failed');
-  }).finally(()=>{ dbBusy=false; syncTx(); fsAfterBoot(); planCloud(); });
+  }).finally(()=>{ dbBusy=false; syncTx(); fsAfterBoot(); planCloud(); fsWatch(); });
 }
 /* tap/click away closes the hover preview and the detail panel (the panel itself
    stops propagation, and node clicks do too, so neither closes on its own click) */

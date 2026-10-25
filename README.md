@@ -53,6 +53,12 @@ status: `Personal Finance\finance-v2-plan\PLAN.md`.
   `bootCheck()` and `fetchTx()` now call it (fingerprint prefix `X:`); the Query page uses
   the same months (no second read). The old sheet readers stay in the file
   (`bootCheckSheet`, `fetchTxSheet`, `fetchSlim`, `fetchFull`) for the test shim only.
+- **Live updates (25 Oct 2026):** after boot, `fsWatch()` opens a Firestore listener
+  (`D.watchChanges(sinceMs, cb)`, `onSnapshot` on months with `updatedAt` > the newest seen).
+  An entry saved in expense-tracker-v2 (any device) fires it within seconds, and the normal
+  `refreshDB()` reads that month: every page, the Query rows included, update with no reload.
+  Hidden tab: the read waits until you come back (`dbAt = 0`). Costs 1 read per changed month.
+  The 10-minute poll stays as a backup.
 - **Import (sheet is still the truth):** `fsImport()` reads the DB tab as **gviz JSON**, not
   CSV, because the CSV export rounds VALUE to whole euros (10 rows carry cents). Skips the
   sheet's blank formula rows (year 1899 / #N/A). Deterministic ids (hash of

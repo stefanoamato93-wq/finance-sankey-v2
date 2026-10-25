@@ -26,7 +26,7 @@ const {
 const {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
   collection, doc, getDoc, getDocs, getDocsFromCache, setDoc, query, where, writeBatch,
-  serverTimestamp, Timestamp
+  serverTimestamp, Timestamp, onSnapshot
 } = await import(`${SDK}/firebase-firestore.js`);
 const { firebaseConfig } = await import("./firebase-config.js");
 
@@ -112,6 +112,18 @@ export async function writeMonths(map) {
   return ids.length;
 }
 
+// Live: cb(n) each time the server reports n months changed after sinceMs (an entry saved
+// in expense-tracker-v2, on any device). Costs 1 read per changed month; nothing while
+// idle. The first answer (what already changed) is passed on only if it is not empty.
+export function watchChanges(sinceMs, cb) {
+  const q = query(monthsCol(), where("updatedAt", ">", Timestamp.fromMillis(sinceMs || Date.now())));
+  return onSnapshot(q, snap => {
+    if (snap.metadata.hasPendingWrites || snap.metadata.fromCache) return;
+    const n = snap.docChanges().length;
+    if (n) cb(n);
+  }, () => {});
+}
+
 // ---- plan ---------------------------------------------------------------------------
 export async function loadPlan() {
   const s = await getDoc(planRef());
@@ -142,7 +154,7 @@ export async function checkAccess() {
   }
 }
 
-const api = { signIn, signOut, onUser, loadMonths, loadCachedMonths, writeMonths, loadPlan, savePlan,
+const api = { signIn, signOut, onUser, loadMonths, loadCachedMonths, writeMonths, watchChanges, loadPlan, savePlan,
               getSettings, setSettings, checkAccess };
 window.FS2Data = api;
 
