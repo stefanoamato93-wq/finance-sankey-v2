@@ -2172,6 +2172,7 @@ function buildNetWorth(){
   const sumV=list=>list.reduce((a,r)=>a+r.v,0);
   const gTot=sumV(rows);
   NW_NOW = LIVE ? {v:gTot, at:LIVE.at} : null;              // Years of Life Paid "Now" point
+  fcRefresh(gTot);                                          // forecast from today's net worth (Years Paid reads it too)
   /* the hero card and the tables are drawn only while the Net Worth page is on screen;
      the live net worth above is kept current for the Years Paid page either way */
   if(!pageOn('networth')){ renderYlp(); return; }
@@ -2193,24 +2194,39 @@ function buildNetWorth(){
   for(const k in byMi){ if(+k<s0) run+=byMi[k]; }
   for(let mi=s0; mi<=cur; mi++){ run+=byMi[mi]||0; series.push(run); }
   if(LIVE && series.length) series[series.length-1]=gTot;   // latest point = live net worth
+  /* forecast tail (25 Oct 2026): from the month after `cur` to Dec of the plan's end year,
+     the month-end net worth of the forecast engine (dashed, faded); months before the
+     forecast starts (no booking yet this month) hold today's value */
+  fcRefresh(gTot);
+  const fEnd=planEnd(), fmap={}; FORECAST.forEach(p=>{ fmap[p.mi]=p.nwEnd; });
+  const fut=[]; if(FORECAST.length) for(let mi=cur+1; mi<=fEnd; mi++) fut.push(fmap[mi]!=null ? fmap[mi] : gTot);
+  const P=series.length, all=series.concat(fut);
   const mLab=mi=>MONTHS[mi%12]+' '+Math.floor(mi/12);
   const hhmm=t=>{ const d=new Date(t); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); };
   const liveNote = LIVE ? `<b class="live">LIVE</b> ${hhmm(LIVE.at)}` : mLab(cur);
   let spark='';
-  const SW=300,SH=60,SP=3, smn=Math.min(0,...series), smx=Math.max(...series), srg=(smx-smn)||1;
+  const SW=300,SH=60,SP=3, smn=Math.min(0,...all), smx=Math.max(...all), srg=(smx-smn)||1;
   const yOf=v=> SP+(SH-2*SP)*(1-(v-smn)/srg);              // viewBox y of a value
-  if(series.length>1){
-    const pts=series.map((v,i)=>[(i/(series.length-1)*SW).toFixed(1),yOf(v).toFixed(1)]);
+  if(all.length>1){
+    const xOf=i=> (i/(all.length-1)*SW).toFixed(1);
+    const pts=series.map((v,i)=>[xOf(i),yOf(v).toFixed(1)]);
     const line=pts.map(p=>p.join(',')).join(' ');
+    const fpts=fut.length ? [[xOf(P-1),yOf(series[P-1]).toFixed(1)]].concat(fut.map((v,j)=>[xOf(P+j),yOf(v).toFixed(1)])) : [];
+    const fline=fpts.map(p=>p.join(',')).join(' ');
+    const fx0=fut.length ? xOf(P-1) : SW;
     // .sparkbox carries the scrubber: hover / drag shows the net worth of that month
-    spark=`<div class="sparkbox" id="sparkbox" title="Drag to see past net worth">`+
+    spark=`<div class="sparkbox" id="sparkbox" title="Drag to see past net worth and the forecast">`+
       `<svg class="spark" viewBox="0 0 ${SW} ${SH}" preserveAspectRatio="none" aria-hidden="true">`+
       `<defs><linearGradient id="nwg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7fd0a3" stop-opacity=".35"/>`+
       `<stop offset="1" stop-color="#7fd0a3" stop-opacity="0"/></linearGradient></defs>`+
-      `<polygon points="0,${SH} ${line} ${SW},${SH}" fill="url(#nwg)"/>`+
-      `<polyline points="${line}" fill="none" stroke="#7fd0a3" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>`+
-      `<div class="scrubline" id="scrubline"></div><div class="scrubdot" id="scrubdot"></div></div>`+
-      `<div class="sparklab"><span>${mLab(s0)}</span><span class="scrubval" id="scrubval">drag the line</span><span>${mLab(cur)}</span></div>`;
+      `<polygon points="0,${SH} ${line} ${xOf(P-1)},${SH}" fill="url(#nwg)"/>`+
+      `<polyline points="${line}" fill="none" stroke="#7fd0a3" stroke-width="2" vector-effect="non-scaling-stroke"/>`+
+      (fut.length ? `<polygon class="fcarea" points="${fx0},${SH} ${fline} ${SW},${SH}" fill="url(#nwg)" opacity=".35"/>`+
+        `<line x1="${fx0}" y1="0" x2="${fx0}" y2="${SH}" stroke="#9aa6bd" stroke-opacity=".45" stroke-width="1" stroke-dasharray="2 2" vector-effect="non-scaling-stroke"/>`+
+        `<polyline class="fcline" points="${fline}" fill="none" stroke="#7fd0a3" stroke-opacity=".7" stroke-width="2" stroke-dasharray="5 4" vector-effect="non-scaling-stroke"/>` : '')+
+      `</svg><div class="scrubline" id="scrubline"></div><div class="scrubdot" id="scrubdot"></div></div>`+
+      `<div class="sparklab"><span>${mLab(s0)}</span><span class="scrubval" id="scrubval">drag the line</span>`+
+      `<span>${fut.length ? mLab(cur)+' \u2192 <i>'+mLab(fEnd)+' forecast</i>' : mLab(cur)}</span></div>`;
   }
   // investment gains, worked out from your rows (nwGains): month / year / all time
   const sgn=v=>(v<0?'\u2212':'+')+fmt(Math.abs(v));
@@ -2232,11 +2248,11 @@ function buildNetWorth(){
   if(box){
     const ln=document.getElementById('scrubline'), dot=document.getElementById('scrubdot'), val=document.getElementById('scrubval');
     const show=x=>{ const r=box.getBoundingClientRect(); if(!r.width) return;
-      const f=Math.min(1,Math.max(0,(x-r.left)/r.width)), i=Math.round(f*(series.length-1)), v=series[i];
-      const px=i/(series.length-1)*100, py=yOf(v)/SH*100;
+      const f=Math.min(1,Math.max(0,(x-r.left)/r.width)), i=Math.round(f*(all.length-1)), v=all[i];
+      const px=i/(all.length-1)*100, py=yOf(v)/SH*100;
       ln.style.left=px+'%'; dot.style.left=px+'%'; dot.style.top=py+'%';
       box.classList.add('on'); val.classList.add('on');
-      val.innerHTML=`${mLab(s0+i)} \u00B7 <b>${money(v)}</b>`; };
+      val.innerHTML=(i>=P ? '<i>Forecast</i> \u00B7 ' : '')+`${mLab(s0+i)} \u00B7 <b>${money(v)}</b>`; };
     const hide=()=>{ box.classList.remove('on'); val.classList.remove('on'); val.textContent='drag the line'; };
     box.addEventListener('pointerdown',e=>{ show(e.clientX); });
     box.addEventListener('pointermove',e=>{ if(e.pointerType==='mouse' || e.buttons) show(e.clientX); });
@@ -4331,7 +4347,7 @@ function amznPrice(){
   if(L && L.price>0) return L.price;
   if(AMZN_PX) return AMZN_PX;
   if(!amznBusy){ amznBusy=true;
-    priceOf({isin:AMZN_ISIN, t:'STOCK'}).then(p=>{ if(p && p.price>0){ AMZN_PX=p.price; renderPlan(true); } }).catch(()=>{}).finally(()=>{ amznBusy=false; }); }
+    priceOf({isin:AMZN_ISIN, t:'STOCK'}).then(p=>{ if(p && p.price>0){ AMZN_PX=p.price; renderPlan(true); if(controlsReady && pageOn('networth')) buildNetWorth(); } }).catch(()=>{}).finally(()=>{ amznBusy=false; }); }
   return null;
 }
 const planEsc=s=> String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -4399,7 +4415,7 @@ async function planCloud(){
   if(take){ PLAN=planMigrate(take); delete PLAN.seed; try{ localStorage.setItem(PLAN_KEY, JSON.stringify(PLAN)); }catch(e){} if(note) planNote=note; }
   planCloudReady=true;
   if(push && (PLAN||local)){ if(!PLAN) PLAN=local; planCloudSave(); }
-  if(take) renderPlan(true);
+  if(take){ renderPlan(true); if(controlsReady && pageOn('networth')) buildNetWorth(); }
 }
 function planPush(){ planUndo.push(JSON.stringify(PLAN.rows)); if(planUndo.length>30) planUndo.shift(); }
 /* last-12-complete-month average per row key (planKey: "LABEL|detail" for spend,
@@ -4440,6 +4456,49 @@ function planSeed(){
   }
   return {v:2, at:Date.now(), incSeeded:true, rows:planSeedInc().concat(rows)};
 }
+/* the plan loaded (local copy, else a fresh seed) and given its incomes once; false = no data yet.
+   A v1 plan (expenses only) gets its income rows without moving its `at`, so a newer cloud
+   plan still wins in planCloud() (and is then given its incomes the same way). */
+function planEnsure(){
+  if(!PLAN){ PLAN=planLoad();
+    if(!PLAN){ if(!DATA.length) return false; PLAN=planSeed(); planSave(true);
+      planNote='Filled with your averages of the last 12 months. Change any amount.'; } }
+  if(!PLAN.incSeeded && DATA.length){ const inc=planSeedInc(); PLAN.rows=inc.concat(PLAN.rows); PLAN.incSeeded=true; PLAN.v=2;
+    try{ localStorage.setItem(PLAN_KEY, JSON.stringify(PLAN)); }catch(e){} planCloudSave();
+    if(inc.length) planNote='Added your incomes (last-12-month averages). Stock vests go under Forecast settings.'; }
+  return true;
+}
+
+/* ---- Forecast engine (pure) ------------------------------------------------------
+   fcForecast(nw0, mi0, mi1, rows, fc, price) -> one entry per month mi0..mi1:
+     {mi, inc, rsu, exp, infl, save, nwStart, growth, nwEnd}
+   nw0 = net worth at the start of mi0 (the live net worth today; the forecast starts the
+   month AFTER this one, the current month stays real). Each month:
+     save   = planned income + RSU - planned expenses - inflation
+     growth = nwStart x ((1 + yield)^(1/12) - 1)      (first draft: the whole net worth earns it)
+     nwEnd  = nwStart + save + growth
+   No tax on future gains yet (the live CAPGAIN is already inside nw0). */
+function fcForecast(nw0, mi0, mi1, rows, fc, price){
+  const g=Math.pow(1+fc.yield, 1/12)-1, rsu=fcRsuByMi(fc, price, mi0, mi1), out=[]; let nw=nw0;
+  for(let mi=mi0; mi<=mi1; mi++){
+    let inc=0, exp=0; rows.forEach(r=>{ const v=+r.m[mi]||0; if(r.k==='I') inc+=v; else exp+=v; });
+    const infl=exp*fcInflF(mi, fc), rs=rsu[mi]||0, save=inc+rs-exp-infl, growth=nw*g, end=nw+save+growth;
+    out.push({mi, inc, rsu:rs, exp, infl, save, nwStart:nw, growth, nwEnd:end}); nw=end;
+  }
+  return out;
+}
+/* FORECAST = fcForecast() from the live net worth (NW_BASE, set by buildNetWorth); FORECAST_FP
+   moves only when an input moves, so pages put it in their redraw signatures */
+let FORECAST=[], FORECAST_FP='', NW_BASE=null;
+function fcRefresh(nw0){
+  if(nw0!=null) NW_BASE=nw0;
+  if(NW_BASE==null || !isFinite(NW_BASE) || !planEnsure()) return false;
+  const fc=fcGet(), mi0=planStart()+1, mi1=planEnd(), px=amznPrice();
+  const fp=[Math.round(NW_BASE), mi0, mi1, JSON.stringify(fc), px||0, csvHash(JSON.stringify(PLAN.rows))].join('|');
+  if(fp===FORECAST_FP) return false;
+  FORECAST=fcForecast(NW_BASE, mi0, mi1, PLAN.rows, fc, px); FORECAST_FP=fp;
+  return true;
+}
 function renderPlan(force){
   if(!pageOn('plan') || !controlsReady) return;
   const wrap=document.getElementById('planwrap'); if(!wrap) return;
@@ -4449,14 +4508,7 @@ function renderPlan(force){
   if(!FC && FS2.data && !FS_SETTINGS && !fcLoading){ fcLoading=true;
     Promise.resolve(FS2.data.getSettings()).then(s=>{ if(!FS_SETTINGS) FS_SETTINGS=s||{}; FC=null; renderPlan(true); })
       .catch(()=>{}).finally(()=>{ fcLoading=false; }); }
-  if(!PLAN){ PLAN=planLoad();
-    if(!PLAN){ if(!DATA.length) return; PLAN=planSeed(); planSave(true);
-      planNote='Filled with your averages of the last 12 months. Change any amount.'; } }
-  /* v2: a v1 plan (expenses only) gets its income rows once. `at` is left alone, so a newer
-     cloud plan still wins in planCloud() (it is then given its incomes the same way) */
-  if(!PLAN.incSeeded && DATA.length){ const inc=planSeedInc(); PLAN.rows=inc.concat(PLAN.rows); PLAN.incSeeded=true; PLAN.v=2;
-    try{ localStorage.setItem(PLAN_KEY, JSON.stringify(PLAN)); }catch(e){} planCloudSave();
-    if(inc.length) planNote='Added your incomes (last-12-month averages). Stock vests go under Forecast settings.'; }
+  if(!planEnsure()) return;
   const fc=fcGet(), ms=planMonths(), y0=Math.floor(ms[0]/12), {ref}=planRef();
   const MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const cols=[];

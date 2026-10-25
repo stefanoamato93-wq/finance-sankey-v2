@@ -203,6 +203,21 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   `py _verify_forecast.py` (untracked, headless Edge: migration, incomes, RSU, inflation,
   settings saved, add / remove a year).
 
+#### Forecast to the plan's end (25 Oct 2026)
+- **Engine** (pure `fcForecast(nw0, mi0, mi1, rows, fc, price)`): starts from the live net
+  worth today (`NW_BASE`, the hero value) and runs from **next month** to Dec of the end year
+  (the current month stays real). Each month: save = planned income + RSU − planned expenses
+  − INFLATION; growth = net worth × ((1 + yield)^(1/12) − 1), so 8 % a year compounds to
+  exactly 8 %; first draft: the **whole** net worth earns the yield (Stefano's choice). No
+  tax on future gains yet (today's CAPGAIN is already in the start value).
+- `fcRefresh()` keeps `FORECAST` (one entry per month: inc, rsu, exp, infl, save, nwStart,
+  growth, nwEnd) and `FORECAST_FP` (moves only when the net worth, plan rows, settings or
+  AMZN price move), called from `buildNetWorth()`. The plan is loaded / seeded for it even
+  if the Plan page was never opened (`planEnsure()`).
+- **Net Worth sparkline:** the line continues to Dec of the end year as a **dashed, faded**
+  forecast after a dotted "now" line; the scrubber reads `Forecast · Mon YYYY · value` there;
+  the right label reads `Oct 2026 → Dec 2030 forecast`. The hero number stays the live value.
+
 ### Query (past transactions, filters, ranked views, drill-down)
 The **Query** page, added 10 Oct 2026, modelled on the sheet's `QUERY` tab (its criteria
 column, the Sum / Average cells, and the ALL TRANSACTIONS / GROUPED BY MONTH / LABEL /
