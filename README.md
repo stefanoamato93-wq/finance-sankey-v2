@@ -17,6 +17,23 @@ status: `Personal Finance\finance-v2-plan\PLAN.md`.
 | 3 Read Firestore instead of the sheet | done 24 Oct 2026 |
 | 4 Expense tracker v2 writes Firestore (repo `expense-tracker-v2`) | built 25 Oct 2026 |
 | 5 Cutover: **Data → Switch to Firebase for good** (`fsCutover()`: last import, then `meta/settings.cutover=true`; the sheet stays online as a backup, untouched) | button added 25 Oct 2026 |
+| 6 Live prices without the sheet (below) | done 25 Oct 2026 |
+
+### Live prices, gains and tax (phase 6, no Google Sheet)
+- **Shares held** box under the Net Worth tables: account, asset, ISIN, shares (decimals
+  allowed), price. Edit and **Save**; stored in `meta/settings.holdingsj`. Seeded once with
+  the sheet's LIST tab (`HOLD_SEED`). Account / asset must match your entries (DEGIRO / VWCE).
+- **Prices:** onvista.de public API, `GET api.onvista.de/api/v1/instruments/{FUND|STOCK}/ISIN:<isin>/snapshot`
+  (no key, CORS open, read-only). `pxPick()` takes the Xetra EUR quote, else the first EUR
+  quote. A stock answers on STOCK, an ETF on FUND; `priceOf()` tries both. A failed price
+  leaves that holding at its value from your data. Refreshed every 5 min.
+- **Gains** (`nwGains()`), per VARIABLE holding, V = live value or its balance:
+  all time = V − money put in (all rows except APPRECIATION); this month / this year =
+  V − balance before the period − money put in during it. Checked 25 Oct 2026 against the
+  sheet's NETWORTH table: same to the cent. Rows carry `inflow` next to `flows` for this.
+- **CAPGAIN** (tax on gains) = 26 % (`TAX_RATE`, conservative, Stefano's choice) of each
+  variable holding's positive all-time gain. Replaces the sheet's CAPITALGAIN value.
+- No GOOGLEFINANCE / gviz call is made any more for prices. Test: `py _verify_v2_live.py`.
 
 ### Where the data comes from (phases 2-3)
 - **Firestore** `users/{uid}/months/{YYYY-MM}` = `{txj:"<JSON of {id:Tx}>", n, updatedAt, source}`,
