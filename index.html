@@ -4282,7 +4282,7 @@ const planKindOf=g=> PLAN_IGROUPS.includes(g) ? 'I' : 'E';
 const planKey=r=> (r.k==='I'?'I:':'')+r.l+'|'+r.d;            // planRef() key of a row
 
 /* ---- Forecast settings (meta/settings.forecastj, 25 Oct 2026) ---------------------
-   {v, inflation, yield, endYear, inflationFrom:"YYYY-MM", rsuNet, rsu:[{date:"YYYY-MM", shares}]}
+   {v, inflation, yield, endYear, inflationFrom:"YYYY-MM", rsuNet, rsu:[{date:"YYYY-MM", shares}], rsuSeeded}
    inflation: yearly rate on every planned expense, one step each January from
      inflationFrom's year (2 % default). Shown as its own INFLATION line, base amounts stay flat.
    yield: yearly return on the whole net worth for the forecast (8 % default).
@@ -4291,18 +4291,25 @@ const planKey=r=> (r.k==='I'?'I:':'')+r.l+'|'+r.d;            // planRef() key o
      shares x live AMZN EUR price x rsuNet (the part kept after tax, 53 % default).
    Saved through FS2.data.setSettings (merge) + a localStorage copy (fs2-forecast-v1). */
 const FC_KEY='fs2-forecast-v1', AMZN_ISIN='US0231351067';
+const FC_RSU_SEED=[['2026-11',73],['2027-02',73],['2027-05',113],['2027-08',112],['2027-11',112],
+  ['2028-02',111],['2028-05',88],['2028-08',88],['2028-11',87],['2029-02',87],['2029-05',60],['2029-08',60],
+  ['2029-11',60],['2030-02',60],['2030-05',30],['2030-08',30],['2030-11',30]];
 let FC=null, fcErr='', fcOpen=false, fcLoading=false, AMZN_PX=null, amznBusy=false;
 /* pure: any stored object -> valid settings (bad or missing fields take the defaults) */
 function fcNorm(o, nowYear){
   o=(o && typeof o==='object') ? o : {};
   const n=(x,lo,hi,d)=>{ x=Number(x); return (x!=null && isFinite(x) && x>=lo && x<=hi) ? x : d; };
   const ym=s=> typeof s==='string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(s);
-  const rsu=(Array.isArray(o.rsu)?o.rsu:[]).filter(x=>x && ym(x.date) && Number(x.shares)>0)
-    .map(x=>({date:x.date, shares:Number(x.shares)})).sort((a,b)=> a.date<b.date?-1:a.date>b.date?1:0);
+  let rsu=(Array.isArray(o.rsu)?o.rsu:[]).filter(x=>x && ym(x.date) && Number(x.shares)>0)
+    .map(x=>({date:x.date, shares:Number(x.shares)}));
+  /* first time only: no vests yet and never seeded -> Stefano's vest schedule of 25 Oct 2026
+     (2025-2028 grants summed per month). rsuSeeded stays true, so deleting them all sticks. */
+  if(!o.rsuSeeded && !rsu.length) rsu=FC_RSU_SEED.map(x=>({date:x[0], shares:x[1]}));
+  rsu.sort((a,b)=> a.date<b.date?-1:a.date>b.date?1:0);
   return {v:1, inflation:n(o.inflation,0,0.5,0.02), yield:n(o.yield,-0.5,0.5,0.08),
     endYear:Math.max(nowYear, Math.round(n(o.endYear,2000,2100,2030))),
     inflationFrom: ym(o.inflationFrom) ? o.inflationFrom : nowYear+'-01',
-    rsuNet:n(o.rsuNet,0,1,0.53), rsu};
+    rsuNet:n(o.rsuNet,0,1,0.53), rsu, rsuSeeded:true};
 }
 function fcGet(){
   if(FC) return FC;
