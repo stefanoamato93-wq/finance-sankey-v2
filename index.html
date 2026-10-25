@@ -756,6 +756,9 @@
      month to Dec 2030 (each year folds to one total). Saved in this browser only. */
   body[data-page="plan"] #tgAvg{display:none;}
   body[data-page="plan"] #tgK{border-left:0;}
+  /* the Plan pill (planned months) only where the pages read it */
+  body[data-page="plan"] #tgPlan, body[data-page="networth"] #tgPlan, body[data-page="query"] #tgPlan{display:none;}
+  .planchip{display:inline-block; margin-left:6px; padding:0 6px; border:1px dashed #e7c14a; border-radius:8px; color:#e7c14a; font-size:11px; font-weight:600;}
   .planhead{display:flex; align-items:center; justify-content:space-between; gap:8px 10px; flex-wrap:wrap;}
   .planwrap{margin:10px 26px 40px; padding:8px 0 0; max-width:940px;}
   .plantools{display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding:0 10px 8px;}
@@ -917,6 +920,7 @@
   <span class="pills toggles" id="toggles">
     <label class="pill" id="tgAvg" title="Per month (average)"><input type="checkbox" id="tMonthly">Avg/m</label>
     <label class="pill" id="tgK" title="Values in thousands"><input type="checkbox" id="tK">K</label>
+    <label class="pill" id="tgPlan" title="Add the planned months after this one (Plan page), up to the plan's last year"><input type="checkbox" id="tPlan">Plan</label>
   </span>
   <span id="exclBox"><span id="exclCount"></span><button id="exclReset" type="button">Include all</button></span>
 </div>
@@ -2731,7 +2735,7 @@ function renderCashBars(){
   if(sig===cfSig && DATA===cfData) return;
   cfSig=sig; cfData=DATA; cfLastW=W;
   if(cfRoll){ renderRolling(svgEl, W, W<560, perMonth); return; }
-  const nowMi=d.getFullYear()*12+d.getMonth(), lastMi=Math.min(META.maxMi, nowMi);
+  const nowMi=d.getFullYear()*12+d.getMonth(), lastMi=pvOn() ? META.maxMi : Math.min(META.maxMi, nowMi);
   /* month view: one row per month of the drilled year (row.year holds the mi) */
   const mBucket=y=> mi=> Math.floor(mi/12)===y ? mi : null;
   let rows=cfDrill!=null ? cashFlowByYear(DATA, lastMi, deselected, mBucket(cfDrill)) : null;
@@ -2771,7 +2775,11 @@ function renderCashBars(){
   const lyB=lyPart ? ()=>lyKey : null;
   const dkDay=dk=> dk%100, dkMon=dk=> MSH[Math.floor(dk/100)%100-1];
   const keyLab=r=> drill ? MSH[r.year%12] : String(r.year);
-  const subLab=r=> r.ly ? (drill ? dkDay(r.lo)+'\u2013'+dkDay(r.hi) : 'YTD')
+  /* plan view: a year / month that is all plan is drawn faded and tagged "Plan"; the
+     current year, real so far plus its planned months, is tagged "+Plan" */
+  const pvAll=r=> !r.ly && (drill ? pvMi(r.year) : pvMi(r.year*12));
+  const pvPart=r=> !r.ly && !drill && !pvAll(r) && pvMi(r.year*12+11);
+  const subLab=r=> pvAll(r) ? 'Plan' : pvPart(r) ? '+Plan' : r.ly ? (drill ? dkDay(r.lo)+'\u2013'+dkDay(r.hi) : 'YTD')
                  : drill ? (r.year===nowMi ? 'MTD' : '')
                          : (r.months<12 ? (r.year===cY ? 'YTD' : r.months+'m') : '');
   const narrow=W<560, n=rows.length;
@@ -2814,7 +2822,7 @@ function renderCashBars(){
     if(sub){ const ts=el('tspan',{x:cx(i),dy:12,fill:'#9aa6bd','font-size':9},sub); yt.appendChild(ts); }
     svgEl.appendChild(yt); };
   /* the LY bar is a reference: faded fill, slightly dimmed value labels */
-  const lyOp=r=> r.ly ? .5 : 1, lyTx=r=> r.ly ? .75 : 1;
+  const lyOp=r=> r.ly ? .5 : pvAll(r) ? .45 : 1, lyTx=r=> r.ly ? .75 : pvAll(r) ? .8 : 1;
   if(ser) rows.forEach((r,i)=>{
     /* one bar: up when positive, down when negative (a savings loss, a net refund) */
     const x=cx(i)-barW/2, v=sv[i], h=Math.abs(v)*sc, neg=v<0, isSav=/^T\|(safe)?sav$/.test(cfSel);
@@ -3115,7 +3123,7 @@ function comparePeriods(data, detail, pa, pb, excluded){
 }
 /* window of a period [f, t]; nothing after the current month (the sheet may hold future rows) */
 function cmpRange(mode, v){
-  const hi=currentMi();
+  const hi=pvOn() ? META.maxMi : currentMi();
   if(mode==='year')  return [Math.max(META.minMi, v*12), Math.min(hi, v*12+11)];
   if(mode==='month') return [v, v];
   if(mode==='ytd')   return [Math.max(META.minMi, Math.floor(v/12)*12), v];
@@ -3123,10 +3131,10 @@ function cmpRange(mode, v){
 }
 /* anchor options, newest first: [value, label]; month value = mi, Year value = year */
 function cmpAnchors(mode){
-  const hi=currentMi(), out=[];
-  if(mode==='year'){ for(let y=Math.floor(hi/12); y>=Math.floor(META.minMi/12); y--) out.push([y,String(y)]); return out; }
+  const hi=pvOn() ? META.maxMi : currentMi(), out=[];
+  if(mode==='year'){ for(let y=Math.floor(hi/12); y>=Math.floor(META.minMi/12); y--) out.push([y,String(y)+(pvMi(y*12)?' (plan)':'')]); return out; }
   const lo = mode==='trailing' ? Math.min(hi, META.minMi+11) : META.minMi;   // a T12M never starts before the data
-  for(let mi=hi; mi>=lo; mi--) out.push([mi, miLabel(mi)]);
+  for(let mi=hi; mi>=lo; mi--) out.push([mi, miLabel(mi)+(pvMi(mi)?' (plan)':'')]);
   return out;
 }
 function cmpClamp(mode, v){
@@ -3141,6 +3149,10 @@ function cmpDefaultB(mode, pa){ const end=pa[1];
   return cmpClamp(mode, mode==='year' ? Math.floor(end/12)-1 : mode==='month' ? end-1 : end-12); }
 /* short column header for a window: "Oct 25\u2013Sep 26", "Jan\u2013Sep 26", "2025", "Sep 26" */
 function cmpShort(f,t){
+  if(pvMi(t)) return cmpShort0(f,t)+' \u00b7 Plan';
+  return cmpShort0(f,t);
+}
+function cmpShort0(f,t){
   const yy=mi=>String(Math.floor(mi/12)).slice(2);
   if(f===t) return MONTHS[f%12]+' '+yy(f);
   if(f%12===0 && t===f+11) return String(Math.floor(f/12));
@@ -3387,7 +3399,7 @@ function renderYlp(){
   const W=Math.max(300, Math.round(svgEl.getBoundingClientRect().width || 900));
   const m0=META.minMi, m1=lastCompleteMi();
   const sig=[W, ylpOpen, showK, m1, NW_NOW ? Math.round(NW_NOW.v)+'@'+NW_NOW.at : '',
-             [...ylpOff].sort().join(','), [...deselected].sort().join(',')].join('#');
+             [...ylpOff].sort().join(','), [...deselected].sort().join(','), pvOn() ? FORECAST_FP : ''].join('#');
   if(sig===ylpSig && DATA===ylpData) return;
   ylpSig=sig; ylpData=DATA; ylpLastW=W;
   const esc=s=> String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -3418,6 +3430,14 @@ function renderYlp(){
   const pts=ylpSeries(DATA, NWHOLD, m0, m1, ylpOff, deselected);
   if(NW_NOW && pts.length){ const L=pts[pts.length-1];
     pts.push({mi:m1+1, nw:NW_NOW.v, exp:L.exp, years: L.exp>0 ? NW_NOW.v/L.exp : null, now:true}); }
+  /* plan view: one point per planned month = forecast net worth / T12M expenses, where the
+     T12M mixes real and planned months (planned DATA rows incl. INFLATION) */
+  if(pvOn() && pts.length && pts[pts.length-1].now && FORECAST.length){
+    const fx=ylpSeries(DATA, NWHOLD, m0, META.maxMi, ylpOff, deselected), byMi={};
+    fx.forEach(p=>{ byMi[p.mi]=p.exp; });
+    FORECAST.forEach(f=>{ if(f.mi<META.planFromMi || f.mi>META.maxMi) return; const e=byMi[f.mi]||0;
+      pts.push({mi:f.mi, nw:f.nwEnd, exp:e, years: e>0 ? f.nwEnd/e : null, plan:true}); });
+  }
   const N=pts.length, vals=pts.map(p=>p.years).filter(v=>v!=null), narrow=W<560, fs=narrow?9.5:10.5;
   svgEl.innerHTML='';
   if(N<2 || !vals.length){
@@ -3456,7 +3476,7 @@ function renderYlp(){
       const line='M'+idx.map(i=>xOf(i).toFixed(1)+','+yC(unit(i)).toFixed(1)).join('L');
       const area=line+`L${xOf(idx[idx.length-1]).toFixed(1)},${z0.toFixed(1)}L${xOf(idx[0]).toFixed(1)},${z0.toFixed(1)}Z`;
       svgEl.appendChild(el('path',{d:area,fill:col,'fill-opacity':o.fill,stroke:'none',class:o.cls+' area'}));
-      svgEl.appendChild(el('path',{d:line,fill:'none',stroke:col,'stroke-width':o.w,'stroke-opacity':o.line,'stroke-linejoin':'round',class:o.cls+' line'}));
+      svgEl.appendChild(el('path',Object.assign({d:line,fill:'none',stroke:col,'stroke-width':o.w,'stroke-opacity':o.line,'stroke-linejoin':'round',class:o.cls+' line'}, o.dash?{'stroke-dasharray':o.dash}:{})));
     };
     /* background, shapes only (values in the tooltip):
        net worth = area on a € scale whose zero sits on the years zero line, sized so the
@@ -3471,8 +3491,12 @@ function renderYlp(){
     series(all, uEx, YLP_EX, {fill:.045, line:.7, w:1.3, cls:'bgex'});   // light fill: orange on navy reads brown-red
     /* foreground: years paid, one piece per run of defined points */
     const runs=[]; let cur=null;
-    pts.forEach((p,i)=>{ if(p.years==null){ cur=null; return; } if(!cur){ cur=[]; runs.push(cur); } cur.push(i); });
-    runs.forEach(r=> series(r, i=>pts[i].years, YLP_COL, {fill:.16, line:1, w:2, cls:'yrs'}));
+    pts.forEach((p,i)=>{ if(p.years==null){ cur=null; return; }
+      const pl=!!p.plan;
+      if(cur && pl!==cur.plan){ cur=[cur[cur.length-1]]; cur.plan=pl; runs.push(cur); }   // the plan run starts at the "Now" point
+      if(!cur){ cur=[]; cur.plan=pl; runs.push(cur); }
+      cur.push(i); });
+    runs.forEach(r=> series(r, i=>pts[i].years, YLP_COL, r.plan ? {fill:.06, line:.7, w:2, cls:'yrs plan', dash:'5 4'} : {fill:.16, line:1, w:2, cls:'yrs'}));
     /* last value labelled at the right end; the live point gets a ring */
     let li=N-1; while(li>=0 && pts[li].years==null) li--;
     if(li>=0){ const p=pts[li];
@@ -3488,7 +3512,7 @@ function renderYlp(){
     const nOff=leaves.length-nCnt;
     const hhmm=t=>{ const d=new Date(t); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); };
     const tipHtml=i=>{ const p=pts[i];
-      let h=p.now ? `<b>Now</b> <b style="color:${YLP_COL}">LIVE</b> ${mut(hhmm(NW_NOW.at))}` : `<b>${miLabel(p.mi)}</b>`;
+      let h=p.now ? `<b>Now</b> <b style="color:${YLP_COL}">LIVE</b> ${mut(hhmm(NW_NOW.at))}` : p.plan ? `<b>Plan \u00b7 ${miLabel(p.mi)}</b>` : `<b>${miLabel(p.mi)}</b>`;
       h+=`<br><i class="sw" style="background:${YLP_COL}"></i>Years paid <b>${p.years==null?'\u2014':yrs(p.years)}</b>`+
          `<br><i class="sw" style="background:${YLP_NW}"></i>Net worth <b>${fmt(p.nw)}</b>`+
          `<br><i class="sw" style="background:${YLP_EX}"></i>T12M expenses <b>${fmt(p.exp)}</b> `+
@@ -4520,6 +4544,67 @@ function fcRefresh(nw0){
   FORECAST=fcForecast(NW_BASE, mi0, mi1, PLAN.rows, fc, px); FORECAST_FP=fp;
   return true;
 }
+/* ---- Plan view (forecast step 7, 25 Oct 2026) --------------------------------------
+   The "Plan" pill (global toggles; Cash Flow, Savings, Compare, Years Paid) adds the
+   planned months to those pages, up to Dec of the plan's last year. The current month
+   stays real; from next month on only the plan counts. DATA / DETAIL get planned rows
+   shaped like aggregate()'s (RSU as income leaf STOCKS, like the past vests; SALARY RISE;
+   INFLATION in group Other); META gets maxMi = planEnd(), the extra years and planFromMi.
+   The real data stays in PV_REAL: the cache stores it, and RANK / the scale refs / the
+   Net Worth page (META.allMaxMi) keep using the real numbers. Off = everything as before. */
+const PV_KEY='fs2-planview-v1';
+let PV_ON=false, PV_REAL=null, PV_FP='';
+try{ PV_ON=localStorage.getItem(PV_KEY)==='1'; }catch(e){}
+const pvFrom=()=>{ const d=new Date(); return d.getFullYear()*12+d.getMonth()+1; };
+const pvOn=()=> PV_ON && META.planFromMi!=null;
+const pvMi=mi=> pvOn() && mi>=META.planFromMi;               // is month mi planned (on screen)?
+/* pure: plan rows + forecast settings -> {data, detail} for the months from..to */
+function planToData(rows, fc, price, from, to){
+  const agg=new Map(), det=new Map();
+  const add=(mi,k,g,l,v)=>{ const key=mi+'|'+k+'|'+g+'|'+l; agg.set(key,(agg.get(key)||0)+v); };
+  const addD=(mi,l,d,v)=>{ const key=mi+'|'+l+'|'+d; det.set(key,(det.get(key)||0)+v); };
+  const rsu=fcRsuByMi(fc, price, from, to);
+  for(let mi=from; mi<=to; mi++){
+    let exp=0, sal=0;
+    rows.forEach(r=>{ const v=+r.m[mi]||0; if(!v) return;
+      if(r.k==='I'){ add(mi,'I',r.g,r.l,v); if(FC_SAL_LABELS.includes(r.l)) sal+=v; }
+      else { add(mi,'E',r.g,r.l,-v); addD(mi,r.l,r.d,v); exp+=v; } });
+    if(rsu[mi]) add(mi,'I','Work income','STOCKS',rsu[mi]);
+    const rise=sal*fcSalF(mi,fc); if(rise) add(mi,'I','Work income','SALARY RISE',rise);
+    const infl=exp*fcInflF(mi,fc); if(infl){ add(mi,'E','Other','INFLATION',-infl); addD(mi,'INFLATION','INFLATION',infl); }
+  }
+  return {data:[...agg.entries()].map(([k,v])=>{ const [mi,kind,group,leaf]=k.split('|'); return [+mi,kind,group,leaf,Math.round(v)]; }).filter(r=>r[4]),
+          detail:[...det.entries()].map(([k,v])=>{ const [mi,leaf,dn]=k.split('|'); return [+mi,leaf,dn,Math.round(v)]; }).filter(r=>r[3])};
+}
+/* put the plan on (or take it off) DATA / DETAIL / META; true = something changed */
+function pvApply(){
+  if(!PV_REAL) PV_REAL={data:DATA, detail:DETAIL, meta:META};
+  const R=PV_REAL;
+  DATA=R.data; DETAIL=R.detail; META=R.meta;                  // real first: planEnsure() seeds from it
+  if(!PV_ON || !PLAN && !planEnsure()){ const ch=PV_FP!=='off'; PV_FP='off'; return ch; }
+  const fc=fcGet(), from=pvFrom(), to=planEnd(), px=amznPrice();
+  const fp=[from, to, JSON.stringify(fc), px||0, csvHash(JSON.stringify(PLAN.rows)), R.data.length, R.meta.maxMi].join('|');
+  if(fp===PV_FP && PV_REAL.over){ const o=PV_REAL.over; DATA=o.data; DETAIL=o.detail; META=o.meta; return false; }
+  const P=planToData(PLAN.rows, fc, px, from, to), years=new Set(R.meta.years);
+  for(let y=Math.floor(from/12); y<=Math.floor(to/12); y++) years.add(y);
+  DATA=R.data.filter(r=>r[0]<from).concat(P.data);
+  DETAIL=R.detail.filter(r=>r[0]<from).concat(P.detail);
+  META=Object.assign({}, R.meta, {maxMi:Math.max(R.meta.maxMi, to), years:[...years].sort((a,b)=>a-b), planFromMi:from});
+  PV_REAL.over={data:DATA, detail:DETAIL, meta:META}; PV_FP=fp;
+  return true;
+}
+/* re-apply after a plan / settings / price change; redraws the pickers when it moved */
+function pvRefresh(){
+  if(!controlsReady || !PV_REAL) return false;
+  if(!pvApply()) return false;
+  syncYearOptions();
+  const N=maxIdx(); if(hiIdx>N) hiIdx=N; if(loIdx>hiIdx) loIdx=Math.max(0,hiIdx); updateSliderUI();
+  return true;
+}
+function pvSet(on){
+  PV_ON=!!on; try{ localStorage.setItem(PV_KEY, PV_ON?'1':'0'); }catch(e){}
+  if(pvRefresh()) renderAll();
+}
 function renderPlan(force){
   if(!pageOn('plan') || !controlsReady) return;
   const wrap=document.getElementById('planwrap'); if(!wrap) return;
@@ -4827,6 +4912,7 @@ function buildSankey(){
     for(const g in res.expGrp) res.expGrp[g]/=res.months;
     plabel += ` · per-month average over ${res.months} month${res.months>1?'s':''}`;
   }
+  if(pvMi(curMiT)) plabel += ` · Plan from ${miLabel(Math.max(curMiF, META.planFromMi))}`;
   document.getElementById('periodLabel').textContent=plabel;
   paintTotals(res); render(res);
   /* If the Detail_Panel is open, refresh it against the new window/mode so ANY
@@ -4868,7 +4954,7 @@ const SheetCache={
   /* snapshot of what is loaded right now (call after applyData / applySnapshot) */
   /* bump KEY (and v) whenever aggregate() changes the shape or meaning of what is stored */
   write(hash,retrievedAt){ try{ localStorage.setItem(this.KEY, JSON.stringify({v:3, hash, retrievedAt,
-      data:DATA, detail:DETAIL, hold:NWHOLD, meta:META})); return true; }catch(e){ return false; } },
+      data:PV_REAL?PV_REAL.data:DATA, detail:PV_REAL?PV_REAL.detail:DETAIL, hold:NWHOLD, meta:PV_REAL?PV_REAL.meta:META})); return true; }catch(e){ return false; } },
   differs(entry,hash){ return !entry || entry.hash!==hash; }
 };
 
@@ -5299,7 +5385,7 @@ let controlsReady=false;
 function syncYearOptions(){
   const prev=yearEl.value; yearEl.innerHTML='';
   META.years.forEach(y=>{ const o=document.createElement('option'); o.value=y; o.textContent=y; yearEl.appendChild(o); });
-  const maxYear=Math.floor(META.maxMi/12);
+  const maxYear=Math.floor(Math.min(META.maxMi, new Date().getFullYear()*12+new Date().getMonth())/12);   // the plan view never moves the default to 2030
   yearEl.value=(prev && META.years.indexOf(+prev)>=0) ? prev : maxYear;
 }
 function initControlsOnce(){
@@ -5326,6 +5412,7 @@ function initControlsOnce(){
   document.getElementById('lastMonth').addEventListener('click',()=>oneMonth(lastCompleteMi()));
   monthlyEl.addEventListener('change',()=>{ build(); renderCashBars(); });
   document.getElementById('tK').addEventListener('change',e=>{ showK=e.target.checked; build(); buildNetWorth(); renderCashBars(); });
+{ const tp=document.getElementById('tPlan'); if(tp){ tp.checked=PV_ON; tp.addEventListener('change',e=>pvSet(e.target.checked)); } }
   /* chart picker, drilled one level at a time: Overview › category › label › detail */
   document.getElementById('cfpath').addEventListener('change',e=>{
     if(e.target && e.target.tagName==='SELECT') cfPick(e.target.value); });
@@ -5411,6 +5498,7 @@ function syncPageUI(){
 }
 function renderPage(){
   if(!controlsReady) return;
+  if(PV_ON && PAGE!=='plan' && PAGE!=='networth' && PAGE!=='query' && pvRefresh()){ renderAll(); return; }   // plan edited meanwhile
   if(PAGE==='cashflow') build();
   else if(PAGE==='networth') buildNetWorth();
   else if(PAGE==='savings') renderCashBars();
@@ -5469,6 +5557,7 @@ function applySnapshot(e){
 }
 function afterData(){
   if(!DATA.length) throw new Error("No usable rows (check the sheet is shared 'anyone with the link → Viewer' and named DB).");
+  PV_REAL={data:DATA, detail:DETAIL, meta:META}; PV_FP=''; pvApply();   // fresh real data; the plan view goes on top
   syncYearOptions();
   initControlsOnce();
   const N=maxIdx();                            // keep the user's window on a refresh, clamp to new bounds

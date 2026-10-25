@@ -19,6 +19,19 @@ status: `Personal Finance\finance-v2-plan\PLAN.md`.
 | 5 Cutover: **Data → Switch to Firebase for good** (`fsCutover()`: last import, then `meta/settings.cutover=true`; the sheet stays online as a backup, untouched) | button added 25 Oct 2026 |
 | 6 Live prices without the sheet (below) | done 25 Oct 2026 |
 
+### Plan view to 2030 (forecast step 7, 25 Oct 2026)
+- **Plan** pill next to K (Cash Flow, Savings, Compare, Years Paid): adds the planned months
+  from next month to Dec of the plan's last year. The current month stays real.
+- `planToData()` turns the plan rows into DATA / DETAIL rows: incomes and expenses as typed,
+  RSU vests as income leaf `STOCKS`, `SALARY RISE` (Work income), `INFLATION` (group Other).
+  `pvApply()` swaps them in for months ≥ `META.planFromMi`; `PV_REAL` keeps the real data,
+  which is what the cache stores. Off (default) = every page exactly as before.
+- Marks: Savings bars faded + "Plan" / "+Plan"; Compare pickers "(plan)" and a "· Plan" column
+  header; Cash Flow period label "· Plan from …"; Years Paid = forecast net worth / T12M
+  expenses, dashed after Now. Saved per browser (`fs2-planview-v1`).
+- Plan menu extras: "Add an extra once a year…" (+amount on one month every year),
+  HOLIDAYS planned as one row, Salary rise % (BASE + TFR) in Forecast settings.
+
 ### Live prices, gains and tax (phase 6, no Google Sheet)
 - **Shares held** box under the Net Worth tables: account, asset, ISIN, shares (decimals
   allowed), price. Edit and **Save**; stored in `meta/settings.holdingsj`. Seeded once with
