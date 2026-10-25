@@ -4788,7 +4788,7 @@ async function fsImport(opt){
     FS_SETTINGS=Object.assign({}, S, {importHash:parsed.hash, lastImportAt:rep.at, lastImport:rep});
     FS_LAST={ok:true, rep};
     return rep;
-  }catch(e){ FS_LAST={ok:false, err:(e && (e.code||e.message)) || String(e)}; if(opt && opt.throw) throw e; return null; }
+  }catch(e){ FS_LAST={ok:false, err:(e && [e.code, e.message].filter(Boolean).join(': ')) || String(e)}; if(opt && opt.throw) throw e; return null; }
   finally{ fsImportBusy=false; fsPanelRender(); }
 }
 /* after the first paint: background import when due, then plan sync */

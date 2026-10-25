@@ -83,19 +83,25 @@ export async function loadMonths(sinceMs) {
   return snap.docs.map(monthOf);
 }
 
-// Full overwrite of each given month (deleted rows disappear). Firestore allows 500
-// writes per batch; stay under it.
+// Full overwrite of each given month (deleted rows disappear). Firestore caps a batch
+// at 500 documents AND at a total size / index-entry budget: every field of every row
+// in tx is indexed, so all 106 months (~12,300 rows) in one batch is rejected with
+// INVALID_ARGUMENT "Transaction too big". Commit in small batches by row count instead.
+const BATCH_MAX_DOCS = 450, BATCH_MAX_ROWS = 800;
 export async function writeMonths(map) {
   const ids = Object.keys(map);
-  for (let i = 0; i < ids.length; i += 450) {
-    const b = writeBatch(db);
-    for (const id of ids.slice(i, i + 450)) {
-      if (!/^\d{4}-\d{2}$/.test(id)) throw new Error("bad month id " + id);
-      const m = map[id];
-      b.set(doc(monthsCol(), id), { tx: m.tx || {}, source: m.source || "app", updatedAt: serverTimestamp() });
+  for (const id of ids) if (!/^\d{4}-\d{2}$/.test(id)) throw new Error("bad month id " + id);
+  let b = writeBatch(db), docs = 0, rows = 0;
+  for (const id of ids) {
+    const m = map[id], n = Object.keys(m.tx || {}).length;
+    if (docs && (docs >= BATCH_MAX_DOCS || rows + n > BATCH_MAX_ROWS)) {
+      await b.commit();
+      b = writeBatch(db); docs = 0; rows = 0;
     }
-    await b.commit();
+    b.set(doc(monthsCol(), id), { tx: m.tx || {}, source: m.source || "app", updatedAt: serverTimestamp() });
+    docs++; rows += n;
   }
+  if (docs) await b.commit();
   return ids.length;
 }
 
