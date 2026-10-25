@@ -81,7 +81,8 @@ browser: it reads only Firebase data (net worth, plan, forecast settings), never
   `pvApply()` swaps them in for months ≥ `META.planFromMi`; `PV_REAL` keeps the real data,
   which is what the cache stores. Off (default) = every page exactly as before.
 - Savings page with the Plan pill: the **current month is the plan too** (`pvSavData()`, Savings
-  only; the month view tags it "Plan" and drops the to-the-day bar next to it). Other pages keep
+  only; the month view tags it "Plan", shows its savings % points like any whole month, the tooltip
+  says "(plan)", and drops the to-the-day bar next to it). Other pages keep
   the current month real.
 - Marks: Savings bars faded + "Plan" / "+Plan"; Compare pickers "(plan)" and a "· Plan" column
   header; Cash Flow period label "· Plan from …"; Years Paid = forecast net worth / T12M

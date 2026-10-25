@@ -2940,7 +2940,7 @@ function renderCashBars(){
   /* month view: the in-progress month has little income yet, so its rate is noise
      (e.g. -23250%): no point on the lines; the tooltip still shows it */
   /* (the month-view comparison bar is part of a month too: no point either) */
-  const rateOf=(r,key)=> drill && (r.year===nowMi || r.ly) ? null : r[key];
+  const rateOf=(r,key)=> drill && (r.year===nowMi && !pvOn() || r.ly) ? null : r[key];   // a planned current month is a whole month: its rate shows
   const rates=ser ? [] : rows.flatMap(r=>[rateOf(r,'rateTot'),rateOf(r,'rateSafe')]).filter(x=>x!=null);
   if(rates.length){
     /* a single month can lose far more than it earns (-900%): the scale stops at -100%
@@ -2976,7 +2976,7 @@ function renderCashBars(){
     /* comparison bar: "2025 YTD (1 Jan–17 Oct, last year)" / "Sep 2026 1–17 (last month, same days)" */
     const head=(drill
       ? (r.ly ? `<b>${miLabel(r.year)} ${dkDay(r.lo)}\u2013${dkDay(r.hi)}</b> <span style="color:#9aa6bd">(last month, same days)</span>`
-          : `<b>${miLabel(r.year)}</b>${r.year===nowMi?' <span style="color:#9aa6bd">(in progress)</span>':''}`)
+          : `<b>${miLabel(r.year)}</b>${r.year===nowMi?' <span style="color:#9aa6bd">'+(pvOn()?'(plan)':'(in progress)')+'</span>':''}`)
       : (r.ly ? `<b>${r.year} YTD</b> <span style="color:#9aa6bd">(${dkDay(r.lo)} ${dkMon(r.lo)}\u2013${dkDay(r.hi)} ${dkMon(r.hi)}, last year)</span>`
           : `<b>${r.year}</b>${r.months<12?` <span style="color:#9aa6bd">(${r.months} months)</span>`:''}`)+
         `${perMonth?' <span style="color:#9aa6bd">avg/m</span>':''}`) +
