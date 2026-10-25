@@ -4302,9 +4302,9 @@ function fcNorm(o, nowYear){
   const ym=s=> typeof s==='string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(s);
   let rsu=(Array.isArray(o.rsu)?o.rsu:[]).filter(x=>x && ym(x.date) && Number(x.shares)>0)
     .map(x=>({date:x.date, shares:Number(x.shares)}));
-  /* first time only: no vests yet and never seeded -> Stefano's vest schedule of 25 Oct 2026
-     (2025-2028 grants summed per month). rsuSeeded stays true, so deleting them all sticks. */
-  if(!o.rsuSeeded && !rsu.length) rsu=FC_RSU_SEED.map(x=>({date:x[0], shares:x[1]}));
+  /* first time only: never seeded -> Stefano's vest schedule of 25 Oct 2026 (2025-2028 grants
+     summed per month; replaces any test vests saved before it). rsuSeeded stays true after. */
+  if(!o.rsuSeeded) rsu=FC_RSU_SEED.map(x=>({date:x[0], shares:x[1]}));
   rsu.sort((a,b)=> a.date<b.date?-1:a.date>b.date?1:0);
   return {v:1, inflation:n(o.inflation,0,0.5,0.02), yield:n(o.yield,-0.5,0.5,0.08),
     endYear:Math.max(nowYear, Math.round(n(o.endYear,2000,2100,2030))),
