@@ -852,7 +852,9 @@
   .fibox{background:var(--panel); border:1px solid var(--grid); border-radius:10px; padding:10px 12px;}
   .fibox h3{margin:0 0 6px; font-size:13px; color:var(--muted); font-weight:600;}
   .fihero{display:flex; flex-wrap:wrap; align-items:center; gap:8px 22px;}
-  .fihero .big{font-size:34px; font-weight:800; line-height:1; font-variant-numeric:tabular-nums;}
+  .fihero .big{font-size:34px; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; white-space:nowrap;}
+  .fihero .svhero .big{font-size:28px; flex:0 0 auto;}
+  .ficard .v{white-space:nowrap;}
   .fihero .big.ok{color:#5fc28a;} .fihero .big.warn{color:#e7c14a;} .fihero .big.bad{color:#e58a8a;}
   .fihero .lead{font-size:13px; font-weight:600;}
   .fihero .svhero{flex:1 1 100%; display:flex; align-items:center; gap:14px; padding-bottom:8px; border-bottom:1px solid var(--grid);}
@@ -915,6 +917,7 @@
     <span>uid <code id="acctUid"></code></span>
     <button type="button" id="acctCopy">Copy uid</button>
     <button type="button" id="acctData" aria-expanded="false" aria-controls="fsPanel">Data</button>
+    <button type="button" id="acctArch" title="Download this app with today's data as one file, to keep a record">Archive</button>
     <button type="button" id="acctOut">Sign out</button>
   </div>
   <div id="fsPanel" class="fspanel" role="region" aria-label="Data source" aria-live="polite" hidden></div>
@@ -5402,6 +5405,7 @@ async function fsAfterBoot(){
 }
 /* the Data panel under the header (opened from the account line) */
 function fsPanelRender(busy){
+  archLabel();
   const p=document.getElementById('fsPanel'); if(!p || p.hidden) return;
   const S=FS_SETTINGS||{}, rep=S.lastImport, rows=FS_CSV ? Math.max(0,(FS_CSV.match(/\n/g)||[]).length-1) : 0;
   const when=t=>t ? new Date(t).toLocaleString() : 'never';
@@ -6229,6 +6233,77 @@ function fireWire(wrap){
   });
 }
 function fireViewSave(){ try{ localStorage.setItem(FIRE_VIEW_KEY, JSON.stringify(FIRE_V)); }catch(e){} }
+
+/* ---- Monthly archive (25 Oct 2026) ----------------------------------------------------
+   "Archive" (header) downloads finance-v2-archive_YYYY-MM-DD_HHMM.html: this page's own source
+   with today's data inside (every month, settings, plan, the live prices). The file opens on
+   its own, offline, no sign-in, and shows the app exactly as it was: the clock is set back
+   to the archive moment (archBoot), prices are frozen, edits stay in memory only, nothing
+   reaches Firebase or the sheet. The button says "Archive (due)" when no archive was taken
+   this calendar month (settings.archiveAt, shared by phone and laptop). */
+function archDue(){
+  const t=+((FS_SETTINGS && FS_SETTINGS.archiveAt)||0); if(!t) return true;
+  const a=new Date(t), d=new Date(); return a.getFullYear()*12+a.getMonth() < d.getFullYear()*12+d.getMonth();
+}
+function archLabel(){
+  const b=document.getElementById('acctArch'); if(!b || b.disabled) return;
+  const t=+((FS_SETTINGS && FS_SETTINGS.archiveAt)||0);
+  b.textContent=archDue() ? 'Archive (due)' : 'Archive';
+  b.style.color=archDue() ? '#e7c14a' : '';
+  b.title='Download this app with today\'s data as one file'+(t ? ' \u00b7 last: '+new Date(t).toLocaleString() : ' \u00b7 never taken');
+}
+/* runs FIRST inside an archive file (before the app's own script): frozen clock, private
+   storage, frozen prices, a read-only data layer built from the archived months */
+function archBoot(){
+  const S=window.FS2_SNAP, RD=Date, T0=RD.now(), now=()=> S.at+(RD.now()-T0);
+  class FD extends RD { constructor(...a){ if(a.length) super(...a); else super(now()); } static now(){ return now(); } }
+  window.Date=FD;
+  const mem={}, ls={getItem:k=> k in mem ? mem[k] : null, setItem:(k,v)=>{ mem[k]=String(v); }, removeItem:k=>{ delete mem[k]; },
+    clear:()=>{ for(const k in mem) delete mem[k]; }, key:i=> Object.keys(mem)[i]||null, get length(){ return Object.keys(mem).length; }};
+  try{ Object.defineProperty(window, 'localStorage', {value:ls, configurable:true}); }catch(e){}
+  const px=S.prices||{};
+  window.fetch=u=>{ u=String(u&&u.url||u); const m=u.match(/api\.onvista\.de\/api\/v1\/instruments\/(FUND|STOCK)\/ISIN:([A-Z0-9]+)\/snapshot/);
+    if(m && px[m[2]]){ const p=px[m[2]];
+      return Promise.resolve(new Response(JSON.stringify({quote:{last:p, isoCurrency:'EUR'}, quoteList:{list:[{isoCurrency:'EUR', last:p, market:{codeExchange:'GER', name:'Xetra'}}]}}), {status:200})); }
+    return Promise.reject(new Error('archive: offline')); };
+  const cl=x=> JSON.parse(JSON.stringify(x)), M=new Map((S.months||[]).map(m=>[m.month, m]));
+  let ST=cl(S.settings||{}), PL=S.plan ? cl(S.plan) : null;
+  window.FS2_FAKE={ loadCachedMonths:async()=>[...M.values()].map(cl), loadMonths:async(since)=> since ? [] : [...M.values()].map(cl),
+    writeMonths:async(map)=>Object.keys(map||{}).length, getSettings:async()=>cl(ST), setSettings:async(p)=>{ ST=Object.assign(ST, cl(p)); },
+    loadPlan:async()=> PL ? cl(PL) : null, savePlan:async(p)=>{ PL=cl(p); }, watchChanges:()=>()=>{} };
+  document.addEventListener('DOMContentLoaded', ()=>{
+    const b=document.createElement('div'); b.setAttribute('role','note');
+    b.style.cssText='background:#3a2f12;color:#e7c14a;padding:6px 12px;font:600 12.5px system-ui,sans-serif;text-align:center';
+    b.textContent='Archive of '+new RD(S.at).toLocaleString()+' \u00b7 read-only: changes are not saved';
+    document.body.insertBefore(b, document.body.firstChild); });
+}
+/* pure: page source + snapshot -> the archive file's HTML (archBoot script before the app's) */
+function archHtml(src, snap, bootSrc){
+  const i=src.indexOf('<script>'); if(i<0 || src.indexOf('const FS2={')<0) throw new Error('page source not found');
+  const J=JSON.stringify(snap).replace(/</g,'\\u003c').replace(/\u2028/g,'\\u2028').replace(/\u2029/g,'\\u2029');
+  return src.slice(0,i)+'<script>window.FS2_SNAP='+J+';('+bootSrc+')();<\/script>'+src.slice(i);
+}
+const archName=t=>{ const d=new Date(t), z=n=>String(n).padStart(2,'0');
+  return `finance-v2-archive_${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}_${z(d.getHours())}${z(d.getMinutes())}.html`; };
+async function archDownload(){
+  const b=document.getElementById('acctArch'); if(!b || b.disabled) return;
+  b.disabled=true; b.textContent='Archiving\u2026';
+  try{
+    if(!FS_MONTHS.size) throw new Error('no data loaded yet');
+    const r=await fetch(location.href.split('#')[0].split('?')[0], {cache:'no-store'}); if(!r.ok) throw new Error('page source: HTTP '+r.status);
+    const src=await r.text();
+    const prices={}; (holdingsLoad()||[]).forEach(h=>{ const L=LIVE && LIVE.hold && LIVE.hold[norm(h.a)+'|'+norm(h.e)]; if(L && L.price>0 && h.isin) prices[h.isin]=L.price; });
+    const ax=amznPrice(); if(ax) prices[AMZN_ISIN]=ax;
+    const at=Date.now(), snap={v:1, at, months:[...FS_MONTHS.values()], settings:FS_SETTINGS||{}, plan:PLAN||null, prices};
+    const html=archHtml(src, snap, archBoot.toString());
+    const url=URL.createObjectURL(new Blob([html], {type:'text/html'})), a=document.createElement('a');
+    a.href=url; a.download=archName(at); document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 60000);
+    FS_SETTINGS=Object.assign({}, FS_SETTINGS||{}, {archiveAt:at});
+    if(FS2.data && !FS2.fake){ try{ await FS2.data.setSettings({archiveAt:at}); }catch(e){} }
+  }catch(e){ alert('Archive failed: '+((e && e.message)||e)); }
+  finally{ b.disabled=false; archLabel(); }
+}
+document.getElementById('acctArch').addEventListener('click', e=>{ e.stopPropagation(); archDownload(); });
 
 /* ---- page switching ----------------------------------------------------------
    showPage(): remember the scroll of the page being left, close the hover / detail

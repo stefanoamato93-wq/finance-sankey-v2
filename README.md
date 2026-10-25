@@ -20,6 +20,19 @@ status: `Personal Finance\finance-v2-plan\PLAN.md`.
 | 6 Live prices without the sheet (below) | done 25 Oct 2026 |
 | 8 FIRE page, Monte Carlo (below) | done 25 Oct 2026 |
 
+### Monthly archive (25 Oct 2026)
+- **Archive** button in the header (next to Data): downloads `finance-v2-archive_YYYY-MM-DD_HHMM.html`,
+  one file with this page's code and today's data inside (every month, settings incl. FIRE and
+  forecast, the plan, today's live prices). Open it any time later in a browser: no sign-in, no
+  internet, the app exactly as it was. `archBoot()` runs first in the file: the clock is set back
+  to the archive moment (so "this month", the plan start and the FIRE ages are as they were),
+  storage is private to the file, prices are frozen, and the data layer is read-only (edits work
+  on screen but are never saved; nothing reaches Firebase or the sheet). A yellow banner says
+  "Archive of <date> · read-only".
+- The button turns yellow, **"Archive (due)"**, when no archive was taken this calendar month
+  (`settings.archiveAt`, shared by phone and laptop). Keep the files in a folder of your choice.
+- Code: `archHtml()` (page source + snapshot), `archBoot()`, `archDownload()`. Check:
+  `_verify_archive.py` (untracked, 2 headless Edge runs: build an archive, then open it alone).
 ### FIRE page (Monte Carlo, 25 Oct 2026)
 Tab **FIRE** after Plan. Question: if I stop working at the FIRE age, does the money last to
 the target age? Handoff and design: `finance-v2-plan\PLAN-fire.md`. Runs on its own in the
