@@ -4306,7 +4306,7 @@ function fcNorm(o, nowYear){
      summed per month; replaces any test vests saved before it). rsuSeeded stays true after. */
   if(!o.rsuSeeded) rsu=FC_RSU_SEED.map(x=>({date:x[0], shares:x[1]}));
   rsu.sort((a,b)=> a.date<b.date?-1:a.date>b.date?1:0);
-  return {v:1, inflation:n(o.inflation,0,0.5,0.02), yield:n(o.yield,-0.5,0.5,0.08),
+  return {v:1, inflation:n(o.inflation,0,0.5,0.02), salary:n(o.salary,0,0.5,0), yield:n(o.yield,-0.5,0.5,0.08),
     endYear:Math.max(nowYear, Math.round(n(o.endYear,2000,2100,2030))),
     inflationFrom: ym(o.inflationFrom) ? o.inflationFrom : nowYear+'-01',
     rsuNet:n(o.rsuNet,0,1,0.53), rsu, rsuSeeded:true};
@@ -4342,6 +4342,10 @@ function planExtendRows(rows, fromEnd, toEnd){
 /* pure: inflation factor of month mi = (1+rate)^years - 1, one step every January after
    inflationFrom's year (from 2026-xx: 2026 = 0, 2027 = 2 %, 2028 = 4,04 %) */
 function fcInflF(mi, fc){ const n=Math.max(0, Math.floor(mi/12) - Math.floor(ymMi(fc.inflationFrom)/12)); return Math.pow(1+fc.inflation, n)-1; }
+/* pure: salary rise factor of month mi, same January steps as inflation, at fc.salary a year.
+   It applies to the rows labelled BASE and TFR (TFR follows the salary). Base amounts stay flat. */
+const FC_SAL_LABELS=['BASE','TFR'];
+function fcSalF(mi, fc){ const n=Math.max(0, Math.floor(mi/12) - Math.floor(ymMi(fc.inflationFrom)/12)); return Math.pow(1+(fc.salary||0), n)-1; }
 /* pure: net RSU income per month {mi: euros} for the vests in fromMi..toMi */
 function fcRsuByMi(fc, price, fromMi, toMi){
   const o={}; if(!(price>0)) return o;
@@ -4488,9 +4492,9 @@ function planEnsure(){
 function fcForecast(nw0, mi0, mi1, rows, fc, price){
   const g=Math.pow(1+fc.yield, 1/12)-1, rsu=fcRsuByMi(fc, price, mi0, mi1), out=[]; let nw=nw0;
   for(let mi=mi0; mi<=mi1; mi++){
-    let inc=0, exp=0; rows.forEach(r=>{ const v=+r.m[mi]||0; if(r.k==='I') inc+=v; else exp+=v; });
-    const infl=exp*fcInflF(mi, fc), rs=rsu[mi]||0, save=inc+rs-exp-infl, growth=nw*g, end=nw+save+growth;
-    out.push({mi, inc, rsu:rs, exp, infl, save, nwStart:nw, growth, nwEnd:end}); nw=end;
+    let inc=0, exp=0, sal=0; rows.forEach(r=>{ const v=+r.m[mi]||0; if(r.k==='I'){ inc+=v; if(FC_SAL_LABELS.includes(r.l)) sal+=v; } else exp+=v; });
+    const rise=sal*fcSalF(mi, fc), infl=exp*fcInflF(mi, fc), rs=rsu[mi]||0, save=inc+rise+rs-exp-infl, growth=nw*g, end=nw+save+growth;
+    out.push({mi, inc, rise, rsu:rs, exp, infl, save, nwStart:nw, growth, nwEnd:end}); nw=end;
   }
   return out;
 }
@@ -4526,11 +4530,13 @@ function renderPlan(force){
   /* two computed, read-only lines next to the typed rows:
      RSU       (Work income) = the stock plans x live AMZN price x the part kept;
      INFLATION (own group)   = every planned expense x the inflation factor of its month */
-  const px=amznPrice(), rsu=fcRsuByMi(fc, px, ms[0], ms[ms.length-1]), infl={};
-  ms.forEach(mi=>{ const f=fcInflF(mi, fc); if(!f) return; let s=0;
-    PLAN.rows.forEach(r=>{ if(r.k!=='I') s+=+r.m[mi]||0; }); if(s) infl[mi]=s*f; });
+  const px=amznPrice(), rsu=fcRsuByMi(fc, px, ms[0], ms[ms.length-1]), infl={}, rise={};
+  ms.forEach(mi=>{ const f=fcInflF(mi, fc), fs=fcSalF(mi, fc); let s=0, b=0;
+    PLAN.rows.forEach(r=>{ const v=+r.m[mi]||0; if(r.k!=='I') s+=v; else if(FC_SAL_LABELS.includes(r.l)) b+=v; });
+    if(s && f) infl[mi]=s*f; if(b && fs) rise[mi]=b*fs; });
   const items=PLAN.rows.map((r,ri)=>({r,ri}));
   items.push({r:{k:'I', g:'Work income', l:'RSU', d:'RSU', m:rsu}, ri:null, ro:'rsu'});
+  if(fc.salary>0) items.push({r:{k:'I', g:'Work income', l:'SALARY RISE', d:'SALARY RISE', m:rise}, ri:null, ro:'sal'});
   items.push({r:{k:'E', g:'Inflation', l:'INFLATION', d:'INFLATION', m:infl}, ri:null, ro:'infl'});
   const cell=(it,c)=> c.mi!=null ? (+it.r.m[c.mi]||0) : ms.reduce((a,mi)=> Math.floor(mi/12)===c.y ? a+(+it.r.m[mi]||0) : a, 0);
   const sumOf=(L,c)=> L.reduce((a,it)=>a+cell(it,c),0);
@@ -4554,7 +4560,8 @@ function renderPlan(force){
         `aria-label="${planEsc(name+', '+when)}"></td>`; }).join(''); };
   const tools=(it,name)=> it.ro ? '' : `<button type="button" data-pt="${it.ri}" aria-haspopup="menu" title="Row tools" aria-label="${planEsc('Tools for '+name)}">&#8943;</button>`;
   const roNote={rsu:`stock plans \u00d7 AMZN ${px?'\u20ac'+px.toFixed(2).replace('.',','):'(price loading)'} \u00d7 ${Math.round(fc.rsuNet*100)}% kept`,
-                infl:`${String(Math.round(fc.inflation*1000)/10).replace('.',',')}% a year, from Jan ${Math.floor(ymMi(fc.inflationFrom)/12)+1}`};
+                infl:`${String(Math.round(fc.inflation*1000)/10).replace('.',',')}% a year, from Jan ${Math.floor(ymMi(fc.inflationFrom)/12)+1}`,
+                sal:`BASE + TFR \u00d7 ${String(Math.round(fc.salary*1000)/10).replace('.',',')}% a year, from Jan ${Math.floor(ymMi(fc.inflationFrom)/12)+1}`};
   const groupsHtml=(t, base)=>{ let body='';
     for(const [g,L] of t){
       if(!L.size && !base.includes(g)) continue;
@@ -4614,8 +4621,8 @@ function fcBoxHtml(fc, px, ms){
       `<td class="v">${past ? 'past' : net==null ? '\u2013' : fmt(net)}</td>`+
       `<td><button type="button" data-fca="delvest" data-i="${i}" aria-label="Remove the vest of ${planEsc(x.date)}">&#10005;</button></td></tr>`; }).join('');
   const num=(f,v,lab)=>`<label>${lab} <input class="fcin num" data-fc="${f}" type="text" inputmode="decimal" value="${pc(v)}" aria-label="${lab} %">%</label>`;
-  return `<details class="fcbox" id="fcbox"${fcOpen?' open':''}><summary>Forecast settings \u00b7 inflation ${pc(fc.inflation)}% \u00b7 yield ${pc(fc.yield)}% \u00b7 to ${fc.endYear} \u00b7 ${fc.rsu.length} stock vest${fc.rsu.length===1?'':'s'}</summary>`+
-    `<div class="fcrow">${num('inflation',fc.inflation,'Inflation a year')}${num('yield',fc.yield,'Yield a year')}${num('rsuNet',fc.rsuNet,'Stock kept after tax')}</div>`+
+  return `<details class="fcbox" id="fcbox"${fcOpen?' open':''}><summary>Forecast settings \u00b7 inflation ${pc(fc.inflation)}% \u00b7 salary +${pc(fc.salary)}% \u00b7 yield ${pc(fc.yield)}% \u00b7 to ${fc.endYear} \u00b7 ${fc.rsu.length} stock vest${fc.rsu.length===1?'':'s'}</summary>`+
+    `<div class="fcrow">${num('inflation',fc.inflation,'Inflation a year')}${num('salary',fc.salary,'Salary rise a year')}${num('yield',fc.yield,'Yield a year')}${num('rsuNet',fc.rsuNet,'Stock kept after tax')}</div>`+
     `<div class="fcrow"><span>Plan ends in Dec <b>${fc.endYear}</b></span>`+
     `<button type="button" data-fca="addyear">Add ${fc.endYear+1}</button>`+
     `<button type="button" data-fca="dropyear"${fc.endYear<=now?' disabled':''}>Remove ${fc.endYear}</button></div>`+
@@ -4627,8 +4634,8 @@ function fcBoxHtml(fc, px, ms){
 function fcField(t){
   const fc=JSON.parse(JSON.stringify(fcGet())), f=t.dataset.fc, num=parseFloat(String(t.value).replace(',','.').replace('%','').trim());
   const bad=m=>{ planNote=m; renderPlan(true); };
-  if(f==='inflation' || f==='yield' || f==='rsuNet'){
-    const lim={inflation:[0,50], yield:[-50,50], rsuNet:[0,100]}[f];
+  if(f==='inflation' || f==='salary' || f==='yield' || f==='rsuNet'){
+    const lim={inflation:[0,50], salary:[0,50], yield:[-50,50], rsuNet:[0,100]}[f];
     if(!isFinite(num) || num<lim[0] || num>lim[1]) return bad(`Use a number from ${lim[0]} to ${lim[1]}.`);
     fc[f]=num/100;
   } else if(f==='vdate'){ if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(t.value)) return bad('Pick a month.'); fc.rsu[+t.dataset.i].date=t.value; }
@@ -4661,6 +4668,7 @@ function planChange(ri, mutate, note){
   if(!PLAN || !PLAN.rows[ri] && ri!=null) return;
   planPush(); mutate(); planNote=note||''; planSave(); planRedraw();
 }
+const MON_L=['January','February','March','April','May','June','July','August','September','October','November','December'];
 function planCloseMenu(){ const m=document.getElementById('planMenu'); if(m && !m.hidden){ m.hidden=true; planMenuR=null; } }
 function planOpenMenu(btn, ri){
   const m=document.getElementById('planMenu'), r=PLAN.rows[ri]; if(!m || !r) return;
@@ -4669,6 +4677,7 @@ function planOpenMenu(btn, ri){
   m.innerHTML=`<button type="button" role="menuitem" data-pm="repeat" data-mi="${f}">Repeat ${miLabel(f)} to Dec ${fcGet().endYear}</button>`+
     `<button type="button" role="menuitem" data-pm="set">Same amount every month\u2026</button>`+
     `<button type="button" role="menuitem" data-pm="grow">Grow by % each year\u2026</button>`+
+    `<button type="button" role="menuitem" data-pm="yearly" data-mi="${f}">Only every ${MON_L[f%12]}, once a year\u2026</button>`+
     `<button type="button" role="menuitem" data-pm="clear">Set to zero</button>`+
     `<button type="button" role="menuitem" class="del" data-pm="del">Delete row</button>`;
   m.hidden=false;
@@ -4691,6 +4700,10 @@ function planMenuAct(act, mi0){
     planChange(ri,()=>{ const y0=Math.floor(ms[0]/12);
       ms.forEach(mi=>{ if(Math.floor(mi/12)===y0) return; const prev=mi-12>=ms[0] ? (+r.m[mi-12]||0) : (+r.m[ms[0]]||0);
         r.m[mi]=Math.round(prev*(1+p/100)); }); }, `${name}: +${p}% each year from ${Math.floor(ms[0]/12)+1}.`); }
+  else if(act==='yearly'){ const mo=mi0%12, cur=+r.m[mi0]||0;
+    const s=window.prompt(`${name}\nAmount every ${MON_L[mo]} (euros). All other months become 0:`, grp(cur || ms.reduce((a,mi)=> Math.floor(mi/12)===Math.floor(ms[ms.length-1]/12) ? a+(+r.m[mi]||0) : a, 0))); if(s==null) return;
+    const v=planNum(s); if(isNaN(v)){ planNote='That is not a number.'; renderPlan(true); return; }
+    planChange(ri,()=>{ ms.forEach(mi=>{ r.m[mi]= mi%12===mo ? v : 0; }); }, `${name}: ${grp(v)} every ${MON_L[mo]}, 0 in the other months.`); }
   else if(act==='clear'){ planChange(ri,()=>{ ms.forEach(mi=>{ r.m[mi]=0; }); }, `${name}: set to zero.`); }
   else if(act==='del'){ if(!window.confirm(`Delete "${name}" from the plan?\nUndo brings it back.`)) return;
     planChange(ri,()=>{ PLAN.rows.splice(ri,1); }, `${name}: deleted.`); }
