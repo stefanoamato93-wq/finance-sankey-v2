@@ -5,7 +5,9 @@
 // Fill in from: Firebase console > Project settings > Your apps > Web app > SDK setup and configuration > Config.
 export const firebaseConfig = {
   apiKey: "AIzaSyCvN8ZWVFYMhGmH0qXkSPrPgpCMGeorG2E",
-  authDomain: "finance-stefano.firebaseapp.com",
+  // same site as the apps: the sign-in helper is self-hosted on the root site (repo stefanoamato93-wq.github.io),
+  // so phone browsers that split storage between sites can finish the redirect sign-in (25 Oct 2026)
+  authDomain: "stefanoamato93-wq.github.io",
   projectId: "finance-stefano",
   storageBucket: "finance-stefano.firebasestorage.app",
   messagingSenderId: "803207911332",

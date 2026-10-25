@@ -82,7 +82,11 @@ status: `Personal Finance\finance-v2-plan\PLAN.md`.
   with the persistent multi-tab offline cache. SDK pinned in one constant (`SDK`,
   Firebase JS **13.1.0**).
 - **`firebase-config.js`**: the web config. Not a secret; security is Google sign-in plus
-  the owner-uid rules (`finance-v2-plan\firestore.rules`).
+  the owner-uid rules (`finance-v2-plan\firestore.rules`). Since 25 Oct 2026 `authDomain` is
+  `stefanoamato93-wq.github.io`: the Firebase sign-in helper (`/__/auth/handler`) is
+  self-hosted on the root site (repo `stefanoamato93-wq.github.io`, folder
+  `Kiro Playground\github-root-site`). With `finance-stefano.firebaseapp.com` phones failed
+  the redirect sign-in with "missing initial state" (storage split between two sites).
 - **Fake/test mode:** `?fake=1`, or `window.FS2_FAKE = {...same interface...}` set before
   the main script, skips the gate and data.js and boots at once (headless tests run from
   `file://`, where Firebase cannot load).
