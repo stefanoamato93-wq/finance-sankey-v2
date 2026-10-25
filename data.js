@@ -64,10 +64,14 @@ export function signOut() { return fbSignOut(auth); }
 export function onUser(cb) { return onAuthStateChanged(auth, cb); }
 
 // ---- months -------------------------------------------------------------------------
+// Effective rows of a month doc: txj (sheet import, one JSON string) + tx (rows written by
+// expense-tracker-v2, one map field per row; tx wins on the same id) - del (deleted ids).
 const monthOf = d => {
   const x = d.data();
-  let tx = x.tx || {};
-  if (typeof x.txj === "string") { try { tx = JSON.parse(x.txj); } catch (e) { tx = {}; } }
+  let tx = {};
+  if (typeof x.txj === "string") { try { tx = JSON.parse(x.txj) || {}; } catch (e) { tx = {}; } }
+  Object.assign(tx, x.tx || {});
+  for (const id in (x.del || {})) delete tx[id];
   return { month: d.id, tx, source: x.source || "",
            updatedAt: x.updatedAt && x.updatedAt.toMillis ? x.updatedAt.toMillis() : 0 };
 };

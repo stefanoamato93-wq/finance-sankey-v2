@@ -15,10 +15,15 @@ status: `Personal Finance\finance-v2-plan\PLAN.md`.
 | 1 Skeleton + Google sign-in (this repo) | done 24 Oct 2026 |
 | 2 Import from sheet | done 24 Oct 2026 |
 | 3 Read Firestore instead of the sheet | done 24 Oct 2026 |
+| 4 Expense tracker v2 writes Firestore (repo `expense-tracker-v2`) | built 25 Oct 2026 |
 
 ### Where the data comes from (phases 2-3)
-- **Firestore** `users/{uid}/months/{YYYY-MM}` = `{tx:{id:Tx}, updatedAt, source}`, one doc per
-  month (106 docs, biggest ~50 KB). Tx short keys: `d` date, `a` ACCOUNT, `v` VALUE, `l` LABEL,
+- **Firestore** `users/{uid}/months/{YYYY-MM}` = `{txj:"<JSON of {id:Tx}>", n, updatedAt, source}`,
+  one doc per month (106 docs, biggest ~50 KB). The rows are ONE JSON string, not a map:
+  a map indexes every field of every row and the first import failed with "Transaction too
+  big" (25 Oct 2026). Imports commit in batches of up to 3,000 rows. Rows saved by
+  expense-tracker-v2 sit next to it as `tx.<id>` fields, deletes as `del.<id>`; `data.js`
+  reads `txj + tx − del`. Tx short keys: `d` date, `a` ACCOUNT, `v` VALUE, `l` LABEL,
   `dt` DETAIL, `acd` ASSETCLASSDETAILS, `ac` ASSETCLASS, `var`, `liq`, `ty` TYPE, `av`
   AVAILABLE, `c1`/`c2`/`c3` CATEGORY1-3, `acdf` ASSETCLASSDETAILSFORM, `o` row order in the
   month, `live:true` on the CAPGAIN / ApprecTaxes row.
