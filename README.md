@@ -25,6 +25,11 @@ Tab **FIRE** after Plan. Question: if I stop working at the FIRE age, does the m
 the target age? Handoff and design: `finance-v2-plan\PLAN-fire.md`. Runs on its own in the
 browser: it reads only Firebase data (net worth, plan, forecast settings), never the sheet.
 
+- **Savings % at the top** (`fireSaveNeed`): the savings rate to keep until FIRE so that no more
+  than 100 % − target (10 %) of the scenarios are broke before the check age (90, setting
+  "Savings check age"). Savings rate = (income + pension − spending) ÷ (income + pension) over
+  the months before FIRE, one-offs left out; only the spending before FIRE moves (binary search),
+  spending after FIRE and the dice stay. Shown next to the plan's own rate (green = enough).
 - **Hero:** success rate (share of the 100 scenarios never broke before the target age), net
   worth today, gain share today, median at FIRE age, the Avg line (every year at the mean), the
   earliest FIRE age that reaches the target (`fireSolveAge`), state pension a month.
@@ -75,6 +80,9 @@ browser: it reads only Firebase data (net worth, plan, forecast settings), never
   RSU vests as income leaf `STOCKS`, `SALARY RISE` (Work income), `INFLATION` (group Other).
   `pvApply()` swaps them in for months ≥ `META.planFromMi`; `PV_REAL` keeps the real data,
   which is what the cache stores. Off (default) = every page exactly as before.
+- Savings page with the Plan pill: the **current month is the plan too** (`pvSavData()`, Savings
+  only; the month view tags it "Plan" and drops the to-the-day bar next to it). Other pages keep
+  the current month real.
 - Marks: Savings bars faded + "Plan" / "+Plan"; Compare pickers "(plan)" and a "· Plan" column
   header; Cash Flow period label "· Plan from …"; Years Paid = forecast net worth / T12M
   expenses, dashed after Now. Saved per browser (`fs2-planview-v1`).

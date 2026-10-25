@@ -854,7 +854,9 @@
   .fihero{display:flex; flex-wrap:wrap; align-items:center; gap:8px 22px;}
   .fihero .big{font-size:34px; font-weight:800; line-height:1; font-variant-numeric:tabular-nums;}
   .fihero .big.ok{color:#5fc28a;} .fihero .big.warn{color:#e7c14a;} .fihero .big.bad{color:#e58a8a;}
-  .fihero .lead{font-size:13px; font-weight:600;} .fihero .sub{color:var(--muted); font-size:12px; margin-top:3px;}
+  .fihero .lead{font-size:13px; font-weight:600;}
+  .fihero .svhero{flex:1 1 100%; display:flex; align-items:center; gap:14px; padding-bottom:8px; border-bottom:1px solid var(--grid);}
+  .fihero .svhero .sub{font-size:12.5px; color:var(--ink);} .fihero .sub{color:var(--muted); font-size:12px; margin-top:3px;}
   .fihero .facts{display:grid; grid-template-columns:auto auto; gap:2px 12px; font-size:12px;}
   .fihero .facts span:nth-child(odd){color:var(--muted);} .fihero .facts b{font-variant-numeric:tabular-nums;}
   .fitools{display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-bottom:6px;}
@@ -2822,12 +2824,13 @@ function renderCashBars(){
   cfSig=sig; cfData=DATA; cfLastW=W;
   if(cfRoll){ renderRolling(svgEl, W, W<560, perMonth); return; }
   const nowMi=d.getFullYear()*12+d.getMonth(), lastMi=pvOn() ? META.maxMi : Math.min(META.maxMi, nowMi);
+  const SD=pvOn() ? pvSavData(nowMi) : DATA;   // Plan pill: the current month is the plan too (Savings only)
   /* month view: one row per month of the drilled year (row.year holds the mi) */
   const mBucket=y=> mi=> Math.floor(mi/12)===y ? mi : null;
-  let rows=cfDrill!=null ? cashFlowByYear(DATA, lastMi, deselected, mBucket(cfDrill)) : null;
+  let rows=cfDrill!=null ? cashFlowByYear(SD, lastMi, deselected, mBucket(cfDrill)) : null;
   if(rows && !rows.length){ cfDrill=null; syncCfDrill(); rows=null; }   // year vanished on a data refresh
   const drill=cfDrill!=null;
-  if(!rows) rows=cashFlowByYear(DATA, lastMi, deselected);
+  if(!rows) rows=cashFlowByYear(SD, lastMi, deselected);
   /* Avg/m: a year / its months; a month is already one month */
   const dv=r=> perMonth && !drill ? Math.max(1,r.months) : 1;
   const MSH=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -2845,7 +2848,7 @@ function renderCashBars(){
   const cY=d.getFullYear(), lastRow=rows[rows.length-1];
   const dim=(y,m)=> new Date(y,m,0).getDate(), dD=d.getDate();
   let lyPart=null, lyKey=null;
-  if(lastRow && (drill ? cfDrill===cY && lastRow.year===nowMi : lastRow.year===cY)){
+  if(lastRow && !(drill && pvOn()) && (drill ? cfDrill===cY && lastRow.year===nowMi : lastRow.year===cY)){   // no to-the-day bar next to a planned month
     let lo, hi;
     if(drill){ const p=nowMi-1, py=Math.floor(p/12), pm=p%12+1;
       lo=py*10000+pm*100+1; hi=py*10000+pm*100+Math.min(dD, dim(py,pm)); lyKey=p; }
@@ -2863,7 +2866,7 @@ function renderCashBars(){
   const keyLab=r=> drill ? MSH[r.year%12] : String(r.year);
   /* plan view: a year / month that is all plan is drawn faded and tagged "Plan"; the
      current year, real so far plus its planned months, is tagged "+Plan" */
-  const pvAll=r=> !r.ly && (drill ? pvMi(r.year) : pvMi(r.year*12));
+  const pvAll=r=> !r.ly && (drill ? pvMi(r.year) || pvOn() && r.year===nowMi : pvMi(r.year*12));
   const pvPart=r=> !r.ly && !drill && !pvAll(r) && pvMi(r.year*12+11);
   const subLab=r=> pvAll(r) ? 'Plan' : pvPart(r) ? '+Plan' : r.ly ? (drill ? dkDay(r.lo)+'\u2013'+dkDay(r.hi) : 'YTD')
                  : drill ? (r.year===nowMi ? 'MTD' : '')
@@ -4690,6 +4693,14 @@ function pvRefresh(){
   const N=maxIdx(); if(hiIdx>N) hiIdx=N; if(loIdx>hiIdx) loIdx=Math.max(0,hiIdx); updateSliderUI();
   return true;
 }
+/* Savings page with the Plan pill: DATA with the current month cm replaced by its plan rows */
+let PV_SAV=null;
+function pvSavData(cm){
+  if(!PLAN) return DATA;
+  if(PV_SAV && PV_SAV.d===DATA && PV_SAV.cm===cm) return PV_SAV.v;
+  const cur=planToData(PLAN.rows, fcGet(), amznPrice(), cm, cm).data;
+  const v=DATA.filter(r=>r[0]!==cm).concat(cur); PV_SAV={d:DATA, cm, v}; return v;
+}
 function pvSet(on){
   PV_ON=!!on; try{ localStorage.setItem(PV_KEY, PV_ON?'1':'0'); }catch(e){}
   if(pvRefresh()) renderAll();
@@ -5686,7 +5697,7 @@ function initControlsOnce(){
    cash >= 0 is invested (cost base grows), cash < 0 is sold grossed up for the tax on the gain
    share; nw <= 0 = broke, it stays 0. Shown values = nw minus the tax on its open gains. */
 const FIRE_KEY='fs2-fire-v1', FIRE_VIEW_KEY='fs2-fire-view-v1';
-const FIRE_DEF={v:2, birth:'1993-01', fireAge:45, endAge:100, mean:0.1005, sd:0.2, sdBy:[], clamp:[-0.8,0.8], dist:'normal', n:100, seed:12345, stress:false, incGrowth:0.02, passion:0, passionEnd:0, pensionAge:72, pensionPct:0.6, salaryOverride:null, expAfterFire:1, oneOffs:[], tax:0.26, target:0.9, gainOverride:null};
+const FIRE_DEF={v:2, birth:'1993-01', fireAge:45, endAge:100, mean:0.1005, sd:0.2, sdBy:[], clamp:[-0.8,0.8], dist:'normal', n:100, seed:12345, stress:false, incGrowth:0.02, passion:0, passionEnd:0, pensionAge:72, pensionPct:0.6, salaryOverride:null, expAfterFire:1, oneOffs:[], tax:0.26, target:0.9, safeAge:90, gainOverride:null};
 /* pure: any stored object -> valid FIRE settings (bad or missing fields take the defaults) */
 function fireNorm(o){
   o=(o && typeof o==='object') ? o : {}; const D=FIRE_DEF;
@@ -5707,7 +5718,8 @@ function fireNorm(o){
     incGrowth:n(o.incGrowth,-0.2,0.5,D.incGrowth), passion:n(o.passion,0,1e6,0), passionEnd:int(o.passionEnd,0,120,0),
     pensionAge:int(o.pensionAge,40,90,D.pensionAge), pensionPct:n(o.pensionPct,0,2,D.pensionPct),
     salaryOverride:n(o.salaryOverride,0,1e6,null), expAfterFire:n(o.expAfterFire,0,3,1),
-    oneOffs, tax:n(o.tax,0,0.6,D.tax), target:n(o.target,0.01,1,D.target), gainOverride:n(o.gainOverride,0,0.99,null)};
+    oneOffs, tax:n(o.tax,0,0.6,D.tax), target:n(o.target,0.01,1,D.target), safeAge:int(o.safeAge,40,120,D.safeAge),
+    gainOverride:n(o.gainOverride,0,0.99,null)};
 }
 let FIRE=null, fireErr='', fireLoading=false;
 function fireGet(){
@@ -5805,7 +5817,7 @@ function fireInputs(P, B, fireMi){
   for(let k=0;k<plan.length;k++) if(yr(m0+k)===yr(pe)){ bi+=plan[k].inc; be+=plan[k].exp; bn++; }
   if(bn){ bi/=bn; be/=bn; }
   const one={}; P.oneOffs.forEach(x=>{ const mi=x.year*12; one[mi]=(one[mi]||0)+x.amount; });
-  const cash=new Float64Array(n), inc=new Float64Array(n), exp=new Float64Array(n), pen=new Float64Array(n);
+  const cash=new Float64Array(n), inc=new Float64Array(n), exp=new Float64Array(n), pen=new Float64Array(n), oneA=new Float64Array(n);
   for(let i=0;i<n;i++){
     const mi=m0+i; let a, e;
     if(i<plan.length){ a=plan[i].inc; e=plan[i].exp; }
@@ -5813,7 +5825,7 @@ function fireInputs(P, B, fireMi){
     if(mi>=fireMi){ a=0; e*=P.expAfterFire;
       if(P.passion && (!P.passionEnd || mi<birthMi+12*P.passionEnd)) a=P.passion*Math.pow(1+infl, yr(mi)-yr(m0)); }
     const p=pensionOn && mi>=pensionMi ? pension0*Math.pow(1+infl, yr(mi)-yr(m0)) : 0;
-    e+=one[mi]||0;
+    e+=one[mi]||0; oneA[i]=one[mi]||0;
     inc[i]=a; exp[i]=e; pen[i]=p; cash[i]=a+p-e;
   }
   const years=Math.ceil(n/12), meanBy=new Float64Array(years), sdBy=new Float64Array(years);
@@ -5825,7 +5837,7 @@ function fireInputs(P, B, fireMi){
   const g0=P.gainOverride!=null ? P.gainOverride : (B.share||0);
   const nw0=B.gross||0;
   return {m0, n, birthMi, endAge:P.endAge, fireMi, fireIdx, pensionMi, pensionOn, pension0, planEndIdx:plan.length-1,
-    cash, inc, exp, pen, years, meanBy, sdBy, mean0, incG, nw0, basis0:nw0*(1-g0), g0, tax:P.tax, infl};
+    cash, inc, exp, pen, one:oneA, years, meanBy, sdBy, mean0, incG, nw0, basis0:nw0*(1-g0), g0, tax:P.tax, infl};
 }
 /* pure: everything for one parameter set; avg = the same engine with every year at the mean */
 function fireSim(P, B, fireMi){
@@ -5850,6 +5862,27 @@ function fireSolveAge(P, B){
   let lo=a0, hi=a1;
   while(lo<hi){ const m=(lo+hi)>>1; if(ok(m)) hi=m; else lo=m+1; }
   return lo;
+}
+/* pure: the savings rate to keep until FIRE so that at most maxShare of the scenarios are broke
+   before `age`. Savings rate = (income + pension - spending) / (income + pension) over the months
+   before FIRE (one-offs left out). Only the spending before FIRE moves (x k, binary search on k);
+   spending after FIRE and the dice stay as they are. -> {now, need (null = not reachable even
+   saving everything), capped (true = even k = 8 is fine)} */
+function fireSaveNeed(inp, R, nScen, age, maxShare){
+  const f=Math.min(inp.fireIdx, inp.n); let I=0, E=0;
+  for(let i=0;i<f;i++){ I+=inp.inc[i]+inp.pen[i]; E+=inp.exp[i]-inp.one[i]; }
+  if(f<1 || !(I>0)) return null;
+  const lim=inp.birthMi+12*age-inp.m0, rate=k=> 1-k*E/I;
+  const ok=k=>{ const cash=Float64Array.from(inp.cash); for(let i=0;i<f;i++) cash[i]+=(inp.exp[i]-inp.one[i])*(1-k);
+    const b=fireRun(Object.assign({}, inp, {cash}), R, nScen).broke; let c=0;
+    for(let s=0;s<nScen;s++) if(b[s]>=0 && b[s]<lim) c++;
+    return c/nScen<=maxShare+1e-9; };
+  const out={now:rate(1), need:null, capped:false};
+  if(!ok(0)) return out;
+  let lo=0, hi=1; while(hi<8 && ok(hi)){ lo=hi; hi*=2; }
+  if(hi>=8 && ok(hi)){ out.need=rate(hi); out.capped=true; return out; }
+  for(let j=0;j<30;j++){ const m=(lo+hi)/2; if(ok(m)) lo=m; else hi=m; }
+  out.need=rate(lo); return out;
 }
 /* pure: EUR short form: € 1,2B / € 2,1M / € 450K / € 9.500 */
 function fireMoney(v){
@@ -6005,7 +6038,8 @@ const FIRE_FIELDS=[
     ['salaryOverride','Salary today (monthly)','eurOpt','Blank = BASE in your plan this month.']]],
   ['Expenses', [['expAfterFire','Spending after FIRE','pc','100 % = same as before; 90 % = spend less once retired.']]],
   ['Tax and target', [['tax','Tax on gains when selling','pc','26 %, only on the gain share of what you sell. Max 60 %.'],
-    ['target','Success target','pc','Sheet "confidence target": 90 % of scenarios must last.']]]];
+    ['target','Success target','pc','Sheet "confidence target": 90 % of scenarios must last.'],
+    ['safeAge','Savings check age','int','The savings % at the top keeps broke scenarios before this age to 100 % minus the target.']]]];
 function fireNumIn(s){ s=String(s==null?'':s).trim().replace(/[€\s%]/g,'').replace(/\u2212/g,'-'); if(s==='') return null;
   s=/,/.test(s) ? s.replace(/\./g,'').replace(',','.') : (/^-?\d{1,3}(\.\d{3})+$/.test(s) ? s.replace(/\./g,'') : s);
   const v=parseFloat(s); return isFinite(v) ? v : NaN; }
@@ -6068,6 +6102,7 @@ function fireCompute(P, B){
   const res=fireSim(P, B);
   res.rows=fireRows(res); res.order=fireHeatOrder(res.rows);
   res.solve=fireSolveAge(P, B); res.today=fireOk(P, B, B.m0); res.in1=fireOk(P, B, B.m0+12);
+  res.save=fireSaveNeed(res.inp, res.R, P.n, P.safeAge, 1-P.target);
   res.ms=Date.now()-t0;
   FIRE_RES=res; FIRE_FP=fp; if(FIRE_HL!=null && FIRE_HL>=P.n) FIRE_HL=null;
   return res;
@@ -6077,7 +6112,14 @@ function fireHeroHtml(res, B){
   const d=i=> fireDef(inp, FIRE_V.real, i), ageNow=Math.floor((inp.m0-inp.birthMi)/12);
   const ab=avg.broke[0], avgTxt=ab<0 ? 'lasts to '+P.endAge : 'broke at age '+Math.floor((inp.m0+ab-inp.birthMi)/12);
   const fy=Math.floor(inp.fireMi/12), unit=FIRE_V.real ? 'today\'s EUR' : 'nominal EUR';
-  return `<div><div class="big">${firePc(st.success)}</div></div>`+
+  const sv=res.save, maxB=Math.round((1-P.target)*100);
+  const svBig=!sv ? '\u2013' : sv.need==null ? 'n/a' : (sv.capped ? '\u2264 ' : '')+firePc(Math.max(0, sv.need));
+  const svTxt=!sv ? `You already stop at ${P.fireAge}: there is nothing left to save.`
+    : sv.need==null ? `Even saving everything until ${P.fireAge}, more than ${maxB} % of scenarios are broke before ${P.safeAge}. Stop later or spend less after FIRE.`
+    : `Save at least this much of your income until FIRE (${P.fireAge}) so that no more than ${maxB} % of the 100 scenarios are broke before ${P.safeAge}. `+
+      `Your plan saves <b>${firePc(sv.now)}</b> now: ${sv.now>=sv.need ? 'on track' : 'not enough'}.`;
+  return `<div class="svhero"><div class="big ${!sv || sv.need==null ? '' : sv.now>=sv.need ? 'ok' : 'bad'}">${svBig}</div><div class="sub">${svTxt}</div></div>`+
+    `<div><div class="big">${firePc(st.success)}</div></div>`+
     `<div><div class="lead">of ${P.n} scenarios last to age ${P.endAge} if you stop at ${P.fireAge} (${fy})</div>`+
     `<div class="sub">Target ${firePc(P.target)} \u00b7 age today ${ageNow} \u00b7 100 dice rolls, not a promise \u00b7 values in ${unit}</div></div>`+
     `<div class="facts"><span>Net worth today</span><b>${fireMoney(B.nwAfter)}</b>`+
