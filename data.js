@@ -11,7 +11,7 @@
 //   checkAccess() -> "ok" | "locked" | "error: ..."
 //
 // Data model (see finance-v2-plan/PLAN.md section 4.1):
-//   users/{uid}/months/{YYYY-MM}  { tx:{id:Tx}, updatedAt, source }
+//   users/{uid}/months/{YYYY-MM}  { txj:"<JSON of {id:Tx}>", n, updatedAt, source }  (old form: tx:{id:Tx})
 //   users/{uid}/meta/settings     { cutover, lists, lookups, lastImportAt, importHash }
 //   users/{uid}/plan/current      { v:1, rows:[...], updatedAt }
 
@@ -66,7 +66,9 @@ export function onUser(cb) { return onAuthStateChanged(auth, cb); }
 // ---- months -------------------------------------------------------------------------
 const monthOf = d => {
   const x = d.data();
-  return { month: d.id, tx: x.tx || {}, source: x.source || "",
+  let tx = x.tx || {};
+  if (typeof x.txj === "string") { try { tx = JSON.parse(x.txj); } catch (e) { tx = {}; } }
+  return { month: d.id, tx, source: x.source || "",
            updatedAt: x.updatedAt && x.updatedAt.toMillis ? x.updatedAt.toMillis() : 0 };
 };
 // Months already in the offline cache (no network, no billed reads).
@@ -83,22 +85,23 @@ export async function loadMonths(sinceMs) {
   return snap.docs.map(monthOf);
 }
 
-// Full overwrite of each given month (deleted rows disappear). Firestore caps a batch
-// at 500 documents AND at a total size / index-entry budget: every field of every row
-// in tx is indexed, so all 106 months (~12,300 rows) in one batch is rejected with
-// INVALID_ARGUMENT "Transaction too big". Commit in small batches by row count instead.
-const BATCH_MAX_DOCS = 450, BATCH_MAX_ROWS = 800;
+// Full overwrite of each given month (deleted rows disappear). The rows are stored as
+// ONE JSON string (txj), not a map: Firestore indexes every field of a map, so ~16
+// fields x ~12,300 rows made even an 800-row batch fail with INVALID_ARGUMENT
+// "Transaction too big". A string is a single index entry. Reads accept the old
+// map form (tx) too. Batches stay small anyway (500-doc cap, 10 MiB request cap).
+const BATCH_MAX_DOCS = 450, BATCH_MAX_ROWS = 3000;
 export async function writeMonths(map) {
   const ids = Object.keys(map);
   for (const id of ids) if (!/^\d{4}-\d{2}$/.test(id)) throw new Error("bad month id " + id);
   let b = writeBatch(db), docs = 0, rows = 0;
   for (const id of ids) {
-    const m = map[id], n = Object.keys(m.tx || {}).length;
+    const m = map[id], tx = m.tx || {}, n = Object.keys(tx).length;
     if (docs && (docs >= BATCH_MAX_DOCS || rows + n > BATCH_MAX_ROWS)) {
       await b.commit();
       b = writeBatch(db); docs = 0; rows = 0;
     }
-    b.set(doc(monthsCol(), id), { tx: m.tx || {}, source: m.source || "app", updatedAt: serverTimestamp() });
+    b.set(doc(monthsCol(), id), { txj: JSON.stringify(tx), n, source: m.source || "app", updatedAt: serverTimestamp() });
     docs++; rows += n;
   }
   if (docs) await b.commit();
