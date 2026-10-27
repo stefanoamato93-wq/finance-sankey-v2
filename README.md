@@ -26,7 +26,8 @@ status: `Personal Finance\finance-v2-plan\PLAN.md`.
   that row (`FS2Data.putTx`, one `tx.<id>` field like expense-tracker-v2; a new month moves it
   with `moveTx`); **Delete** removes it (`delTx`). A new label / detail copies type, group,
   category 2 and the hidden columns (asset class, variable, liquidity, ...) from the newest row
-  with the same label + detail. Works after the cutover only, like Month-end. Code:
+  with the same label + detail (Net Worth columns: only from a row of the SAME account, worked out at
+  Save; fix 27 Oct 2026 after DEBTS/Nico moved into Cash). Works after the cutover only, like Month-end. Code:
   `qEditFind()` (finds the row in `FS_MONTHS` by day, account, label, detail, value),
   `qEditTemplate()`, `qEditOpen()`.
 - **Tabs on phones:** short names (Worth, Cash, Trends, Compare, Years, Query, Plan, FIRE),

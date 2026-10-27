@@ -4479,12 +4479,18 @@ function qEditFind(r){
 }
 const TX_EDIT_F=[['d','Date','date'],['v','Value \u20ac','num'],['a','Account','list'],['l','Label','list'],['dt','Detail','list'],
   ['ty','Type','list'],['c1','Group','list'],['c2','Category 2','list']];
-const TX_COPY=['ty','c1','c2','c3','ac','acd','acdf','var','liq','av'];
-/* pure: the newest row (other than skip) with this label and detail; label alone as fallback */
-function qEditTemplate(months, lab, det, skip){
+/* the columns that place a row in Net Worth (holding = VARIABLE | ASSETCLASSDETAILS | ACCOUNT |
+   CATEGORY3): they belong to the ACCOUNT, so they are only ever copied from a row of the same
+   account. Fix 27 Oct 2026: they used to come from any row with the same label, so DEBTS /
+   PRESENTS / "Nicol?" took a SATISPAY Presents row's CASH columns and left the debts table. */
+const TX_HOLD=['c3','ac','acd','acdf','var','liq','av'];
+/* pure: the newest row (other than skip) matching label + detail, else the label only.
+   acct given: only rows of that account (for TX_HOLD). */
+function qEditTemplate(months, lab, det, skip, acct){
   let best=null, bd='', lone=null, ld='';
   for(const m of months) for(const id in (m.tx||{})){ if(id===skip) continue;
     const t=m.tx[id], d=String(t.d||''); if(norm(t.l)!==lab) continue;
+    if(acct!=null && norm(t.a)!==acct) continue;
     if(norm(t.dt)===det){ if(d>=bd){ best=t; bd=d; } } else if(d>=ld){ lone=t; ld=d; } }
   return best || lone;
 }
@@ -4507,11 +4513,11 @@ function qEditOpen(r){
     `<button type="button" class="del" id="txDel"${can?'':' disabled'}>Delete</button><span class="txmsg" id="txMsg" role="status">${planEsc(why)}</span></div>`;
   document.body.appendChild(dlg);
   const $f=k=>dlg.querySelector('#txf-'+k), msg=s=>{ dlg.querySelector('#txMsg').textContent=s; };
-  let tpl=null;
-  /* a new label / detail: fill type, group, category 2 from the newest matching row */
+  /* a new label / detail: fill type, group, category 2 from the newest matching row (same
+     account first). Only fills the boxes; what is in them when you press Save is saved. */
   const refill=()=>{ if(!hit) return; const L=norm($f('l').value), D=norm($f('dt').value);
-    if(L===norm(t0.l) && D===norm(t0.dt)){ tpl=null; return; }
-    tpl=qEditTemplate(FS_MONTHS.values(), L, D, hit.id);
+    if(L===norm(t0.l) && D===norm(t0.dt)) return;
+    const tpl=qEditTemplate(FS_MONTHS.values(), L, D, hit.id, norm($f('a').value)) || qEditTemplate(FS_MONTHS.values(), L, D, hit.id);
     if(tpl) ['ty','c1','c2'].forEach(k=>{ $f(k).value=tpl[k]==null ? '' : String(tpl[k]); });
     msg(tpl ? 'Type, group and category copied from a matching row.' : 'New label: check type, group and category.'); };
   $f('l').addEventListener('change', refill); $f('dt').addEventListener('change', refill);
@@ -4524,7 +4530,10 @@ function qEditOpen(r){
     if(!/^\d{4}-\d{2}-\d{2}$/.test(d)){ msg('Pick a date.'); return; }
     if(v==null || Number.isNaN(v)){ msg('Value is not a number.'); return; }
     const nt=Object.assign({}, t0);
-    if(tpl) TX_COPY.forEach(k=>{ if(tpl[k]!==undefined) nt[k]=tpl[k]; });
+    /* Net Worth columns: from the newest row with the same account + label (+ detail), worked
+       out at Save (no reliance on a change event); none = keep the row's own */
+    const hold=qEditTemplate(FS_MONTHS.values(), norm($f('l').value), norm($f('dt').value), hit.id, norm($f('a').value));
+    if(hold) TX_HOLD.forEach(k=>{ if(hold[k]!==undefined) nt[k]=hold[k]; });
     TX_EDIT_F.forEach(([k])=>{ if(k!=='d' && k!=='v') nt[k]=$f(k).value.trim(); });
     nt.d=d; nt.v=Math.round(v*100)/100; delete nt.live;
     const ym=d.slice(0,7);
