@@ -4495,6 +4495,45 @@ function qEditTemplate(months, lab, det, skip, acct){
     if(norm(t.dt)===det){ if(d>=bd){ best=t; bd=d; } } else if(d>=ld){ lone=t; ld=d; } }
   return best || lone;
 }
+/* the row whose Net Worth columns an edited row takes. CREDITS / DEBTS: every row of the
+   account sits in ONE holding (drilled by detail), so the newest healthy row of the account
+   (CATEGORY3 = its usual one); else the newest row with the same account + label (+ detail). */
+function qEditHoldOf(acct, lab, det, skip){
+  if(DETAIL_ACCTS.has(acct)) return debtTemplate(FS_MONTHS.values(), acct, skip);
+  return qEditTemplate(FS_MONTHS.values(), lab, det, skip, acct);
+}
+/* pure: newest row of a CREDITS / DEBTS account in its home CATEGORY3 (LIABILITIES / CREDITS) */
+function debtTemplate(months, acct, skip){
+  const n={}, rows=[];
+  for(const m of months) for(const id in (m.tx||{})){ if(id===skip) continue; const t=m.tx[id];
+    if(norm(t.a)!==acct) continue; rows.push(t); const k=norm(t.c3); n[k]=(n[k]||0)+1; }
+  /* the home category is fixed (the sheet never had another): a majority vote is not safe, the
+     broken rows can outnumber the healthy ones */
+  const home={DEBTS:'LIABILITIES', CREDITS:'CREDITS'}[acct];
+  const top= home && n[home] ? home : Object.keys(n).sort((a,b)=>n[b]-n[a])[0]; let best=null;
+  rows.forEach(t=>{ if(norm(t.c3)===top && (!best || String(t.d||'')>=String(best.d||''))) best=t; });
+  return best;
+}
+/* one-off repair (27 Oct 2026): CREDITS / DEBTS rows that an edit moved into another holding
+   (the first edit box copied CASH columns from a PRESENTS row) get their account's columns
+   back. Runs once per open after the cutover, writes only rows that are off. */
+async function fixDetailAccts(){
+  const fix={};
+  for(const acct of DETAIL_ACCTS){
+    const tpl=debtTemplate(FS_MONTHS.values(), acct, null); if(!tpl) continue;
+    for(const m of FS_MONTHS.values()) for(const id in (m.tx||{})){ const t=m.tx[id];
+      if(norm(t.a)!==acct || norm(t.c3)===norm(tpl.c3) && norm(t.acd)===norm(tpl.acd)) continue;
+      const nt=Object.assign({}, t); TX_HOLD.forEach(k=>{ if(k!=='liq' && tpl[k]!==undefined) nt[k]=tpl[k]; });
+      (fix[m.month]=fix[m.month]||{})[id]=nt; } }
+  const months=Object.keys(fix); if(!months.length) return 0;
+  for(const ym of months) await FS2.data.putTx(ym, fix[ym]);
+  console.info('fixDetailAccts: repaired', months.map(ym=>ym+':'+Object.keys(fix[ym]).length).join(', '));
+  dbAt=0; refreshDB(); return months.length;
+}
+{ const t0=Date.now(), iv=setInterval(()=>{
+    if(FS2.fake || Date.now()-t0>180e3){ clearInterval(iv); return; }
+    if(!FS_MONTHS.size || !aprOn() || !FS2.data || !FS2.data.putTx) return;
+    clearInterval(iv); fixDetailAccts().catch(e=>console.warn('fixDetailAccts', e)); }, 2000); }
 function qEditOpen(r){
   const old=document.getElementById('txDlg'); if(old) old.remove();
   const hit=qEditFind(r), can=hit && aprOn();
@@ -4523,7 +4562,7 @@ function qEditOpen(r){
     msg(tpl ? 'Type, group and category copied from a matching row.' : 'New label: check type, group and category.'); };
   $f('l').addEventListener('change', refill); $f('dt').addEventListener('change', refill);
   /* where Save will put the row in Net Worth (group > account), live while typing */
-  const holdNow=()=> hit ? qEditTemplate(FS_MONTHS.values(), norm($f('l').value), norm($f('dt').value), hit.id, norm($f('a').value)) : null;
+  const holdNow=()=> hit ? qEditHoldOf(norm($f('a').value), norm($f('l').value), norm($f('dt').value), hit.id) : null;
   const nwLine=()=>{ const h=Object.assign({}, t0, holdNow()||{}), cap=x=>{ x=String(x||'\u2014'); return x.charAt(0)+x.slice(1).toLowerCase(); };
     const was=norm(t0.c3)!==norm(h.c3) ? ` (now ${cap(t0.c3)}: Save fixes it)` : '';
     dlg.querySelector('#txNw').textContent=`Net Worth: ${cap(h.c3)} \u203a ${cap($f('a').value)}${was}`; };
@@ -4539,7 +4578,7 @@ function qEditOpen(r){
     const nt=Object.assign({}, t0);
     /* Net Worth columns: from the newest row with the same account + label (+ detail), worked
        out at Save (no reliance on a change event); none = keep the row's own */
-    const hold=qEditTemplate(FS_MONTHS.values(), norm($f('l').value), norm($f('dt').value), hit.id, norm($f('a').value));
+    const hold=qEditHoldOf(norm($f('a').value), norm($f('l').value), norm($f('dt').value), hit.id);
     if(hold) TX_HOLD.forEach(k=>{ if(hold[k]!==undefined) nt[k]=hold[k]; });
     TX_EDIT_F.forEach(([k])=>{ if(k!=='d' && k!=='v') nt[k]=$f(k).value.trim(); });
     nt.d=d; nt.v=Math.round(v*100)/100; delete nt.live;
