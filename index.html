@@ -5108,7 +5108,15 @@ function planActual(mi){
 }
 const PLAN_AM_KEY='fs2-plan-month-v1';
 let planAmOn=true; try{ planAmOn=localStorage.getItem(PLAN_AM_KEY)!=='0'; }catch(e){}
+/* a redraw that fails used to leave the old table on screen and every button dead with no
+   sign why: now the error shows in the tools line (27 Oct 2026) */
 function renderPlan(force){
+  try{ renderPlanCore(force); }
+  catch(e){ console.error('Plan redraw failed', e);
+    const m=document.querySelector('#planwrap .planmsg');
+    if(m) m.innerHTML='<b>Plan error: '+planEsc(e && e.message || e)+' (send this to Kiro)</b>'; }
+}
+function renderPlanCore(force){
   if(!pageOn('plan') || !controlsReady) return;
   const wrap=document.getElementById('planwrap'); if(!wrap) return;
   const ae=document.activeElement;
