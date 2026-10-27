@@ -2,6 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<!-- start downloading Firebase at once, in parallel with the page -->
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js" crossorigin>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Personal Finance v2</title>
 <!-- v2 icon set (teal square + "2" badge so the home-screen icon differs from v1) -->
@@ -6698,7 +6702,7 @@ const FS2={
   start(){ if(this.booted) return; this.booted=true; boot(); }
 };
 if(FS2.fake){ FS2.start(); }
-else { document.getElementById('gate').hidden=false; }
+else if(!localStorage.getItem('fs2.user')){ document.getElementById('gate').hidden=false; }
 window.FS2=FS2;
 document.getElementById('acctData').addEventListener('click',e=>{
   e.stopPropagation();

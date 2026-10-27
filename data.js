@@ -178,11 +178,29 @@ export function initGate() {
     catch (e) { $("acctCopy").textContent = "Select it"; }
   });
 
+  // Fast open: once signed in, the uid is remembered on this device, so the app starts at
+  // once without waiting for Firebase to confirm the user. Firestore itself waits for auth
+  // before it talks to the server, so reads stay private.
+  const HINT_KEY = "fs2.user";
+  let started = false;
+  const go = u => {
+    if (started) return; started = true;
+    gate.hidden = true;
+    $("acct").hidden = false;
+    $("acctEmail").textContent = u.email || "";
+    $("acctUid").textContent = u.uid;
+    window.FS2.start();
+  };
+  let hint = null;
+  try { hint = JSON.parse(localStorage.getItem(HINT_KEY) || "null"); } catch (e) {}
+  if (hint && hint.uid) { user = { uid: hint.uid, email: hint.email }; go(hint); } else hint = null;
+
   let first = true;
   onUser(async u => {
     user = u;
     if (!u) {
-      if (!first) { location.reload(); return; }   // signed out in another tab
+      localStorage.removeItem(HINT_KEY);
+      if (!first || started) { location.reload(); return; }   // signed out / session expired
       gate.hidden = false; btn.hidden = false;
       msg.textContent = "Sign in with your Google account to see your data.";
       btn.focus();
@@ -190,12 +208,13 @@ export function initGate() {
       return;
     }
     first = false;
-    gate.hidden = true;
-    $("acct").hidden = false;
+    const save = () => { try { localStorage.setItem(HINT_KEY, JSON.stringify({ uid: u.uid, email: u.email || "" })); } catch (e) {} };
+    if (started && hint && hint.uid !== u.uid) { save(); location.reload(); return; }
+    save();
+    go(u);
     $("acctEmail").textContent = u.email || "";
-    $("acctUid").textContent = u.uid;
-    window.FS2.start();
     const a = await checkAccess();
+    if (a !== "ok") localStorage.removeItem(HINT_KEY);
     const tag = document.createElement("span");
     tag.textContent = a === "ok" ? "Database: OK" : a === "locked" ? "Database: locked (rules not set for this uid)" : "Database: " + a;
     tag.style.color = a === "ok" ? "var(--income)" : "#ff9a9a";
