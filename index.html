@@ -6135,7 +6135,7 @@ function fireHeroHtml(res, B){
 }
 function fireCardsHtml(res){
   const {P, st}=res, N=P.n;
-  return st.hist.map(h=>`<div class="ficard"><div class="k">Broke before ${h.age}</div><div class="v">${h.n} <small>of ${N}</small></div></div>`).join('')+
+  return st.hist.map(h=>`<div class="ficard"><div class="k">Broke before ${h.age}</div><div class="v">${firePc(h.n/N)}</div></div>`).join('')+
     `<div class="ficard"><div class="k">Stop working today</div><div class="v">${firePc(res.today)}</div></div>`+
     `<div class="ficard"><div class="k">Stop in 1 year</div><div class="v">${firePc(res.in1)}</div></div>`;
 }
