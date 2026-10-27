@@ -23,6 +23,18 @@
   }
   *{box-sizing:border-box;}
   /* v2 sign-in gate: covers the page until Google sign-in confirms the user */
+  /* Month-end values box (APPRECIATION rows) */
+  .aprdlg{background:var(--panel); color:var(--ink); border:1px solid var(--grid); border-radius:12px; padding:16px 18px; max-width:720px; width:94vw;}
+  .aprdlg::backdrop{background:rgba(0,0,0,.55);}
+  .aprdlg h3{margin:0 0 4px; font-size:16px;}
+  .aprdlg .sub{color:var(--muted); font-size:12.5px;}
+  .aprdlg table{width:100%; border-collapse:collapse; margin:10px 0; font-size:13px;}
+  .aprdlg th{color:var(--muted); font-weight:500; text-align:left; padding:4px;}
+  .aprdlg td{padding:3px 4px;} .aprdlg td.n, .aprdlg th.n{text-align:right; font-variant-numeric:tabular-nums;}
+  .aprdlg input{width:130px; text-align:right; background:var(--bg); color:var(--ink); border:1px solid var(--grid); border-radius:6px; padding:5px 6px; font:inherit;}
+  .aprdlg .up{color:var(--income);} .aprdlg .dn{color:var(--taxes);}
+  .aprdlg button{background:var(--bg); color:var(--ink); border:1px solid var(--grid); border-radius:6px; padding:6px 12px; font:inherit; cursor:pointer;}
+  .aprdlg button.pri{background:var(--income); color:#0f1420; border-color:var(--income); font-weight:600;}
   /* v2 phase 6: "Shares held" box under the Net Worth tables */
   .holdbox{margin:14px 0 4px; background:var(--panel); border:1px solid var(--grid); border-radius:10px; padding:8px 12px; color:var(--ink);}
   .holdbox summary{cursor:pointer; font-size:13px; color:var(--muted);}
@@ -918,6 +930,7 @@
     <button type="button" id="acctCopy">Copy uid</button>
     <button type="button" id="acctData" aria-expanded="false" aria-controls="fsPanel">Data</button>
     <button type="button" id="acctArch" title="Download this app with today's data as one file, to keep a record">Archive</button>
+    <button type="button" id="acctApr" title="Write last month's value changes (APPRECIATION rows)">Month-end</button>
     <button type="button" id="acctOut">Sign out</button>
   </div>
   <div id="fsPanel" class="fspanel" role="region" aria-label="Data source" aria-live="polite" hidden></div>
@@ -6246,6 +6259,7 @@ function archDue(){
   const a=new Date(t), d=new Date(); return a.getFullYear()*12+a.getMonth() < d.getFullYear()*12+d.getMonth();
 }
 function archLabel(){
+  aprLabel();
   const b=document.getElementById('acctArch'); if(!b || b.disabled) return;
   const t=+((FS_SETTINGS && FS_SETTINGS.archiveAt)||0);
   b.textContent=archDue() ? 'Archive (due)' : 'Archive';
@@ -6304,6 +6318,119 @@ async function archDownload(){
   finally{ b.disabled=false; archLabel(); }
 }
 document.getElementById('acctArch').addEventListener('click', e=>{ e.stopPropagation(); archDownload(); });
+
+/* ---- Month-end values (27 Oct 2026) -------------------------------------------------
+   "Month-end" (header) opens a box with every VARIABLE holding that already has an
+   APPRECIATION row: its book value (all its rows so far) and its value now. Holdings in
+   "Shares held" are filled in with shares x live price; the others (house, TFR, ...) you
+   type. Save writes ONE APPRECIATION row per holding into LAST month, dated its last day,
+   value = new value - book value. The row is a copy of that holding's newest APPRECIATION
+   row (same columns), so every page reads it as before. Row id = 'apr'+hash(month|holding):
+   saving again rewrites the same row, never adds a second one (its old value is left out
+   of the book value). Only after the cutover: before it the sheet import would overwrite
+   last month. The button says "Month-end (due)" until last month is saved or skipped
+   (settings.apprMonth); on the first open of a due month the box opens by itself once. */
+function aprPrev(){
+  const d=new Date(), mi=d.getFullYear()*12+d.getMonth()-1, y=Math.floor(mi/12), m=mi%12+1;
+  return {ym:y+'-'+pad2(m), day:y+'-'+pad2(m)+'-'+pad2(new Date(y, m, 0).getDate()), label:new Date(y, m-1, 1).toLocaleString('en-GB',{month:'long', year:'numeric'})};
+}
+function aprOn(){ return !!(typeof FS2!=='undefined' && FS2.data && !FS2.fake && FS_SETTINGS && FS_SETTINGS.cutover===true); }
+function aprDue(){ return aprOn() && String(FS_SETTINGS.apprMonth||'') < aprPrev().ym; }
+function aprLabel(){
+  const b=document.getElementById('acctApr'); if(!b) return;
+  b.hidden=!!FS2.fake; if(b.disabled) return;
+  const due=aprDue(); b.textContent=due ? 'Month-end (due)' : 'Month-end'; b.style.color=due ? '#e7c14a' : '';
+}
+/* pure: the months in memory -> VARIABLE holdings {hk, acct, acd, book, tpl, id} with a
+   template APPRECIATION row; book = every row so far except this month-end's own row */
+function aprScan(months, ym){
+  const H=new Map(), ownIds=new Set();
+  const key=t=>[norm(t.var)||'OTHER', norm(t.acd)||'\u2014', norm(t.a)||'\u2014', norm(t.c3)||'\u2014'];
+  const idOf=k=>'apr'+fsHash(ym+'|'+k.join('|'));
+  for(const m of months){
+    for(const id in (m.tx||{})){
+      const t=m.tx[id], k=key(t); if(k[0]!=='VARIABLE' || k[2]==='CAPGAIN') continue;
+      const hk=k.join('|'); let h=H.get(hk);
+      if(!h){ h={hk, acd:k[1], acct:k[2], book:0, tpl:null, tplD:'', id:idOf(k)}; H.set(hk, h); }
+      if(m.month===ym && id===h.id) continue;
+      h.book+=+t.v||0;
+      if(norm(t.l)==='APPRECIATION' && String(t.d||'')>=h.tplD){ h.tpl=t; h.tplD=String(t.d||''); }
+    }
+  }
+  return [...H.values()].filter(h=>h.tpl).map(h=>Object.assign(h, {book:Math.round(h.book*100)/100}));
+}
+const aprFmt=v=> (v<0?'-':'')+Math.abs(v).toLocaleString('it-IT',{minimumFractionDigits:2, maximumFractionDigits:2});
+/* "463.000,50" / "463000.50" / "463.000" -> number; blank -> null */
+function aprNum(s){
+  s=String(s||'').replace(/[\s\u20ac]/g,''); if(!s) return null;
+  if(s.includes(',')) s=s.replace(/\./g,'').replace(',','.');
+  else if(/^-?\d{1,3}(\.\d{3})+$/.test(s)) s=s.replace(/\./g,'');
+  const v=Number(s); return isFinite(v) ? v : NaN;
+}
+let aprAuto=false;
+function aprOpen(){
+  if(!aprOn()){ alert(FS2.fake ? 'This is an archive: nothing can be saved.' : 'Month-end works after Data \u2192 Switch to Firebase for good (before that the sheet copy would overwrite it).'); return; }
+  const P=aprPrev(), list=aprScan(FS_MONTHS.values(), P.ym).filter(h=>{
+    const L=LIVE && LIVE.hold[h.acct+'|'+h.acd]; return L || Math.abs(h.book)>0.5; });
+  list.sort((a,b)=> (LIVE && LIVE.hold[b.acct+'|'+b.acd] ? 1 : 0)-(LIVE && LIVE.hold[a.acct+'|'+a.acd] ? 1 : 0) || Math.abs(b.book)-Math.abs(a.book));
+  const old=document.getElementById('aprDlg'); if(old) old.remove();
+  const dlg=document.createElement('dialog'); dlg.id='aprDlg'; dlg.className='aprdlg'; dlg.setAttribute('aria-labelledby','aprH');
+  const row=(h,i)=>{ const L=LIVE && LIVE.hold[h.acct+'|'+h.acd];
+    return `<tr data-i="${i}"><td>${planEsc(h.acct)} \u00b7 ${planEsc(h.acd)}${L ? ' <span class="sub">live</span>' : ''}</td>
+      <td class="n">${aprFmt(h.book)}</td>
+      <td class="n"><input data-i="${i}" inputmode="decimal" aria-label="New value ${planEsc(h.acct+' '+h.acd)}" value="${L ? aprFmt(L.value) : ''}" placeholder="type value"></td>
+      <td class="n" data-ch="${i}"></td></tr>`; };
+  dlg.innerHTML=`<h3 id="aprH">Month-end values \u00b7 ${planEsc(P.label)}</h3>
+    <div class="sub">Live = shares \u00d7 today's price. Type the others; leave blank to skip. Save writes one APPRECIATION row per asset, dated ${P.day}.</div>
+    <table><thead><tr><th>Asset</th><th class="n">In your data \u20ac</th><th class="n">Value now \u20ac</th><th class="n">Change \u20ac</th></tr></thead>
+    <tbody>${list.map(row).join('')}</tbody></table>
+    <div><button type="button" class="pri" id="aprSave">Save</button> <button type="button" id="aprSkip">Skip this month</button>
+    <button type="button" id="aprClose">Close</button> <span id="aprMsg" class="sub" role="status"></span></div>`;
+  document.body.appendChild(dlg);
+  const ch=()=>{ dlg.querySelectorAll('input[data-i]').forEach(inp=>{ const i=+inp.dataset.i, v=aprNum(inp.value), c=dlg.querySelector(`[data-ch="${i}"]`);
+    if(v==null){ c.textContent='\u2013'; c.className='n'; return; }
+    if(Number.isNaN(v)){ c.textContent='not a number'; c.className='n dn'; return; }
+    const d=v-list[i].book; c.textContent=(d>0?'+':'')+aprFmt(d); c.className='n '+(d>=0?'up':'dn'); }); };
+  dlg.addEventListener('input', ch); ch();
+  const msg=t=>{ dlg.querySelector('#aprMsg').textContent=t; };
+  dlg.querySelector('#aprClose').onclick=()=>dlg.close();
+  dlg.querySelector('#aprSkip').onclick=async()=>{
+    try{ await FS2.data.setSettings({apprMonth:P.ym}); FS_SETTINGS=Object.assign({}, FS_SETTINGS, {apprMonth:P.ym}); aprLabel(); dlg.close(); }
+    catch(e){ msg('Not saved: '+((e && (e.code||e.message))||e)); } };
+  dlg.querySelector('#aprSave').onclick=async()=>{
+    const vals=[...dlg.querySelectorAll('input[data-i]')].map(inp=>aprNum(inp.value));
+    if(vals.some(v=>Number.isNaN(v))){ msg('Fix the values marked "not a number".'); return; }
+    const btn=dlg.querySelector('#aprSave'); btn.disabled=true; msg('Saving\u2026');
+    try{
+      await fsFetch();                                       // freshest months before the full overwrite of last month
+      const fresh=new Map(aprScan(FS_MONTHS.values(), P.ym).map(h=>[h.hk, h]));
+      const m=FS_MONTHS.get(P.ym), tx=Object.assign({}, (m && m.tx)||{});
+      let maxO=0; for(const k in tx) maxO=Math.max(maxO, +tx[k].o||0);
+      let n=0;
+      list.forEach((h0,i)=>{ const v=vals[i], h=fresh.get(h0.hk); if(v==null || !h) return;
+        const d=Math.round((v-h.book)*100)/100;
+        if(Math.abs(d)<0.005){ delete tx[h.id]; return; }
+        const t=Object.assign({}, h.tpl, {d:P.day, v:d, o: tx[h.id] ? tx[h.id].o : ++maxO}); delete t.live;
+        tx[h.id]=t; n++; });
+      await FS2.data.writeMonths({[P.ym]:{tx, source:'app'}});
+      await FS2.data.setSettings({apprMonth:P.ym});
+      FS_SETTINGS=Object.assign({}, FS_SETTINGS, {apprMonth:P.ym}); aprLabel();
+      dbAt=0; refreshDB();
+      msg(`Saved ${n} row(s) in ${P.label}.`); setTimeout(()=>dlg.close(), 1500);
+    }catch(e){ msg('Not saved: '+((e && (e.code||e.message))||e)); }
+    finally{ btn.disabled=false; }
+  };
+  dlg.showModal();
+}
+document.getElementById('acctApr').addEventListener('click', e=>{ e.stopPropagation(); aprOpen(); });
+/* opens by itself once per visit when due: after the data, the settings and (up to 60 s) the live prices */
+{ const t0=Date.now(), iv=setInterval(()=>{
+    if(FS2.fake || Date.now()-t0>180e3){ clearInterval(iv); return; }
+    aprLabel();
+    if(aprAuto || !FS_MONTHS.size || !FS_SETTINGS) return;
+    if(!aprDue()){ if(FS_SETTINGS) clearInterval(iv); return; }
+    if(!LIVE && Date.now()-t0<60e3) return;
+    aprAuto=true; clearInterval(iv); aprOpen(); }, 3000); }
 
 /* ---- page switching ----------------------------------------------------------
    showPage(): remember the scroll of the page being left, close the hover / detail
