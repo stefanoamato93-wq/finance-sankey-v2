@@ -4699,7 +4699,7 @@ const PLAN_GC={Needs:'var(--needs)',Wants:'var(--wants)',Liberality:'var(--liber
   'Work income':'var(--income)','Non-work income':'var(--income)','Other income':'var(--income)',Inflation:'#e7c14a'};
 let PLAN=null, planUndo=[], planNote='', planFocus=null, planMenuR=null;
 const planOpenY=new Set(), planShutG=new Set(), planOpenL=new Set();
-let planDetKeys=[], planGrpKeys=[];   // every "group|label" that has details / every group shown (filled by renderPlan)
+let planDetKeys=[], planGrpKeys=[], planFoldOnOpen=true;   // every "group|label" that has details / every group shown (filled by renderPlan)
 /* the same list read straight from the plan rows, so Expand all never depends on what the
    last redraw left behind (27 Oct 2026: it did nothing until "Show all months" was clicked) */
 function planDetKeysNow(){
@@ -5224,6 +5224,7 @@ function renderPlanCore(force){
   const groupsHtml=(t, base)=>{ let body='';
     for(const [g,L] of t){
       if(!L.size && !base.includes(g)) continue;
+      if(planFoldOnOpen) planShutG.add(g);   // the page opens with every group folded (27 Oct 2026)
       const all=[...L.values()].flat(), shut=planShutG.has(g), gq=planEsc(g), canAdd=g!=='Inflation' && g!=='Not in plan'; planGrpKeys.push(g);
       body+=`<tr class="g" style="--gc:${PLAN_GC[g]||'var(--budget)'}"><td class="n"><span class="nm">`+
         `<button type="button" class="tw" data-pg="${gq}" aria-expanded="${!shut}" aria-label="${(shut?'Open ':'Close ')+gq}">${shut?'&#9656;':'&#9662;'}</button>`+
@@ -5258,6 +5259,7 @@ function renderPlanCore(force){
   const body=sav+
     `<tr class="tot"><td class="n">Total income</td>${sums(inc)}</tr>`+groupsHtml(tree(PLAN_IGROUPS.slice(0,2),inc), PLAN_IGROUPS.slice(0,2))+
     `<tr class="tot"><td class="n">Total expenses</td>${sums(exp)}</tr>`+groupsHtml(tree(PLAN_GROUPS.concat(['Inflation']),exp), PLAN_GROUPS);
+  planFoldOnOpen=false;
   const head=`<tr><th class="n">Category</th><th class="ref" title="Average per month, last 12 complete months">Last 12M /m</th>`+
     (planAmOn ? `<th class="am" title="This month: actual so far / plan. The white tick is today's pace.">${MONL} actual<small>day ${dN.getDate()} of ${dim}</small></th>` : '')+
     cols.map(c=> c.mi!=null ? `<th>${MON[c.mi%12]} ${String(Math.floor(c.mi/12)).slice(2)}</th>`
