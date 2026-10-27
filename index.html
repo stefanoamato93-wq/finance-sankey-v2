@@ -70,6 +70,36 @@
   #acct button{font:inherit; font-size:11.5px; color:var(--muted); background:none; border:1px solid var(--grid);
                border-radius:6px; padding:2px 8px; cursor:pointer;}
   #acct button:hover{color:var(--ink);}
+  /* account menu (27 Oct 2026): email, uid and sign-out behind one round button */
+  .acctwrap{position:relative; margin-left:auto;}
+  #acct #acctBtn{width:30px; height:30px; padding:0; border-radius:50%; display:inline-flex; align-items:center; justify-content:center;}
+  #acctBtn svg{width:16px; height:16px; fill:currentColor;}
+  #acctMenu{position:absolute; right:0; top:calc(100% + 6px); z-index:45; min-width:230px; max-width:min(320px,90vw);
+            display:flex; flex-direction:column; gap:7px; padding:10px 12px; background:var(--panel); color:var(--ink);
+            border:1px solid var(--grid); border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.5); font-size:12px;}
+  #acctMenu[hidden]{display:none;}
+  #acctMenu .amk{color:var(--muted); font-size:11px;}
+  #acctMenu .amv{word-break:break-all;}
+  #acctMenu .amrow{display:flex; gap:6px; flex-wrap:wrap;}
+  #acct #acctMenu button{padding:5px 10px; color:var(--ink);}
+  #acct #acctMenu #acctOut{color:#e58a8a;}
+  /* Query: edit one transaction */
+  .txdlg{background:var(--panel); color:var(--ink); border:1px solid var(--grid); border-radius:12px; padding:14px 16px; width:min(460px,94vw);}
+  .txdlg::backdrop{background:rgba(0,0,0,.55);}
+  .txdlg h3{margin:0 0 8px; font-size:15px;}
+  .txdlg .txg{display:grid; grid-template-columns:96px 1fr; gap:7px 10px; align-items:center;}
+  .txdlg label{color:var(--muted); font-size:12px;}
+  .txdlg input{background:var(--bg); color:var(--ink); border:1px solid var(--grid); border-radius:6px; padding:7px 8px; font:inherit; font-size:13px; width:100%; box-sizing:border-box; min-width:0;}
+  .txdlg input:focus{outline:none; border-color:#8fb0ff;}
+  .txdlg .txb{display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:12px;}
+  .txdlg button{background:var(--bg); color:var(--ink); border:1px solid var(--grid); border-radius:7px; padding:7px 13px; font:inherit; font-size:12.5px; cursor:pointer;}
+  .txdlg button.pri{background:var(--income); color:#0f1420; border-color:var(--income); font-weight:600;}
+  .txdlg button.del{color:#e58a8a; margin-left:auto;}
+  .txdlg button:disabled{opacity:.45; cursor:default;}
+  .txdlg .txmsg{color:var(--muted); font-size:12px; flex:1 1 100%; min-height:1.2em;}
+  table.q.tx tr.er{cursor:pointer;}
+  table.q.tx tr.er:hover td, table.q.tx tr.er:focus-visible td{background:#1d2840;}
+  table.q.tx tr.er:focus-visible{outline:none;}
   .fspanel{margin-top:8px; max-width:640px; padding:10px 12px; border:1px solid var(--grid); border-radius:10px;
            background:var(--panel); font-size:12.5px; line-height:1.5;}
   .fspanel[hidden]{display:none;}
@@ -91,6 +121,7 @@
   .tabs a{flex:0 0 auto; padding:7px 13px; border-radius:8px; color:var(--muted); font-size:12.5px; font-weight:600;
           text-decoration:none; white-space:nowrap; -webkit-tap-highlight-color:transparent;}
   .tabs a:hover{color:var(--ink); background:var(--panel);}
+  .tabs .ts{display:none;}
   .tabs a[aria-current="page"]{color:#fff; background:#25603f;}
   .tabs a:focus-visible{outline:2px solid var(--needs); outline-offset:-2px;}
   .page[hidden]{display:none !important;}
@@ -730,8 +761,12 @@
     .tabs{position:fixed; top:auto; bottom:0; left:0; right:0; margin:0; max-width:none; z-index:25; gap:1px;
           padding:5px 4px calc(5px + env(safe-area-inset-bottom)); border-top:1px solid var(--grid);
           background:rgba(15,20,32,.97); box-shadow:0 -6px 14px -8px rgba(0,0,0,.7);}
-    .tabs a{flex:1 1 0; min-width:0; text-align:center; padding:10px 0; font-size:10.5px; letter-spacing:-.2px;
-            overflow:hidden; text-overflow:ellipsis;}
+    /* short names (Worth, Cash, Years) and natural widths: no label is cut or runs into the
+       next one; on a very narrow phone the bar scrolls sideways instead (27 Oct 2026) */
+    .tabs{overflow-x:auto; overscroll-behavior-x:contain;}
+    .tabs{gap:0;}
+    .tabs a{flex:1 0 auto; min-width:0; text-align:center; padding:10px 3px; font-size:11px; letter-spacing:0;}
+    .tabs .tl{display:none;} .tabs .ts{display:inline;}
     body{padding-bottom:calc(60px + env(safe-area-inset-bottom));}
     /* month detail on a phone: tighter cards and columns, bigger tap targets */
     #mdetail{padding:10px 10px 12px;}
@@ -858,9 +893,22 @@
   table.fcvest td{padding:2px 6px;} table.fcvest td.v{text-align:right; min-width:70px;}
   table.fcvest tr.past td{opacity:.5;}
   @media (max-width:680px){
-    .planwrap{margin:8px 8px 30px;}
-    .plan .n{width:140px; min-width:140px; max-width:140px;}
-    .plan input.pc{width:56px;}
+    .planwrap{margin:8px 8px 30px; min-width:0;}
+    .planhead h2{font-size:16px;}
+    .plan .n{width:118px; min-width:118px; max-width:118px; font-size:11.5px;}
+    .plan th,.plan td{padding:3px 4px;}
+    .plan .am{min-width:70px;}
+    .plan input.pc{width:52px; padding:3px 2px;}
+    /* tools: the message on its own line, buttons wrap under it */
+    .plantools{padding:0 8px 8px; gap:5px;}
+    .plantools .planmsg{flex:1 1 100%;}
+    .plantools button{padding:6px 9px;}
+    /* setting boxes: wide tables scroll inside their box instead of running over the page */
+    .fcbox{margin:0 8px 8px; padding:6px 8px; min-width:0;}
+    .fcbox table{display:block; max-width:100%; overflow-x:auto;}
+    .fcbox summary{line-height:1.45;}
+    .fcrow{gap:6px 10px;} .fcrow label{display:inline-flex; align-items:center; gap:4px;}
+    .yttab th,.yttab td{white-space:nowrap;}
   }
   /* FIRE page (Monte Carlo): hero, fan chart, outcome cards, returns heat strip, parameters */
   body[data-page="fire"] #tgAvg, body[data-page="fire"] #tgK, body[data-page="fire"] #tgPlan{display:none;}
@@ -873,7 +921,11 @@
   .ficard .v{white-space:nowrap;}
   .fihero .big.ok{color:#5fc28a;} .fihero .big.warn{color:#e7c14a;} .fihero .big.bad{color:#e58a8a;}
   .fihero .lead{font-size:13px; font-weight:600;}
-  .fihero .svhero{flex:1 1 100%; display:flex; align-items:center; gap:14px; padding-bottom:8px; border-bottom:1px solid var(--grid);}
+  .fihero .svhero{flex:1 1 100%; display:flex; flex-wrap:wrap; align-items:flex-end; gap:6px 22px; padding-bottom:8px; border-bottom:1px solid var(--grid);}
+  .fihero .svstat{display:flex; flex-direction:column; gap:3px;}
+  .fihero .svstat .k{color:var(--muted); font-size:11.5px;}
+  .fihero .svhero .sub{flex:1 1 180px;} .fihero .sub b.ok{color:#5fc28a;} .fihero .sub b.bad{color:#e58a8a;}
+  .fihero .fisucc{display:flex; align-items:center; gap:12px;}
   .fihero .svhero .sub{font-size:12.5px; color:var(--ink);} .fihero .sub{color:var(--muted); font-size:12px; margin-top:3px;}
   .fihero .facts{display:grid; grid-template-columns:auto auto; gap:2px 12px; font-size:12px;}
   .fihero .facts span:nth-child(odd){color:var(--muted);} .fihero .facts b{font-variant-numeric:tabular-nums;}
@@ -908,8 +960,10 @@
   .fitab tr.hl td{background:#1d2840;} .fitab td.bad{color:#e58a8a;}
   @media (max-width:680px){
     .firewrap{margin:8px 8px 30px;}
-    .fiparams .row{grid-template-columns:1fr 100px;} .fiparams .row .h{grid-column:1 / -1;}
-    .fihero .big{font-size:28px;}
+    .fiparams .row{grid-template-columns:1fr 100px;} .fiparams .row .h{display:none;}
+    .fihero .big{font-size:28px;} .fihero .svhero .big{font-size:24px;}
+    .fihero .facts{flex:1 1 100%;}
+    .fitools .scrub{flex:1 1 100%; margin-left:0;}
   }
 </style>
 </head>
@@ -929,13 +983,20 @@
 <header>
   <h1>Personal Finance <span style="color:var(--muted);font-weight:600">v2</span></h1>
   <div id="acct" hidden>
-    <span id="acctEmail"></span>
-    <span>uid <code id="acctUid"></code></span>
-    <button type="button" id="acctCopy">Copy uid</button>
     <button type="button" id="acctData" aria-expanded="false" aria-controls="fsPanel">Data</button>
     <button type="button" id="acctArch" title="Download this app with today's data as one file, to keep a record">Archive</button>
     <button type="button" id="acctApr" title="Write last month's value changes (APPRECIATION rows)">Month-end</button>
-    <button type="button" id="acctOut">Sign out</button>
+    <span class="acctwrap">
+      <button type="button" id="acctBtn" aria-haspopup="true" aria-expanded="false" aria-controls="acctMenu" aria-label="Account" title="Account">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9zm0 2c-4.4 0-8 2.2-8 5v2h16v-2c0-2.8-3.6-5-8-5z"/></svg>
+      </button>
+      <div id="acctMenu" role="menu" aria-label="Account" hidden>
+        <div><div class="amk">Signed in as</div><div class="amv" id="acctEmail"></div></div>
+        <div><div class="amk">uid</div><code class="amv" id="acctUid"></code></div>
+        <div class="amk" id="acctDb"></div>
+        <div class="amrow"><button type="button" id="acctCopy">Copy uid</button><button type="button" id="acctOut">Sign out</button></div>
+      </div>
+    </span>
   </div>
   <div id="fsPanel" class="fspanel" role="region" aria-label="Data source" aria-live="polite" hidden></div>
 </header>
@@ -944,11 +1005,11 @@
      others render the first time they are opened (then only when their inputs change).
      The URL hash names the page (#cashflow ...), and the last page is reopened next time. -->
 <nav class="tabs" id="tabs" aria-label="Pages">
-  <a href="#networth" data-page="networth">Net Worth</a>
-  <a href="#cashflow" data-page="cashflow">Cash Flow</a>
-  <a href="#savings" data-page="savings">Savings</a>
+  <a href="#networth" data-page="networth"><span class="tl">Net Worth</span><span class="ts">Worth</span></a>
+  <a href="#cashflow" data-page="cashflow"><span class="tl">Cash Flow</span><span class="ts">Cash</span></a>
+  <a href="#savings" data-page="savings">Trends</a>
   <a href="#compare" data-page="compare">Compare</a>
-  <a href="#life" data-page="life">Years Paid</a>
+  <a href="#life" data-page="life"><span class="tl">Years Paid</span><span class="ts">Years</span></a>
   <a href="#query" data-page="query">Query</a>
   <a href="#plan" data-page="plan">Plan</a>
   <a href="#fire" data-page="fire">FIRE</a>
@@ -1037,7 +1098,7 @@
      and the savings rate on total income and on safe income (Base + TFR + Food tickets) -->
 <section class="page" id="pg-savings" data-page="savings" hidden>
 <div class="nwhead cfbhead" id="cfbhead" style="display:none">
-  <h2>Cash Flow vs Savings</h2>
+  <h2>Trends: cash flow vs savings</h2>
   <div class="cfbtools">
     <!-- month drill-down: shown while one year's months are on screen, goes back to the years -->
     <span class="pills" id="cfBackWrap" style="display:none"><button type="button" class="pill on" id="cfBack" title="Back to all years (Esc)">&lsaquo; Year</button></span>
@@ -4237,12 +4298,14 @@ function qGroupTable(list, view, n, sum){
     `<th class="c${on('count')}" data-qs="count">Count</th><th class="a${on('avg')}" data-qs="avg">Avg</th>`+
     `<th class="s${on('sum')}" data-qs="sum">Sum</th><th class="bar"></th><th class="p">Share</th></tr></thead><tbody>${body}</tbody></table>`;
 }
+let qShowRows=[];
 function qTxTable(rows){
   const sorted=querySortTx(rows, q.sortTx), show=sorted.slice(0,qShown), s=q.sortTx;
+  qShowRows=show;
   const on=k=> (k==='date' ? (s==='date'||s==='old') : (s==='size'||s==='neg'||s==='pos')) ? ' on'+((k==='date'&&s==='old')||(k==='value'&&s==='neg') ? ' asc' : '') : '';
   let body='';
-  show.forEach(r=>{ const det=r.det||'\u2014', acct=r.acct||'\u2014';
-    body+=`<tr><td class="dt">${qIt(r.dk)}</td><td class="lb">${qEsc(r.lab||'\u2014')}<span class="sub">${qEsc(det)} \u00b7 ${qEsc(acct)}</span></td>`+
+  show.forEach((r,i)=>{ const det=r.det||'\u2014', acct=r.acct||'\u2014';
+    body+=`<tr class="er" tabindex="0" data-ti="${i}" title="Tap to edit"><td class="dt">${qIt(r.dk)}</td><td class="lb">${qEsc(r.lab||'\u2014')}<span class="sub">${qEsc(det)} \u00b7 ${qEsc(acct)}</span></td>`+
       `<td class="dd">${qEsc(det)}</td><td class="ac">${qEsc(acct)}</td><td class="s ${qCls(r.v)}">${fmtE(r.v)}</td></tr>`; });
   const left=sorted.length-show.length;
   return `<table class="q tx"><thead><tr><th class="dt${on('date')}" data-qs="date">Date</th><th class="lb">Label</th>`+
@@ -4378,9 +4441,11 @@ function qInit(){
     if(t.closest('[data-qmore]')){ qShown+=Q_MORE; renderQuery(true); return; }
     if(t.closest('[data-qretry]')){ txAt=0; txErr=null; refreshTx(); return; }
     if(t.closest('[data-qreset]')){ qReset(); return; }
+    const er=t.closest('tr.er'); if(er){ qEditOpen(qShowRows[+er.getAttribute('data-ti')]); return; }
     const tr=t.closest('tr.dr'); if(tr) qDrill(tr.getAttribute('data-k'));
   });
   wrap.addEventListener('keydown',e=>{ if(e.key!=='Enter' && e.key!==' ') return;
+    const er=e.target.closest && e.target.closest('tr.er'); if(er){ e.preventDefault(); qEditOpen(qShowRows[+er.getAttribute('data-ti')]); return; }
     const tr=e.target.closest && e.target.closest('tr.dr'); if(!tr) return; e.preventDefault(); qDrill(tr.getAttribute('data-k')); });
   /* Esc: closes an open picker first, else steps back through the drill-down (not while
      typing in a box, not over another overlay) */
@@ -4392,6 +4457,91 @@ function qInit(){
     qBack(); });
   ['qhead','qfilters','qcards','qbar','qwrap'].forEach(id=>{ $(id).style.display=''; });
   syncQControls();
+}
+
+/* ---- Query: edit one transaction (27 Oct 2026) --------------------------------------
+   A tap on a row of the Transactions view opens a box with its date, value, account, label,
+   detail, type, group and category 2. The row is found again in the Firestore months
+   (FS_MONTHS) by month + day, account, label, detail and value. Save writes only that row
+   (FS2.data.putTx; a new month moves it, moveTx); Delete removes it (delTx). Changing the
+   label or detail fills type, group, category 2 and the hidden columns (asset class,
+   variable, liquidity, ...) from the newest row with the same label + detail, so every page
+   classifies it as before. Only after the cutover, like Month-end. */
+function qEditFind(r){
+  if(!r) return null;
+  const ym=Math.floor(r.dk/10000)+'-'+pad2(Math.floor(r.dk/100)%100), m=FS_MONTHS.get(ym); if(!m) return null;
+  for(const id in (m.tx||{})){ const t=m.tx[id], p=String(t.d||'').split('-').map(Number);
+    if(p[0]*10000+p[1]*100+Math.min(31,Math.max(1,p[2]||1))!==r.dk) continue;
+    if(norm(t.a)!==r.acct || norm(t.l)!==r.lab || norm(t.dt)!==norm(r.det)) continue;
+    if(Math.abs((+t.v||0)-r.v)>0.005) continue;
+    return {ym, id, t}; }
+  return null;
+}
+const TX_EDIT_F=[['d','Date','date'],['v','Value \u20ac','num'],['a','Account','list'],['l','Label','list'],['dt','Detail','list'],
+  ['ty','Type','list'],['c1','Group','list'],['c2','Category 2','list']];
+const TX_COPY=['ty','c1','c2','c3','ac','acd','acdf','var','liq','av'];
+/* pure: the newest row (other than skip) with this label and detail; label alone as fallback */
+function qEditTemplate(months, lab, det, skip){
+  let best=null, bd='', lone=null, ld='';
+  for(const m of months) for(const id in (m.tx||{})){ if(id===skip) continue;
+    const t=m.tx[id], d=String(t.d||''); if(norm(t.l)!==lab) continue;
+    if(norm(t.dt)===det){ if(d>=bd){ best=t; bd=d; } } else if(d>=ld){ lone=t; ld=d; } }
+  return best || lone;
+}
+function qEditOpen(r){
+  const old=document.getElementById('txDlg'); if(old) old.remove();
+  const hit=qEditFind(r), can=hit && aprOn();
+  const dlg=document.createElement('dialog'); dlg.id='txDlg'; dlg.className='txdlg'; dlg.setAttribute('aria-labelledby','txH');
+  const lists={a:new Set(), l:new Set(), dt:new Set(), ty:new Set(), c1:new Set(), c2:new Set()};
+  for(const m of FS_MONTHS.values()) for(const id in (m.tx||{})){ const t=m.tx[id]; for(const k in lists) if(t[k]) lists[k].add(String(t[k])); }
+  const t0=hit ? hit.t : {};
+  const val=k=> k==='v' ? (t0.v==null ? '' : String(t0.v).replace('.',',')) : (t0[k]==null ? '' : String(t0[k]));
+  const field=([k,lab,kind])=>`<label for="txf-${k}">${lab}</label>`+
+    `<input id="txf-${k}" data-k="${k}"${kind==='date'?' type="date"':kind==='num'?' type="text" inputmode="decimal"':' type="text"'}`+
+    `${kind==='list'?` list="txl-${k}"`:''} value="${planEsc(val(k))}" autocomplete="off">`;
+  const dls=Object.keys(lists).map(k=>`<datalist id="txl-${k}">${[...lists[k]].sort().map(v=>`<option value="${planEsc(v)}">`).join('')}</datalist>`).join('');
+  const why=!hit ? 'This row was not found in the database (reload and try again).'
+    : !aprOn() ? (FS2.fake ? 'This is an archive: nothing can be saved.' : 'Editing works after Data \u2192 Switch to Firebase for good.') : '';
+  dlg.innerHTML=`<h3 id="txH">Edit transaction</h3><div class="txg">${TX_EDIT_F.map(field).join('')}</div>${dls}`+
+    `<div class="txb"><button type="button" class="pri" id="txSave"${can?'':' disabled'}>Save</button><button type="button" id="txClose">Cancel</button>`+
+    `<button type="button" class="del" id="txDel"${can?'':' disabled'}>Delete</button><span class="txmsg" id="txMsg" role="status">${planEsc(why)}</span></div>`;
+  document.body.appendChild(dlg);
+  const $f=k=>dlg.querySelector('#txf-'+k), msg=s=>{ dlg.querySelector('#txMsg').textContent=s; };
+  let tpl=null;
+  /* a new label / detail: fill type, group, category 2 from the newest matching row */
+  const refill=()=>{ if(!hit) return; const L=norm($f('l').value), D=norm($f('dt').value);
+    if(L===norm(t0.l) && D===norm(t0.dt)){ tpl=null; return; }
+    tpl=qEditTemplate(FS_MONTHS.values(), L, D, hit.id);
+    if(tpl) ['ty','c1','c2'].forEach(k=>{ $f(k).value=tpl[k]==null ? '' : String(tpl[k]); });
+    msg(tpl ? 'Type, group and category copied from a matching row.' : 'New label: check type, group and category.'); };
+  $f('l').addEventListener('change', refill); $f('dt').addEventListener('change', refill);
+  dlg.querySelector('#txClose').onclick=()=>dlg.close();
+  dlg.addEventListener('close',()=>dlg.remove());
+  const busy=on=>{ dlg.querySelector('#txSave').disabled=on; dlg.querySelector('#txDel').disabled=on; };
+  const done=s=>{ msg(s); dbAt=0; refreshDB(); setTimeout(()=>{ if(dlg.open) dlg.close(); }, 900); };
+  dlg.querySelector('#txSave').onclick=async()=>{
+    const d=$f('d').value, v=aprNum($f('v').value);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(d)){ msg('Pick a date.'); return; }
+    if(v==null || Number.isNaN(v)){ msg('Value is not a number.'); return; }
+    const nt=Object.assign({}, t0);
+    if(tpl) TX_COPY.forEach(k=>{ if(tpl[k]!==undefined) nt[k]=tpl[k]; });
+    TX_EDIT_F.forEach(([k])=>{ if(k!=='d' && k!=='v') nt[k]=$f(k).value.trim(); });
+    nt.d=d; nt.v=Math.round(v*100)/100; delete nt.live;
+    const ym=d.slice(0,7);
+    busy(true); msg('Saving\u2026');
+    try{
+      if(ym===hit.ym) await FS2.data.putTx(ym, {[hit.id]:nt});
+      else await FS2.data.moveTx(hit.ym, ym, [hit.id], {[hit.id]:nt});
+      done('Saved.');
+    }catch(e){ msg('Not saved: '+((e && (e.code||e.message))||e)); busy(false); }
+  };
+  dlg.querySelector('#txDel').onclick=async()=>{
+    if(!confirm('Delete this transaction?')) return;
+    busy(true); msg('Deleting\u2026');
+    try{ await FS2.data.delTx(hit.ym, [hit.id]); done('Deleted.'); }
+    catch(e){ msg('Not deleted: '+((e && (e.code||e.message))||e)); busy(false); }
+  };
+  dlg.showModal();
 }
 
 /* ---- PAGE Plan (income and expenses, v2 25 Oct 2026) ------------------------
@@ -6132,23 +6282,27 @@ function fireHeroHtml(res, B){
   const {P, inp, st, avg}=res;
   const d=i=> fireDef(inp, FIRE_V.real, i), ageNow=Math.floor((inp.m0-inp.birthMi)/12);
   const ab=avg.broke[0], avgTxt=ab<0 ? 'lasts to '+P.endAge : 'broke at age '+Math.floor((inp.m0+ab-inp.birthMi)/12);
-  const fy=Math.floor(inp.fireMi/12), unit=FIRE_V.real ? 'today\'s EUR' : 'nominal EUR';
-  const sv=res.save, maxB=Math.round((1-P.target)*100);
+  const fy=Math.floor(inp.fireMi/12);
+  const sv=res.save;
   const svBig=!sv ? '\u2013' : sv.need==null ? 'n/a' : (sv.capped ? '\u2264 ' : '')+firePc(Math.max(0, sv.need));
-  const svTxt=!sv ? `You already stop at ${P.fireAge}: there is nothing left to save.`
-    : sv.need==null ? `Even saving everything until ${P.fireAge}, more than ${maxB} % of scenarios are broke before ${P.safeAge}. Stop later or spend less after FIRE.`
-    : `Save at least this much of your income until FIRE (${P.fireAge}) so that no more than ${maxB} % of the 100 scenarios are broke before ${P.safeAge}. `+
-      `Your plan saves <b>${firePc(sv.now)}</b> now: ${sv.now>=sv.need ? 'on track' : 'not enough'}.`;
-  return `<div class="svhero"><div class="big ${!sv || sv.need==null ? '' : sv.now>=sv.need ? 'ok' : 'bad'}">${svBig}</div><div class="sub">${svTxt}</div></div>`+
-    `<div><div class="big">${firePc(st.success)}</div></div>`+
-    `<div><div class="lead">of ${P.n} scenarios last to age ${P.endAge} if you stop at ${P.fireAge} (${fy})</div>`+
-    `<div class="sub">Target ${firePc(P.target)} \u00b7 age today ${ageNow} \u00b7 100 dice rolls, not a promise \u00b7 values in ${unit}</div></div>`+
+  /* 27 Oct 2026: two plain numbers, "Minimum save" vs "Your plan". Both are the share of
+     income saved over ALL the months from today to the FIRE month together (one-offs left
+     out), so one average for the whole stretch, not a yearly figure. */
+  const svCls=!sv || sv.need==null ? '' : sv.now>=sv.need ? 'ok' : 'bad';
+  const svHtml=!sv ? `<div class="sub">You already stop at ${P.fireAge}: nothing left to save.</div>`
+    : sv.need==null ? `<div class="sub">Not reachable, even saving everything. Stop later or spend less after ${P.fireAge}.</div>`
+    : `<div class="svstat"><span class="k">Minimum save</span><span class="big ${svCls}">${svBig}</span></div>`+
+      `<div class="svstat"><span class="k">Your plan</span><span class="big">${firePc(sv.now)}</span></div>`+
+      `<div class="sub">of income, today \u2192 ${P.fireAge} (${fy}) \u00b7 <b class="${svCls}">${sv.now>=sv.need ? 'on track' : 'not enough'}</b></div>`;
+  return `<div class="svhero">${svHtml}</div>`+
+    `<div class="fisucc"><div class="big">${firePc(st.success)}</div>`+
+    `<div><div class="lead">last to ${P.endAge} if you stop at ${P.fireAge}</div><div class="sub">goal ${firePc(P.target)}</div></div></div>`+
     `<div class="facts"><span>Net worth today</span><b>${fireMoney(B.nwAfter)}</b>`+
-    `<span>Gain share today (taxed 26 % when sold)</span><b>${firePc(inp.g0,1)}</b>`+
-    `<span>Median at FIRE age ${P.fireAge}</span><b>${fireMoney(st.medFire/d(st.fireAt))}</b>`+
-    `<span>Avg line (every year = mean)</span><b>${avgTxt}</b>`+
-    `<span>Earliest FIRE age at ${firePc(P.target)}</span><b>${res.solve==null ? 'none before '+P.endAge : res.solve}</b>`+
-    `<span>State pension from ${P.pensionAge}</span><b>${inp.pensionOn ? fireMoney(inp.pension0)+' a month in today\'s EUR' : 'none'}</b></div>`;
+    `<span>Gain share (taxed 26 %)</span><b>${firePc(inp.g0,1)}</b>`+
+    `<span>Median at ${P.fireAge}</span><b>${fireMoney(st.medFire/d(st.fireAt))}</b>`+
+    `<span>Average path</span><b>${avgTxt}</b>`+
+    `<span>Earliest stop age</span><b>${res.solve==null ? 'none before '+P.endAge : res.solve}</b>`+
+    `<span>Pension from ${P.pensionAge}</span><b>${inp.pensionOn ? fireMoney(inp.pension0)+'/month' : 'none'}</b></div>`;
 }
 function fireCardsHtml(res){
   const {P, st}=res, N=P.n;
@@ -6168,10 +6322,10 @@ function fireDrawResults(){
   if(q('fiCards')) q('fiCards').innerHTML=fireCardsHtml(res);
   if(q('fiTab')) q('fiTab').innerHTML=fireTableHtml(res.rows, FIRE_SORT, FIRE_HL);
   if(q('fiPick')) q('fiPick').innerHTML=firePickHtml(res);
-  if(q('fiTrace')) q('fiTrace').innerHTML= FIRE_HL==null ? '<div class="fimsg">Pick a scenario (list, Worst / Median / Best, or a row of the table below) to see its net worth year by year.</div>'
-    : fireTraceHtml(res.inp, fireTrace(res.inp, res.R, FIRE_HL), FIRE_V.real)+`<div class="fimsg">Scenario ${FIRE_HL+1}, values in ${FIRE_V.real ? 'today\'s' : 'nominal'} EUR. Start / End = net worth after the tax on its open gains. Tax on sales = 26 % of the gain share of what was sold to pay the bills.</div>`;
-  if(q('fiNote')) q('fiNote').textContent=`Log scale: each step up = 10 times more. White = your real net worth so far; thin lines = the 100 scenarios; thick green = median; dashed = every year at the mean.`+
-    (FIRE_HL!=null ? ` Yellow = scenario ${FIRE_HL+1}.` : '')+` ${res.P.n} scenarios in ${res.ms} ms.`;
+  if(q('fiTrace')) q('fiTrace').innerHTML= FIRE_HL==null ? '<div class="fimsg">Pick a scenario to see it year by year.</div>'
+    : fireTraceHtml(res.inp, fireTrace(res.inp, res.R, FIRE_HL), FIRE_V.real)+`<div class="fimsg">Scenario ${FIRE_HL+1} \u00b7 ${FIRE_V.real ? 'today\'s' : 'nominal'} \u20ac \u00b7 after 26 % tax on gains.</div>`;
+  if(q('fiNote')) q('fiNote').textContent=`White = real so far \u00b7 green = median \u00b7 dashed = average`+
+    (FIRE_HL!=null ? ` \u00b7 yellow = #${FIRE_HL+1}` : '')+'.';
   fireWireChart(res, B);
 }
 function fireWireChart(res, B){
@@ -6205,7 +6359,7 @@ function renderFire(force){
   const ae=document.activeElement, typing=ae && wrap.contains(ae) && (ae.tagName==='INPUT' || ae.tagName==='SELECT');
   if(!document.getElementById('fiParams')){
     wrap.innerHTML=`<div class="fibox fihero" id="fiHero"></div>`+
-      `<div class="fibox"><div class="fitools"><label class="pill"><input type="checkbox" id="fiReal"${FIRE_V.real?' checked':''}>Real \u20ac (today's money)</label>`+
+      `<div class="fibox"><div class="fitools"><label class="pill"><input type="checkbox" id="fiReal"${FIRE_V.real?' checked':''}>Today's \u20ac</label>`+
       `<span class="scrub" id="fiScrub" aria-live="polite"></span></div>`+
       `<div class="fichart" id="fiChart"></div><div class="fimsg" id="fiNote"></div></div>`+
       `<div class="fibox"><h3>Follow one scenario, year by year</h3><div class="fitools"><select id="fiPick" aria-label="Scenario"></select>`+
@@ -6213,7 +6367,7 @@ function renderFire(force){
       `<div id="fiTrace"></div></div>`+
       `<div class="fibox"><h3>When does the money run out?</h3><div class="ficards" id="fiCards"></div></div>`+
       `<div class="fibox fiparams" id="fiParams"></div>`+
-      `<details class="fibox" id="fiTabBox"><summary>All 100 scenarios (tap a header to sort, a row to follow it)</summary><div id="fiTab"></div></details>`;
+      `<details class="fibox" id="fiTabBox"><summary>All 100 scenarios</summary><div id="fiTab"></div></details>`;
     fireWire(wrap);
   }
   if(force || !typing) document.getElementById('fiParams').innerHTML=fireParamsHtml(P, B);
@@ -6446,7 +6600,10 @@ function syncPageUI(){
   document.body.setAttribute('data-page',PAGE);
   document.querySelectorAll('section.page').forEach(s=>{ s.hidden = !controlsReady || s.getAttribute('data-page')!==PAGE; });
   document.querySelectorAll('#tabs a[data-page]').forEach(a=>{
-    if(a.getAttribute('data-page')===PAGE) a.setAttribute('aria-current','page'); else a.removeAttribute('aria-current'); });
+    if(a.getAttribute('data-page')===PAGE){ a.setAttribute('aria-current','page');
+      const t=a.parentNode; if(t.scrollWidth>t.clientWidth){ const l=a.offsetLeft, r=l+a.offsetWidth;
+        if(l<t.scrollLeft) t.scrollLeft=l-8; else if(r>t.scrollLeft+t.clientWidth) t.scrollLeft=r-t.clientWidth+8; } }
+    else a.removeAttribute('aria-current'); });
   /* one Avg/m | K element: back in the controls row on Cash Flow, else in the page header */
   const tg=document.getElementById('toggles');
   if(tg){
@@ -6710,6 +6867,13 @@ document.getElementById('acctData').addEventListener('click',e=>{
   p.hidden=!p.hidden; b.setAttribute('aria-expanded', String(!p.hidden)); fsPanelRender();
 });
 document.getElementById('fsPanel').addEventListener('click',e=>e.stopPropagation());
+/* account menu: open / close (outside tap, Esc) */
+{ const btn=document.getElementById('acctBtn'), menu=document.getElementById('acctMenu');
+  const set=open=>{ menu.hidden=!open; btn.setAttribute('aria-expanded', String(open)); };
+  btn.addEventListener('click',e=>{ e.stopPropagation(); set(menu.hidden); });
+  menu.addEventListener('click',e=>e.stopPropagation());
+  document.addEventListener('click',()=>{ if(!menu.hidden) set(false); });
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape' && !menu.hidden){ set(false); btn.focus(); } }); }
 
 /* ---- test-only export shim ------------------------------------------------
    Exposes the pure helpers to the Node test harness (fast-check).

@@ -26,7 +26,7 @@ const {
 const {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
   collection, doc, getDoc, getDocs, getDocsFromCache, setDoc, query, where, writeBatch,
-  serverTimestamp, Timestamp, onSnapshot, documentId
+  serverTimestamp, Timestamp, onSnapshot, documentId, deleteField, FieldPath
 } = await import(`${SDK}/firebase-firestore.js`);
 const { firebaseConfig } = await import("./firebase-config.js");
 
@@ -123,6 +123,39 @@ export function watchChanges(fromYm, cb) {
   }, err => { console.warn("watchChanges", err && (err.code || err.message)); });
 }
 
+// ---- one-row edits (Query page, 27 Oct 2026) ------------------------------------------
+// Same form as expense-tracker-v2: one map field per row, tx.<id> (mergeFields replaces the
+// row as a whole) and del.<id> (deleted ids). Never rewrites the rest of the month.
+const okYm = ym => { if (!/^\d{4}-\d{2}$/.test(ym)) throw new Error("bad month id " + ym); return ym; };
+const okId = id => { if (!/^[A-Za-z0-9_]+$/.test(id)) throw new Error("bad row id " + id); return id; };
+function rowsPart(rows, ids) {
+  const data = { tx: {}, del: {}, updatedAt: serverTimestamp(), source: "app" };
+  const fields = ["updatedAt", "source"];
+  for (const id in (rows || {})) {
+    okId(id); data.tx[id] = rows[id]; data.del[id] = deleteField();
+    fields.push(new FieldPath("tx", id), new FieldPath("del", id));
+  }
+  for (const id of (ids || [])) {
+    okId(id); data.tx[id] = deleteField(); data.del[id] = true;
+    fields.push(new FieldPath("tx", id), new FieldPath("del", id));
+  }
+  return { data, fields };
+}
+export function putTx(ym, rows) {
+  const p = rowsPart(rows, null);
+  return setDoc(doc(monthsCol(), okYm(ym)), p.data, { mergeFields: p.fields });
+}
+export function delTx(ym, ids) {
+  const p = rowsPart(null, ids);
+  return setDoc(doc(monthsCol(), okYm(ym)), p.data, { mergeFields: p.fields });
+}
+export function moveTx(fromYm, toYm, ids, rows) {
+  const b = writeBatch(db), d = rowsPart(null, ids), p = rowsPart(rows, null);
+  b.set(doc(monthsCol(), okYm(fromYm)), d.data, { mergeFields: d.fields });
+  b.set(doc(monthsCol(), okYm(toYm)), p.data, { mergeFields: p.fields });
+  return b.commit();
+}
+
 // ---- plan ---------------------------------------------------------------------------
 export async function loadPlan() {
   const s = await getDoc(planRef());
@@ -153,7 +186,7 @@ export async function checkAccess() {
   }
 }
 
-const api = { signIn, signOut, onUser, loadMonths, loadCachedMonths, writeMonths, watchChanges, loadPlan, savePlan,
+const api = { signIn, signOut, onUser, loadMonths, loadCachedMonths, writeMonths, putTx, delTx, moveTx, watchChanges, loadPlan, savePlan,
               getSettings, setSettings, checkAccess };
 window.FS2Data = api;
 
@@ -215,10 +248,9 @@ export function initGate() {
     $("acctEmail").textContent = u.email || "";
     const a = await checkAccess();
     if (a !== "ok") localStorage.removeItem(HINT_KEY);
-    const tag = document.createElement("span");
+    const tag = $("acctDb");
     tag.textContent = a === "ok" ? "Database: OK" : a === "locked" ? "Database: locked (rules not set for this uid)" : "Database: " + a;
     tag.style.color = a === "ok" ? "var(--income)" : "#ff9a9a";
-    $("acct").appendChild(tag);
   });
 }
 

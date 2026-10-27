@@ -20,6 +20,30 @@ status: `Personal Finance\finance-v2-plan\PLAN.md`.
 | 6 Live prices without the sheet (below) | done 25 Oct 2026 |
 | 8 FIRE page, Monte Carlo (below) | done 25 Oct 2026 |
 
+### Edit a transaction, phone layout, account menu (27 Oct 2026)
+- **Query → Transactions: tap a row to edit it.** A box shows date, value, account, label,
+  detail, type, group and category 2 (each with suggestions from the data). **Save** writes only
+  that row (`FS2Data.putTx`, one `tx.<id>` field like expense-tracker-v2; a new month moves it
+  with `moveTx`); **Delete** removes it (`delTx`). A new label / detail copies type, group,
+  category 2 and the hidden columns (asset class, variable, liquidity, ...) from the newest row
+  with the same label + detail. Works after the cutover only, like Month-end. Code:
+  `qEditFind()` (finds the row in `FS_MONTHS` by day, account, label, detail, value),
+  `qEditTemplate()`, `qEditOpen()`.
+- **Tabs on phones:** short names (Worth, Cash, Trends, Compare, Years, Query, Plan, FIRE),
+  natural widths, never cut or overlapping; the bar scrolls sideways only on a very narrow
+  screen and keeps the open tab in view. The **Savings** tab is now called **Trends**
+  (hash stays `#savings`).
+- **Account button** (round icon, top right): email, uid, Copy uid, database state and Sign
+  out live in its menu instead of the header line.
+- **FIRE wording:** hero = **Minimum save X** vs **Your plan Y**, "of income, today → FIRE age".
+  Both are ONE average over every month from today to the FIRE month (income + pension −
+  spending, one-offs left out), not a yearly figure. Dropped "100 dice rolls, not a promise",
+  shorter fact labels and chart note; parameter hints are hidden on phones.
+- **Plan on phones:** narrower name column and cells, tool buttons wrap under the message, the
+  savings-targets and vest tables scroll inside their box instead of running over the page.
+- Check: `_verify_mobile.py` (untracked, headless Edge, fake Firebase): tabs, account menu,
+  edit / move / delete, FIRE text, nothing wider than the screen.
+
 ### Monthly archive (25 Oct 2026)
 - **Archive** button in the header (next to Data): downloads `finance-v2-archive_YYYY-MM-DD_HHMM.html`,
   one file with this page's code and today's data inside (every month, settings incl. FIRE and
