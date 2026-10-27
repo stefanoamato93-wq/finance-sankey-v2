@@ -4699,6 +4699,7 @@ const PLAN_GC={Needs:'var(--needs)',Wants:'var(--wants)',Liberality:'var(--liber
   'Work income':'var(--income)','Non-work income':'var(--income)','Other income':'var(--income)',Inflation:'#e7c14a'};
 let PLAN=null, planUndo=[], planNote='', planFocus=null, planMenuR=null;
 const planOpenY=new Set(), planShutG=new Set(), planOpenL=new Set();
+let planDetKeys=[];   // every "group|label" that has details (filled by renderPlan)
 const planStart=()=>{ const d=new Date(); return d.getFullYear()*12+d.getMonth(); };
 function planMonths(){ const a=[], e=planEnd(); for(let m=planStart(); m<=e; m++) a.push(m); return a; }
 const planKindOf=g=> PLAN_IGROUPS.includes(g) ? 'I' : 'E';
@@ -5186,6 +5187,8 @@ function renderPlan(force){
       body+=`<tr class="g" style="--gc:${PLAN_GC[g]||'var(--budget)'}"><td class="n"><span class="nm">`+
         `<button type="button" class="tw" data-pg="${gq}" aria-expanded="${!shut}" aria-label="${(shut?'Open ':'Close ')+gq}">${shut?'&#9656;':'&#9662;'}</button>`+
         `<span>${gq}</span>${canAdd?`<button type="button" data-padd="${gq}" title="Add a label" aria-label="Add a label to ${gq}">+</button>`:''}</span></td>${sums(all)}</tr>`;
+      // remember every label that has details, so Expand all / Collapse all can reach them
+      for(const [l,its] of L) if(!(its.length===1 && norm(its[0].r.d)===norm(l))) planDetKeys.push(g+'|'+l);
       if(shut) continue;
       const labels=[...L.keys()].sort((a,b)=> refSum(L.get(b))-refSum(L.get(a)) || (a<b?-1:1));
       for(const l of labels){
@@ -5210,6 +5213,7 @@ function renderPlan(force){
   const sav=`<tr class="tot sav"><td class="n">Savings</td><td class="ref">${fv(refSum(inc)-refSum(exp))}</td>`+
     amTd(inc.reduce((s,it)=>s+actOf(it),0)-exp.reduce((s,it)=>s+actOf(it),0), inc.reduce((s,it)=>s+plOf(it),0)-exp.reduce((s,it)=>s+plOf(it),0), 'S')+
     cols.map(c=>tdv(sumOf(inc,c)-sumOf(exp,c), c.y!=null)).join('')+`</tr>`;
+  planDetKeys=[];
   const body=sav+
     `<tr class="tot"><td class="n">Total income</td>${sums(inc)}</tr>`+groupsHtml(tree(PLAN_IGROUPS.slice(0,2),inc), PLAN_IGROUPS.slice(0,2))+
     `<tr class="tot"><td class="n">Total expenses</td>${sums(exp)}</tr>`+groupsHtml(tree(PLAN_GROUPS.concat(['Inflation']),exp), PLAN_GROUPS);
@@ -5218,11 +5222,15 @@ function renderPlan(force){
     cols.map(c=> c.mi!=null ? `<th>${MON[c.mi%12]} ${String(Math.floor(c.mi/12)).slice(2)}</th>`
       : `<th class="yt"><button type="button" data-py="${c.y}" aria-expanded="${planOpenY.has(c.y)}" title="${planOpenY.has(c.y)?'Fold the months of '+c.y:'Show the months of '+c.y}">${planOpenY.has(c.y)?'&#9666;':'&#9656;'} ${c.y}</button></th>`).join('')+`</tr>`;
   const anyOpen=planOpenY.size>0, at=PLAN.at ? new Date(PLAN.at) : null;
+  const detAll=!planShutG.size && planDetKeys.length>0 && planDetKeys.every(k=>planOpenL.has(k)),
+        detNone=!planDetKeys.some(k=>planOpenL.has(k));
   const msg=planNote ? `<b>${planEsc(planNote)}</b>` : fcErr ? `<b>${planEsc(fcErr)}</b>` :
     `Saved${at?' \u00b7 '+at.toLocaleDateString()+' '+at.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):''}. Export keeps a copy.`;
   const sc=wrap.querySelector('.planscroll'), sl=sc?sc.scrollLeft:0, st=sc?sc.scrollTop:0;
   wrap.innerHTML=ytBoxHtml(fc, px)+fcBoxHtml(fc, px, ms)+`<div class="plantools"><span class="planmsg" role="status">${msg}</span>`+
     `<button type="button" data-pa="years">${anyOpen?'Fold all years':'Show all months'}</button>`+
+    `<button type="button" data-pa="detopen"${detAll?' disabled':''} title="Open every group and every label's details">Expand all</button>`+
+    `<button type="button" data-pa="detclose"${detNone?' disabled':''} title="Close every label's details">Collapse all</button>`+
     `<button type="button" data-pa="actual" aria-pressed="${planAmOn}" title="Show or hide this month's actual vs plan">${planAmOn?'Hide':'Show'} ${MONL} actual</button>`+
     `<button type="button" data-pa="undo"${planUndo.length?'':' disabled'}>Undo</button>`+
     `<button type="button" data-pa="export">Export</button>`+
@@ -5377,6 +5385,8 @@ function planInit(){
     else if(ds.pt!=null){ e.stopPropagation(); if(planMenuR===+ds.pt && !menu.hidden) planCloseMenu(); else planOpenMenu(t, +ds.pt); }
     else if(ds.pa==='years'){ if(planOpenY.size) planOpenY.clear();
       else planMonths().forEach(mi=>planOpenY.add(Math.floor(mi/12))); renderPlan(true); }
+    else if(ds.pa==='detopen'){ planShutG.clear(); planDetKeys.forEach(k=>planOpenL.add(k)); renderPlan(true); }
+    else if(ds.pa==='detclose'){ planOpenL.clear(); renderPlan(true); }
     else if(ds.pa==='undo'){ if(!planUndo.length) return; PLAN.rows=JSON.parse(planUndo.pop()); planNote='Undone.'; planSave(); renderPlan(true); }
     else if(ds.pa==='actual'){ planAmOn=!planAmOn; try{ localStorage.setItem(PLAN_AM_KEY, planAmOn?'1':'0'); }catch(e){} renderPlan(true); }
   else if(ds.pa==='export') planExport();
