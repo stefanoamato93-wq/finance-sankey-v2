@@ -99,6 +99,14 @@
   .txdlg .txnw{margin-top:9px; color:var(--muted); font-size:12px;}
   .txdlg .txmsg{color:var(--muted); font-size:12px; flex:1 1 100%; min-height:1.2em;}
   table.q.tx tr.er{cursor:pointer;}
+  /* bulk delete (select mode) */
+  .qselbar{display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:0 0 8px;}
+  .qselbar .qsn{color:var(--muted); font-size:12px; margin-right:auto;}
+  .qselbar button.qdel{color:#e58a8a; border-color:#6b2f36;}
+  .qselbar button:disabled{opacity:.4; cursor:default;}
+  table.q.tx td.sl,table.q.tx th.sl{width:26px; text-align:center; padding-left:2px; padding-right:2px;}
+  table.q.tx td.sl input{width:16px; height:16px; pointer-events:none;}
+  table.q.tx tr.er.pick td{background:#3a1d22;}
   table.q.tx tr.er:hover td, table.q.tx tr.er:focus-visible td{background:#1d2840;}
   table.q.tx tr.er:focus-visible{outline:none;}
   .fspanel{margin-top:8px; max-width:640px; padding:10px 12px; border:1px solid var(--grid); border-radius:10px;
@@ -4300,16 +4308,73 @@ function qGroupTable(list, view, n, sum){
     `<th class="s${on('sum')}" data-qs="sum">Sum</th><th class="bar"></th><th class="p">Share</th></tr></thead><tbody>${body}</tbody></table>`;
 }
 let qShowRows=[];
+/* ---- bulk delete (27 Oct 2026) ------------------------------------------------------
+   "Select" turns the Transactions view into tick boxes (a tap ticks a row instead of opening
+   it). Safety, on purpose more than two layers:
+   - hard cap: at most BULK_MAX rows, and never more than 5 % of all transactions, per delete;
+     there is no "select everything that matches", only ticking rows or "Tick shown" (capped);
+   - layer 1: a confirm with the count, the total and the months;
+   - layer 2: you must type "DELETE <count>" exactly;
+   - undo: the deleted rows are kept on this device and "Undo last delete" writes them back.
+   The selection is dropped whenever the data reloads. */
+const BULK_MAX=100, BULK_UNDO_KEY='fs2-bulkdel-v1';
+let qSelMode=false, qSel=new Set(), qSelVer=-1;
+function qBulkCap(){ return Math.max(1, Math.min(BULK_MAX, Math.floor((TX ? TX.length : 0)*0.05))); }
+function qBulkUndo(){ try{ return JSON.parse(localStorage.getItem(BULK_UNDO_KEY)||'null'); }catch(e){ return null; } }
+function qSelBar(){
+  const u=qBulkUndo(), undo=u && u.n ? `<button type="button" class="qbtn" data-qsel="undo" title="Write back the ${u.n} rows deleted ${new Date(u.at).toLocaleString('en-GB')}">Undo last delete (${u.n})</button>` : '';
+  if(!qSelMode) return `<div class="qselbar"><span class="qsn"></span>${undo}<button type="button" class="qbtn" data-qsel="on">Select</button></div>`;
+  const n=qSel.size, cap=qBulkCap();
+  return `<div class="qselbar"><span class="qsn">${n} selected \u00b7 max ${cap} per delete</span>`+
+    `<button type="button" class="qbtn" data-qsel="shown">Tick shown</button><button type="button" class="qbtn" data-qsel="clear"${n?'':' disabled'}>Clear</button>`+
+    `<button type="button" class="qbtn qdel" data-qsel="del"${n && n<=cap ? '' : ' disabled'}>Delete ${n}</button>`+
+    `<button type="button" class="qbtn" data-qsel="off">Done</button></div>`;
+}
+async function qBulkDelete(){
+  if(!aprOn()){ alert(FS2.fake ? 'This is an archive: nothing can be deleted.' : 'Deleting works after Data \u2192 Switch to Firebase for good.'); return; }
+  const rows=[...qSel], n=rows.length, cap=qBulkCap();
+  if(!n) return;
+  if(n>cap){ alert(`At most ${cap} rows per delete. You ticked ${n}.`); return; }
+  const used=new Set(), hits=rows.map(r=>{ const h=qEditFind(r, used); if(h) used.add(h.ym+'|'+h.id); return h; });
+  if(hits.some(h=>!h)){ alert('Some rows were not found in the database. Reload and try again. Nothing was deleted.'); return; }
+  if(new Set(hits.map(h=>h.ym+'|'+h.id)).size!==n){ alert('Two ticked rows point to the same database row. Nothing was deleted.'); return; }
+  const tot=rows.reduce((a,r)=>a+r.v,0), ms=[...new Set(hits.map(h=>h.ym))].sort();
+  /* layer 1 */
+  if(!confirm(`Delete ${n} transaction${n===1?'':'s'}?\n\nTotal ${fmtE(tot)}\nMonths: ${ms.join(', ')}\n\nNext you will type a confirmation.`)) return;
+  /* layer 2 */
+  const want='DELETE '+n, got=prompt(`To delete ${n} rows, type exactly:\n\n${want}`);
+  if(got==null) return;
+  if(got.trim()!==want){ alert('Text did not match. Nothing was deleted.'); return; }
+  const by={}; hits.forEach(h=>{ (by[h.ym]=by[h.ym]||{})[h.id]=h.t; });
+  try{ localStorage.setItem(BULK_UNDO_KEY, JSON.stringify({at:Date.now(), n, rows:by})); }
+  catch(e){ if(!confirm('Could not keep an undo copy on this device. Delete anyway?')) return; }
+  try{
+    for(const ym in by) await FS2.data.delTx(ym, Object.keys(by[ym]));
+    qSel.clear(); qSelMode=false; dbAt=0; refreshDB(); renderQuery(true);
+    alert(`Deleted ${n} row${n===1?'':'s'}. "Undo last delete" writes them back.`);
+  }catch(e){ alert('Delete stopped: '+((e && (e.code||e.message))||e)+'\nSome months may be done; use "Undo last delete" to restore them.'); dbAt=0; refreshDB(); }
+}
+async function qBulkUndoRun(){
+  const u=qBulkUndo(); if(!u || !u.rows) return;
+  if(!aprOn()){ alert('Undo works after the cutover only.'); return; }
+  if(!confirm(`Write back the ${u.n} rows deleted ${new Date(u.at).toLocaleString('en-GB')}?`)) return;
+  try{ for(const ym in u.rows) await FS2.data.putTx(ym, u.rows[ym]);
+    localStorage.removeItem(BULK_UNDO_KEY); dbAt=0; refreshDB(); renderQuery(true); alert(`Restored ${u.n} rows.`); }
+  catch(e){ alert('Undo failed: '+((e && (e.code||e.message))||e)); }
+}
 function qTxTable(rows){
   const sorted=querySortTx(rows, q.sortTx), show=sorted.slice(0,qShown), s=q.sortTx;
   qShowRows=show;
+  if(qSelVer!==txVer){ qSel.clear(); qSelVer=txVer; }
   const on=k=> (k==='date' ? (s==='date'||s==='old') : (s==='size'||s==='neg'||s==='pos')) ? ' on'+((k==='date'&&s==='old')||(k==='value'&&s==='neg') ? ' asc' : '') : '';
   let body='';
   show.forEach((r,i)=>{ const det=r.det||'\u2014', acct=r.acct||'\u2014';
-    body+=`<tr class="er" tabindex="0" data-ti="${i}" title="Tap to edit"><td class="dt">${qIt(r.dk)}</td><td class="lb">${qEsc(r.lab||'\u2014')}<span class="sub">${qEsc(det)} \u00b7 ${qEsc(acct)}</span></td>`+
+    const pk=qSelMode && qSel.has(r);
+    body+=`<tr class="er${pk?' pick':''}" tabindex="0" data-ti="${i}" title="${qSelMode?'Tap to tick':'Tap to edit'}">`+
+      (qSelMode ? `<td class="sl"><input type="checkbox" tabindex="-1" aria-label="Select"${pk?' checked':''}></td>` : '')+`<td class="dt">${qIt(r.dk)}</td><td class="lb">${qEsc(r.lab||'\u2014')}<span class="sub">${qEsc(det)} \u00b7 ${qEsc(acct)}</span></td>`+
       `<td class="dd">${qEsc(det)}</td><td class="ac">${qEsc(acct)}</td><td class="s ${qCls(r.v)}">${fmtE(r.v)}</td></tr>`; });
   const left=sorted.length-show.length;
-  return `<table class="q tx"><thead><tr><th class="dt${on('date')}" data-qs="date">Date</th><th class="lb">Label</th>`+
+  return qSelBar()+`<table class="q tx"><thead><tr>${qSelMode?'<th class="sl"></th>':''}<th class="dt${on('date')}" data-qs="date">Date</th><th class="lb">Label</th>`+
     `<th class="dd">Detail</th><th class="ac">Account</th><th class="s${on('value')}" data-qs="value">Value</th></tr></thead><tbody>${body}</tbody></table>`+
     (left>0 ? `<button type="button" class="qbtn qmore" data-qmore>Show ${grp(Math.min(Q_MORE,left))} more (${grp(left)} left)</button>` : '');
 }
@@ -4442,11 +4507,22 @@ function qInit(){
     if(t.closest('[data-qmore]')){ qShown+=Q_MORE; renderQuery(true); return; }
     if(t.closest('[data-qretry]')){ txAt=0; txErr=null; refreshTx(); return; }
     if(t.closest('[data-qreset]')){ qReset(); return; }
-    const er=t.closest('tr.er'); if(er){ qEditOpen(qShowRows[+er.getAttribute('data-ti')]); return; }
+    const sb=t.closest('[data-qsel]');
+    if(sb){ const a=sb.getAttribute('data-qsel');
+      if(a==='on'){ qSelMode=true; qSel.clear(); }
+      else if(a==='off'){ qSelMode=false; qSel.clear(); }
+      else if(a==='clear') qSel.clear();
+      else if(a==='shown'){ const cap=qBulkCap(); for(const r of qShowRows){ if(qSel.size>=cap) break; qSel.add(r); } }
+      else if(a==='del'){ qBulkDelete(); return; }
+      else if(a==='undo'){ qBulkUndoRun(); return; }
+      renderQuery(true); return; }
+    const er=t.closest('tr.er');
+    if(er && qSelMode){ const r=qShowRows[+er.getAttribute('data-ti')]; if(qSel.has(r)) qSel.delete(r); else qSel.add(r); renderQuery(true); return; }
+    if(er){ qEditOpen(qShowRows[+er.getAttribute('data-ti')]); return; }
     const tr=t.closest('tr.dr'); if(tr) qDrill(tr.getAttribute('data-k'));
   });
   wrap.addEventListener('keydown',e=>{ if(e.key!=='Enter' && e.key!==' ') return;
-    const er=e.target.closest && e.target.closest('tr.er'); if(er){ e.preventDefault(); qEditOpen(qShowRows[+er.getAttribute('data-ti')]); return; }
+    const er=e.target.closest && e.target.closest('tr.er'); if(er){ e.preventDefault(); if(qSelMode) er.click(); else qEditOpen(qShowRows[+er.getAttribute('data-ti')]); return; }
     const tr=e.target.closest && e.target.closest('tr.dr'); if(!tr) return; e.preventDefault(); qDrill(tr.getAttribute('data-k')); });
   /* Esc: closes an open picker first, else steps back through the drill-down (not while
      typing in a box, not over another overlay) */
@@ -4468,13 +4544,14 @@ function qInit(){
    label or detail fills type, group, category 2 and the hidden columns (asset class,
    variable, liquidity, ...) from the newest row with the same label + detail, so every page
    classifies it as before. Only after the cutover, like Month-end. */
-function qEditFind(r){
+function qEditFind(r, used){
   if(!r) return null;
   const ym=Math.floor(r.dk/10000)+'-'+pad2(Math.floor(r.dk/100)%100), m=FS_MONTHS.get(ym); if(!m) return null;
   for(const id in (m.tx||{})){ const t=m.tx[id], p=String(t.d||'').split('-').map(Number);
     if(p[0]*10000+p[1]*100+Math.min(31,Math.max(1,p[2]||1))!==r.dk) continue;
     if(norm(t.a)!==r.acct || norm(t.l)!==r.lab || norm(t.dt)!==norm(r.det)) continue;
     if(Math.abs((+t.v||0)-r.v)>0.005) continue;
+    if(used && used.has(ym+'|'+id)) continue;          // identical twin rows: each tick takes its own
     return {ym, id, t}; }
   return null;
 }

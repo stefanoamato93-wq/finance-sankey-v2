@@ -30,6 +30,11 @@ status: `Personal Finance\finance-v2-plan\PLAN.md`.
   Save; fix 27 Oct 2026 after DEBTS/Nico moved into Cash). Works after the cutover only, like Month-end. Code:
   `qEditFind()` (finds the row in `FS_MONTHS` by day, account, label, detail, value),
   `qEditTemplate()`, `qEditOpen()`.
+- **Bulk delete (Query, Transactions):** Select, tick rows (or Tick shown), Delete. Safety: at most
+  100 rows and never over 5 % of all rows per delete (no select-all), layer 1 = confirm with count,
+  total and months, layer 2 = type DELETE <count> exactly; the rows are kept on this device and
+  Undo last delete writes them back. Code: qBulkDelete(), qBulkUndoRun(). One-off repair
+  fixDetailAccts() puts CREDITS / DEBTS rows back in their account holding.
 - **Tabs on phones:** short names (Worth, Cash, Trends, Compare, Years, Query, Plan, FIRE),
   natural widths, never cut or overlapping; the bar scrolls sideways only on a very narrow
   screen and keeps the open tab in view. The **Savings** tab is now called **Trends**
