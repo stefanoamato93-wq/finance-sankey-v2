@@ -96,6 +96,7 @@
   .txdlg button.pri{background:var(--income); color:#0f1420; border-color:var(--income); font-weight:600;}
   .txdlg button.del{color:#e58a8a; margin-left:auto;}
   .txdlg button:disabled{opacity:.45; cursor:default;}
+  .txdlg .txnw{margin-top:9px; color:var(--muted); font-size:12px;}
   .txdlg .txmsg{color:var(--muted); font-size:12px; flex:1 1 100%; min-height:1.2em;}
   table.q.tx tr.er{cursor:pointer;}
   table.q.tx tr.er:hover td, table.q.tx tr.er:focus-visible td{background:#1d2840;}
@@ -4508,7 +4509,7 @@ function qEditOpen(r){
   const dls=Object.keys(lists).map(k=>`<datalist id="txl-${k}">${[...lists[k]].sort().map(v=>`<option value="${planEsc(v)}">`).join('')}</datalist>`).join('');
   const why=!hit ? 'This row was not found in the database (reload and try again).'
     : !aprOn() ? (FS2.fake ? 'This is an archive: nothing can be saved.' : 'Editing works after Data \u2192 Switch to Firebase for good.') : '';
-  dlg.innerHTML=`<h3 id="txH">Edit transaction</h3><div class="txg">${TX_EDIT_F.map(field).join('')}</div>${dls}`+
+  dlg.innerHTML=`<h3 id="txH">Edit transaction</h3><div class="txg">${TX_EDIT_F.map(field).join('')}</div>${dls}<div class="txnw" id="txNw"></div>`+
     `<div class="txb"><button type="button" class="pri" id="txSave"${can?'':' disabled'}>Save</button><button type="button" id="txClose">Cancel</button>`+
     `<button type="button" class="del" id="txDel"${can?'':' disabled'}>Delete</button><span class="txmsg" id="txMsg" role="status">${planEsc(why)}</span></div>`;
   document.body.appendChild(dlg);
@@ -4521,6 +4522,12 @@ function qEditOpen(r){
     if(tpl) ['ty','c1','c2'].forEach(k=>{ $f(k).value=tpl[k]==null ? '' : String(tpl[k]); });
     msg(tpl ? 'Type, group and category copied from a matching row.' : 'New label: check type, group and category.'); };
   $f('l').addEventListener('change', refill); $f('dt').addEventListener('change', refill);
+  /* where Save will put the row in Net Worth (group > account), live while typing */
+  const holdNow=()=> hit ? qEditTemplate(FS_MONTHS.values(), norm($f('l').value), norm($f('dt').value), hit.id, norm($f('a').value)) : null;
+  const nwLine=()=>{ const h=Object.assign({}, t0, holdNow()||{}), cap=x=>{ x=String(x||'\u2014'); return x.charAt(0)+x.slice(1).toLowerCase(); };
+    const was=norm(t0.c3)!==norm(h.c3) ? ` (now ${cap(t0.c3)}: Save fixes it)` : '';
+    dlg.querySelector('#txNw').textContent=`Net Worth: ${cap(h.c3)} \u203a ${cap($f('a').value)}${was}`; };
+  dlg.addEventListener('input', nwLine); nwLine();
   dlg.querySelector('#txClose').onclick=()=>dlg.close();
   dlg.addEventListener('close',()=>dlg.remove());
   const busy=on=>{ dlg.querySelector('#txSave').disabled=on; dlg.querySelector('#txDel').disabled=on; };
