@@ -5155,9 +5155,20 @@ function renderPlanCore(force){
   items.push({r:{k:'E', g:'Inflation', l:'INFLATION', d:'INFLATION', m:infl}, ri:null, ro:'infl'});
   /* "Not in plan" (27 Oct 2026): this month's real spend on labels that have no plan row.
      Trends counts it (real so far), so it shows here too: actual only, no plan amounts. */
-  const unplBy={}; { const planL=new Set(PLAN.rows.filter(r=>r.k!=='I').map(r=>r.l)), cm0=planStart();
-    (PV_REAL||{data:DATA}).data.forEach(([m,k,g,leaf,v])=>{ if(m!==cm0 || k!=='E' || planL.has(leaf)) return; unplBy[leaf]=(unplBy[leaf]||0)-v; }); }
+  const unplBy={}, leafAct={}; { const planL=new Set(PLAN.rows.filter(r=>r.k!=='I').map(r=>r.l)), cm0=planStart();
+    (PV_REAL||{data:DATA}).data.forEach(([m,k,g,leaf,v])=>{ if(m!==cm0 || k!=='E') return; leafAct[leaf]=(leafAct[leaf]||0)-v;
+      if(!planL.has(leaf)) unplBy[leaf]=(unplBy[leaf]||0)-v; }); }
   const unplT=Object.values(unplBy).reduce((a,v)=>a+v,0);
+  /* this month's actual per LABEL (27 Oct 2026): spend whose detail name the plan does not have
+     used to be missed (TAXES spent 176 showed as under its 100 plan). A label planned as one
+     row takes the whole label's spend; a label with details gets a "(not in plan)" detail
+     holding what its plan details do not catch. */
+  const lblOne=new Set(), act0=planActual(planStart());
+  { const byL=new Map(); PLAN.rows.forEach(r=>{ if(r.k==='I') return; const k=r.g+'|'+r.l; if(!byL.has(k)) byL.set(k,[]); byL.get(k).push(r); });
+    for(const [k,rs] of byL){ const l=rs[0].l;
+      if(rs.length===1 && norm(rs[0].d)===norm(l)){ lblOne.add(k); continue; }
+      const rest=(leafAct[l]||0)-rs.reduce((s,r)=>s+(act0[planKey(r)]||0),0);
+      if(Math.round(rest)) items.push({r:{k:'E', g:rs[0].g, l, d:'(not in plan)', m:{}}, ri:null, ro:'rest', act:rest}); } }
   if(Math.round(unplT)) items.push({r:{k:'E', g:'Not in plan', l:'NOT IN PLAN', d:'NOT IN PLAN', m:{}}, ri:null, ro:'unpl'});
   const cell=(it,c)=> c.mi!=null ? (+it.r.m[c.mi]||0) : ms.reduce((a,mi)=> Math.floor(mi/12)===c.y ? a+(+it.r.m[mi]||0) : a, 0);
   const sumOf=(L,c)=> L.reduce((a,it)=>a+cell(it,c),0);
@@ -5175,7 +5186,8 @@ function renderPlanCore(force){
      have no actuals (plan only). */
   const cm=planStart(), act=planActual(cm), dN=new Date(), dim=new Date(dN.getFullYear(), dN.getMonth()+1, 0).getDate();
   const pace=dN.getDate()/dim, MONL=MON[cm%12]+' '+String(Math.floor(cm/12)).slice(2);
-  const actOf=it=> (it.ro==='infl' || it.ro==='sal') ? 0 : it.ro==='unpl' ? unplT : (act[planKey(it.r)]||0);
+  const actOf=it=> (it.ro==='infl' || it.ro==='sal') ? 0 : it.ro==='unpl' ? unplT : it.ro==='rest' ? it.act
+    : it.r.k!=='I' && !it.ro && lblOne.has(it.r.g+'|'+it.r.l) ? (leafAct[it.r.l]||0) : (act[planKey(it.r)]||0);
   const plOf=it=> +it.r.m[cm]||0;
   const amTd=(a,p,kind)=>{
     if(!planAmOn) return '';
