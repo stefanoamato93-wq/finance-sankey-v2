@@ -38,6 +38,9 @@ status: `Personal Finance\finance-v2-plan\PLAN.md`.
 - **Trends shows the plan for the rest of this year** (Plan pill off): real Jan..this month + Plan page
   months to Dec, tagged +Plan, so 2026 matches the Plan page outlook. The to-the-day last-year bar is
   left out in the year view then (it would compare a full-year outlook with a part year).
+- **This month = the bigger of real so far and plan, per category** (mixMonth(), Plan outlook, Trends with
+  and without the Plan pill): a planned spend not yet paid still counts, so a plan edit for this month
+  moves the outlook; the Plan box so far stays real only.
 - **Tabs on phones:** short names (Worth, Cash, Trends, Compare, Years, Query, Plan, FIRE),
   natural widths, never cut or overlapping; the bar scrolls sideways only on a very narrow
   screen and keeps the open tab in view. The **Savings** tab is now called **Trends**

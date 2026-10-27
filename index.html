@@ -2918,9 +2918,10 @@ function renderCashBars(){
      come from the Plan page, so the current year reads like the Plan page's "outlook"
      (real Jan..this month + plan for the rest, same numbers as its Savings targets box) */
   const olTo=d.getFullYear()*12+11;
-  const OL=!pvOn() && PLAN && PLAN.rows && nowMi<olTo && nowMi<=META.maxMi ? planToData(PLAN.rows, fcGet(), amznPrice(), nowMi+1, olTo) : null;
+  const OL=!pvOn() && PLAN && PLAN.rows && nowMi<olTo && nowMi<=META.maxMi ? planToData(PLAN.rows, fcGet(), amznPrice(), nowMi, olTo) : null;
   const lastMi=pvOn() ? META.maxMi : OL ? olTo : Math.min(META.maxMi, nowMi);
-  const SD=pvOn() ? pvSavData(nowMi) : OL ? DATA.concat(OL.data) : DATA;   // Plan pill: the current month is the plan too (Savings only)
+  /* this month = mixMonth (bigger of real so far and plan, per category), like the Plan page */
+  const SD=pvOn() ? pvSavData(nowMi) : OL ? mixMonth(DATA, OL.data, nowMi).concat(OL.data.filter(r=>r[0]>nowMi)) : DATA;
   const plFrom=pvOn() ? META.planFromMi : OL ? nowMi+1 : null, isPl=mi=> plFrom!=null && mi>=plFrom;
   /* month view: one row per month of the drilled year (row.year holds the mi) */
   const mBucket=y=> mi=> Math.floor(mi/12)===y ? mi : null;
@@ -2972,7 +2973,7 @@ function renderCashBars(){
   if(!n){ svgEl.innerHTML=''; return; }
   /* single-series mode: one bar per year (or month) for the picked entry, no savings % lines */
   const info=cfSel ? CF_OPTS.get(cfSel) : null;
-  const ser=info ? cfSeriesByYear(cfSel, OL ? SD : DATA, OL ? DETAIL.concat(OL.detail) : DETAIL, lastMi, deselected, drill ? mBucket(cfDrill) : null) : null;
+  const ser=info ? cfSeriesByYear(cfSel, OL ? SD : DATA, OL ? mixDetail(DETAIL, OL.detail, nowMi).concat(OL.detail.filter(r=>r[0]>nowMi)) : DETAIL, lastMi, deselected, drill ? mBucket(cfDrill) : null) : null;
   const serLY=info && lyB ? cfSeriesByYear(cfSel, lyPart.data, lyPart.detail, lastMi, deselected, lyB) : {};
   const serOf=r=> ((r.ly ? serLY : ser)[r.year]||0);
   const sv=ser ? rows.map(r=>serOf(r)/dv(r)) : null;
@@ -5006,9 +5007,8 @@ function pvRefresh(){
 let PV_SAV=null;
 function pvSavData(cm){
   if(!PLAN) return DATA;
-  if(PV_SAV && PV_SAV.d===DATA && PV_SAV.cm===cm) return PV_SAV.v;
-  const cur=planToData(PLAN.rows, fcGet(), amznPrice(), cm, cm).data;
-  const v=DATA.filter(r=>r[0]!==cm).concat(cur); PV_SAV={d:DATA, cm, v}; return v;
+  if(PV_SAV && PV_SAV.d===DATA && PV_SAV.cm===cm && PV_SAV.at===PLAN.at) return PV_SAV.v;
+  const v=mixMonth(DATA, planToData(PLAN.rows, fcGet(), amznPrice(), cm, cm).data, cm); PV_SAV={d:DATA, cm, v, at:PLAN.at}; return v;
 }
 function pvSet(on){
   PV_ON=!!on; try{ localStorage.setItem(PV_KEY, PV_ON?'1':'0'); }catch(e){}
@@ -5042,10 +5042,27 @@ function ytYears(real, plan, cm, y0, y1){
 /* the targets of year y: its own (tYears) where set, else the defaults tSafe / tTot */
 function ytTarget(fc, y){ const o=(fc.tYears||{})[y]||{};
   return {s: o.s!=null ? o.s : fc.tSafe, t: o.t!=null ? o.t : fc.tTot, own: o.s!=null || o.t!=null}; }
+/* the month in progress (27 Oct 2026): per category the BIGGER of what happened so far and
+   what the plan says (the month is not over: a planned taxi not yet paid still counts, a
+   spend already above plan counts as spent). Used by the Plan page outlook and by Trends,
+   so both read the same, and a plan edit for this month moves the outlook. */
+function mixMonth(real, plan, cm){
+  const m=new Map(), key=r=>r[1]+'|'+r[2]+'|'+r[3];
+  real.forEach(r=>{ if(r[0]===cm) m.set(key(r), r); });
+  plan.forEach(r=>{ if(r[0]!==cm) return; const k=key(r), a=m.get(k); if(!a || Math.abs(r[4])>Math.abs(a[4])) m.set(k, r); });
+  return real.filter(r=>r[0]!==cm).concat([...m.values()]);
+}
+function mixDetail(real, plan, cm){
+  const m=new Map(), key=r=>r[1]+'|'+r[2];
+  real.forEach(r=>{ if(r[0]===cm) m.set(key(r), r); });
+  plan.forEach(r=>{ if(r[0]!==cm) return; const k=key(r), a=m.get(k); if(!a || Math.abs(r[3])>Math.abs(a[3])) m.set(k, r); });
+  return real.filter(r=>r[0]!==cm).concat([...m.values()]);
+}
 function ytBoxHtml(fc, px){
-  const cm=planStart(), y0=Math.floor(cm/12), real=(PV_REAL||{data:DATA}).data;
+  const cm=planStart(), y0=Math.floor(cm/12), real=mixMonth((PV_REAL||{data:DATA}).data, planToData(PLAN.rows, fc, px, cm, cm).data, cm);
   const plan=planToData(PLAN.rows, fc, px, cm+1, planEnd()).data;
   const Y=ytYears(real, plan, cm, y0, fc.endYear), cur=Y[0], T0=ytTarget(fc, y0);
+  { const yr=ytYears((PV_REAL||{data:DATA}).data, plan, cm, y0, y0)[0]; if(yr && yr.ytd) cur.ytd=yr.ytd; }   // "so far" = real only
   const pc=x=> x==null ? '\u2013' : String(Math.round(x*1000)/10).replace('.',',')+'%';
   const ok=(r,t)=> r==null || !t ? '' : r>=t ? 'ok' : 'over';
   /* room left in a year to still hit its safe target: safe income x (1 - target) - expenses */
