@@ -5153,7 +5153,8 @@ function renderPlanCore(force){
   const px=amznPrice(), rsu=fcRsuByMi(fc, px, ms[0], ms[ms.length-1]), infl={}, rise={};
   ms.forEach(mi=>{ const f=fcInflF(mi, fc), fs=fcSalF(mi, fc); let s=0, b=0;
     PLAN.rows.forEach(r=>{ const v=+r.m[mi]||0; if(r.k!=='I') s+=v; else if(FC_SAL_LABELS.includes(r.l)) b+=v; });
-    if(s && f) infl[mi]=s*f; if(b && fs) rise[mi]=b*fs; });
+    if(s && f) infl[mi]=Math.round(s*f); if(b && fs) rise[mi]=Math.round(b*fs); });
+  for(const mi in rsu) rsu[mi]=Math.round(rsu[mi]);   // whole euros a month, like Trends (planToData), so year totals match
   const items=PLAN.rows.map((r,ri)=>({r,ri}));
   items.push({r:{k:'I', g:'Work income', l:'RSU', d:'RSU', m:rsu}, ri:null, ro:'rsu'});
   if(fc.salary>0) items.push({r:{k:'I', g:'Work income', l:'SALARY RISE', d:'SALARY RISE', m:rise}, ri:null, ro:'sal'});
