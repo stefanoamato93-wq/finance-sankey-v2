@@ -5136,6 +5136,12 @@ function renderPlan(force){
   items.push({r:{k:'I', g:'Work income', l:'RSU', d:'RSU', m:rsu}, ri:null, ro:'rsu'});
   if(fc.salary>0) items.push({r:{k:'I', g:'Work income', l:'SALARY RISE', d:'SALARY RISE', m:rise}, ri:null, ro:'sal'});
   items.push({r:{k:'E', g:'Inflation', l:'INFLATION', d:'INFLATION', m:infl}, ri:null, ro:'infl'});
+  /* "Not in plan" (27 Oct 2026): this month's real spend on labels that have no plan row.
+     Trends counts it (real so far), so it shows here too: actual only, no plan amounts. */
+  const unplBy={}; { const planL=new Set(PLAN.rows.filter(r=>r.k!=='I').map(r=>r.l)), cm0=planStart();
+    (PV_REAL||{data:DATA}).data.forEach(([m,k,g,leaf,v])=>{ if(m!==cm0 || k!=='E' || planL.has(leaf)) return; unplBy[leaf]=(unplBy[leaf]||0)-v; }); }
+  const unplT=Object.values(unplBy).reduce((a,v)=>a+v,0);
+  if(Math.round(unplT)) items.push({r:{k:'E', g:'Not in plan', l:'NOT IN PLAN', d:'NOT IN PLAN', m:{}}, ri:null, ro:'unpl'});
   const cell=(it,c)=> c.mi!=null ? (+it.r.m[c.mi]||0) : ms.reduce((a,mi)=> Math.floor(mi/12)===c.y ? a+(+it.r.m[mi]||0) : a, 0);
   const sumOf=(L,c)=> L.reduce((a,it)=>a+cell(it,c),0);
   const refOf=it=> ref[planKey(it.r)]||0;
@@ -5152,7 +5158,7 @@ function renderPlan(force){
      have no actuals (plan only). */
   const cm=planStart(), act=planActual(cm), dN=new Date(), dim=new Date(dN.getFullYear(), dN.getMonth()+1, 0).getDate();
   const pace=dN.getDate()/dim, MONL=MON[cm%12]+' '+String(Math.floor(cm/12)).slice(2);
-  const actOf=it=> (it.ro==='infl' || it.ro==='sal') ? 0 : (act[planKey(it.r)]||0);
+  const actOf=it=> (it.ro==='infl' || it.ro==='sal') ? 0 : it.ro==='unpl' ? unplT : (act[planKey(it.r)]||0);
   const plOf=it=> +it.r.m[cm]||0;
   const amTd=(a,p,kind)=>{
     if(!planAmOn) return '';
@@ -5179,11 +5185,12 @@ function renderPlan(force){
   const tools=(it,name)=> it.ro ? '' : `<button type="button" data-pt="${it.ri}" aria-haspopup="menu" title="Row tools" aria-label="${planEsc('Tools for '+name)}">&#8943;</button>`;
   const roNote={rsu:`stock plans \u00d7 AMZN ${px?'\u20ac'+px.toFixed(2).replace('.',','):'(price loading)'} \u00d7 ${Math.round(fc.rsuNet*100)}% kept`,
                 infl:`${String(Math.round(fc.inflation*1000)/10).replace('.',',')}% a year, from Jan ${Math.floor(ymMi(fc.inflationFrom)/12)+1}`,
+                unpl:'this month, no plan row: '+Object.entries(unplBy).filter(([,v])=>Math.round(v)).sort((a,b)=>b[1]-a[1]).map(([l,v])=>l+' '+fmt(v)).join(', '),
                 sal:`BASE + TFR \u00d7 ${String(Math.round(fc.salary*1000)/10).replace('.',',')}% a year, from Jan ${Math.floor(ymMi(fc.inflationFrom)/12)+1}`};
   const groupsHtml=(t, base)=>{ let body='';
     for(const [g,L] of t){
       if(!L.size && !base.includes(g)) continue;
-      const all=[...L.values()].flat(), shut=planShutG.has(g), gq=planEsc(g), canAdd=g!=='Inflation';
+      const all=[...L.values()].flat(), shut=planShutG.has(g), gq=planEsc(g), canAdd=g!=='Inflation' && g!=='Not in plan';
       body+=`<tr class="g" style="--gc:${PLAN_GC[g]||'var(--budget)'}"><td class="n"><span class="nm">`+
         `<button type="button" class="tw" data-pg="${gq}" aria-expanded="${!shut}" aria-label="${(shut?'Open ':'Close ')+gq}">${shut?'&#9656;':'&#9662;'}</button>`+
         `<span>${gq}</span>${canAdd?`<button type="button" data-padd="${gq}" title="Add a label" aria-label="Add a label to ${gq}">+</button>`:''}</span></td>${sums(all)}</tr>`;
