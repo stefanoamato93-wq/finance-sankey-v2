@@ -35,6 +35,9 @@ status: `Personal Finance\finance-v2-plan\PLAN.md`.
   total and months, layer 2 = type DELETE <count> exactly; the rows are kept on this device and
   Undo last delete writes them back. Code: qBulkDelete(), qBulkUndoRun(). One-off repair
   fixDetailAccts() puts CREDITS / DEBTS rows back in their account holding.
+- **Trends shows the plan for the rest of this year** (Plan pill off): real Jan..this month + Plan page
+  months to Dec, tagged +Plan, so 2026 matches the Plan page outlook. The to-the-day last-year bar is
+  left out in the year view then (it would compare a full-year outlook with a part year).
 - **Tabs on phones:** short names (Worth, Cash, Trends, Compare, Years, Query, Plan, FIRE),
   natural widths, never cut or overlapping; the bar scrolls sideways only on a very narrow
   screen and keeps the open tab in view. The **Savings** tab is now called **Trends**

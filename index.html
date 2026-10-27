@@ -2909,12 +2909,19 @@ function renderCashBars(){
      cached copy now, a background check that redraws when it lands (txVer / txSnapAt) */
   const d=new Date(), todayDk=d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate();
   if(!cfRoll) ensureTx();
-  const sig=[W,perMonth,showK,cfSel,cfRoll,cfDrill,[...deselected].sort().join(','),todayDk,txVer,txSnapAt].join('#');
+  const sig=[W,perMonth,showK,cfSel,cfRoll,cfDrill,[...deselected].sort().join(','),todayDk,txVer,txSnapAt,PLAN?PLAN.at:0,JSON.stringify(fcGet())].join('#');
   if(sig===cfSig && DATA===cfData) return;
   cfSig=sig; cfData=DATA; cfLastW=W;
   if(cfRoll){ renderRolling(svgEl, W, W<560, perMonth); return; }
-  const nowMi=d.getFullYear()*12+d.getMonth(), lastMi=pvOn() ? META.maxMi : Math.min(META.maxMi, nowMi);
-  const SD=pvOn() ? pvSavData(nowMi) : DATA;   // Plan pill: the current month is the plan too (Savings only)
+  const nowMi=d.getFullYear()*12+d.getMonth();
+  /* current-year outlook (27 Oct 2026), Plan pill off: the months after this one up to Dec
+     come from the Plan page, so the current year reads like the Plan page's "outlook"
+     (real Jan..this month + plan for the rest, same numbers as its Savings targets box) */
+  const olTo=d.getFullYear()*12+11;
+  const OL=!pvOn() && PLAN && PLAN.rows && nowMi<olTo && nowMi<=META.maxMi ? planToData(PLAN.rows, fcGet(), amznPrice(), nowMi+1, olTo) : null;
+  const lastMi=pvOn() ? META.maxMi : OL ? olTo : Math.min(META.maxMi, nowMi);
+  const SD=pvOn() ? pvSavData(nowMi) : OL ? DATA.concat(OL.data) : DATA;   // Plan pill: the current month is the plan too (Savings only)
+  const plFrom=pvOn() ? META.planFromMi : OL ? nowMi+1 : null, isPl=mi=> plFrom!=null && mi>=plFrom;
   /* month view: one row per month of the drilled year (row.year holds the mi) */
   const mBucket=y=> mi=> Math.floor(mi/12)===y ? mi : null;
   let rows=cfDrill!=null ? cashFlowByYear(SD, lastMi, deselected, mBucket(cfDrill)) : null;
@@ -2938,7 +2945,7 @@ function renderCashBars(){
   const cY=d.getFullYear(), lastRow=rows[rows.length-1];
   const dim=(y,m)=> new Date(y,m,0).getDate(), dD=d.getDate();
   let lyPart=null, lyKey=null;
-  if(lastRow && !(drill && pvOn()) && (drill ? cfDrill===cY && lastRow.year===nowMi : lastRow.year===cY)){   // no to-the-day bar next to a planned month
+  if(lastRow && !(drill && pvOn()) && !(OL && !drill) && (drill ? cfDrill===cY && lastRow.year===nowMi : lastRow.year===cY)){   // no to-the-day bar next to a planned month
     let lo, hi;
     if(drill){ const p=nowMi-1, py=Math.floor(p/12), pm=p%12+1;
       lo=py*10000+pm*100+1; hi=py*10000+pm*100+Math.min(dD, dim(py,pm)); lyKey=p; }
@@ -2956,8 +2963,8 @@ function renderCashBars(){
   const keyLab=r=> drill ? MSH[r.year%12] : String(r.year);
   /* plan view: a year / month that is all plan is drawn faded and tagged "Plan"; the
      current year, real so far plus its planned months, is tagged "+Plan" */
-  const pvAll=r=> !r.ly && (drill ? pvMi(r.year) || pvOn() && r.year===nowMi : pvMi(r.year*12));
-  const pvPart=r=> !r.ly && !drill && !pvAll(r) && pvMi(r.year*12+11);
+  const pvAll=r=> !r.ly && (drill ? isPl(r.year) || pvOn() && r.year===nowMi : isPl(r.year*12));
+  const pvPart=r=> !r.ly && !drill && !pvAll(r) && isPl(r.year*12+11);
   const subLab=r=> pvAll(r) ? 'Plan' : pvPart(r) ? '+Plan' : r.ly ? (drill ? dkDay(r.lo)+'\u2013'+dkDay(r.hi) : 'YTD')
                  : drill ? (r.year===nowMi ? 'MTD' : '')
                          : (r.months<12 ? (r.year===cY ? 'YTD' : r.months+'m') : '');
@@ -2965,7 +2972,7 @@ function renderCashBars(){
   if(!n){ svgEl.innerHTML=''; return; }
   /* single-series mode: one bar per year (or month) for the picked entry, no savings % lines */
   const info=cfSel ? CF_OPTS.get(cfSel) : null;
-  const ser=info ? cfSeriesByYear(cfSel, DATA, DETAIL, lastMi, deselected, drill ? mBucket(cfDrill) : null) : null;
+  const ser=info ? cfSeriesByYear(cfSel, OL ? SD : DATA, OL ? DETAIL.concat(OL.detail) : DETAIL, lastMi, deselected, drill ? mBucket(cfDrill) : null) : null;
   const serLY=info && lyB ? cfSeriesByYear(cfSel, lyPart.data, lyPart.detail, lastMi, deselected, lyB) : {};
   const serOf=r=> ((r.ly ? serLY : ser)[r.year]||0);
   const sv=ser ? rows.map(r=>serOf(r)/dv(r)) : null;
@@ -3102,7 +3109,7 @@ function renderCashBars(){
     const tk=r.ly ? 'ly' : r.year;
     hit.addEventListener('click',e=>{ e.stopPropagation();
       if(still){ show(e); return; }                  // touch: a tap shows its tooltip
-      if(drill){ openMd(r.year); return; }           // a month: its income / expense detail
+      if(drill){ if(OL && r.year>nowMi){ show(e); return; } openMd(r.year); return; }   // a month: its income / expense detail (a planned month: tooltip only)
       if(cfPT==='mouse' || cfTipKey===tk){ cfDrillTo(r.year); return; }
       cfTipKey=tk; show(e); });                      // touch: tap shows, tap elsewhere hides
     if(still){ svgEl.appendChild(hit); return; }
