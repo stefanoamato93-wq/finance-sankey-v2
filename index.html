@@ -4700,6 +4700,12 @@ const PLAN_GC={Needs:'var(--needs)',Wants:'var(--wants)',Liberality:'var(--liber
 let PLAN=null, planUndo=[], planNote='', planFocus=null, planMenuR=null;
 const planOpenY=new Set(), planShutG=new Set(), planOpenL=new Set();
 let planDetKeys=[];   // every "group|label" that has details (filled by renderPlan)
+/* the same list read straight from the plan rows, so Expand all never depends on what the
+   last redraw left behind (27 Oct 2026: it did nothing until "Show all months" was clicked) */
+function planDetKeysNow(){
+  const m=new Map(); (PLAN && PLAN.rows || []).forEach(r=>{ const k=r.g+'|'+r.l; if(!m.has(k)) m.set(k,[]); m.get(k).push(r); });
+  return [...m].filter(([,rs])=>!(rs.length===1 && norm(rs[0].d)===norm(rs[0].l))).map(([k])=>k);
+}
 const planStart=()=>{ const d=new Date(); return d.getFullYear()*12+d.getMonth(); };
 function planMonths(){ const a=[], e=planEnd(); for(let m=planStart(); m<=e; m++) a.push(m); return a; }
 const planKindOf=g=> PLAN_IGROUPS.includes(g) ? 'I' : 'E';
@@ -5048,8 +5054,11 @@ function ytTarget(fc, y){ const o=(fc.tYears||{})[y]||{};
    spend already above plan counts as spent). Used by the Plan page outlook and by Trends,
    so both read the same, and a plan edit for this month moves the outlook. */
 function mixMonth(real, plan, cm){
-  const m=new Map(), key=r=>r[1]+'|'+r[2]+'|'+r[3];
-  real.forEach(r=>{ if(r[0]===cm) m.set(key(r), r); });
+  /* matched by kind + label only: a label filed under another group in the plan than in the
+     real data used to be counted twice (once per group) and lifted Trends above the plan */
+  const m=new Map(), key=r=>r[1]+'|'+r[3];
+  real.forEach(r=>{ if(r[0]!==cm) return; const k=key(r), a=m.get(k);   // one label in two real groups: summed, not dropped
+    m.set(k, a ? [a[0],a[1],a[2],a[3],a[4]+r[4]] : r); });
   plan.forEach(r=>{ if(r[0]!==cm) return; const k=key(r), a=m.get(k); if(!a || Math.abs(r[4])>Math.abs(a[4])) m.set(k, r); });
   return real.filter(r=>r[0]!==cm).concat([...m.values()]);
 }
@@ -5400,7 +5409,7 @@ function planInit(){
     else if(ds.pt!=null){ e.stopPropagation(); if(planMenuR===+ds.pt && !menu.hidden) planCloseMenu(); else planOpenMenu(t, +ds.pt); }
     else if(ds.pa==='years'){ if(planOpenY.size) planOpenY.clear();
       else planMonths().forEach(mi=>planOpenY.add(Math.floor(mi/12))); renderPlan(true); }
-    else if(ds.pa==='detopen'){ planShutG.clear(); planDetKeys.forEach(k=>planOpenL.add(k)); renderPlan(true); }
+    else if(ds.pa==='detopen'){ planShutG.clear(); planDetKeysNow().forEach(k=>planOpenL.add(k)); renderPlan(true); }
     else if(ds.pa==='detclose'){ planOpenL.clear(); renderPlan(true); }
     else if(ds.pa==='undo'){ if(!planUndo.length) return; PLAN.rows=JSON.parse(planUndo.pop()); planNote='Undone.'; planSave(); renderPlan(true); }
     else if(ds.pa==='actual'){ planAmOn=!planAmOn; try{ localStorage.setItem(PLAN_AM_KEY, planAmOn?'1':'0'); }catch(e){} renderPlan(true); }
