@@ -4699,7 +4699,7 @@ const PLAN_GC={Needs:'var(--needs)',Wants:'var(--wants)',Liberality:'var(--liber
   'Work income':'var(--income)','Non-work income':'var(--income)','Other income':'var(--income)',Inflation:'#e7c14a'};
 let PLAN=null, planUndo=[], planNote='', planFocus=null, planMenuR=null;
 const planOpenY=new Set(), planShutG=new Set(), planOpenL=new Set();
-let planDetKeys=[];   // every "group|label" that has details (filled by renderPlan)
+let planDetKeys=[], planGrpKeys=[];   // every "group|label" that has details / every group shown (filled by renderPlan)
 /* the same list read straight from the plan rows, so Expand all never depends on what the
    last redraw left behind (27 Oct 2026: it did nothing until "Show all months" was clicked) */
 function planDetKeysNow(){
@@ -5063,8 +5063,8 @@ function mixMonth(real, plan, cm){
   return real.filter(r=>r[0]!==cm).concat([...m.values()]);
 }
 function mixDetail(real, plan, cm){
-  const m=new Map(), key=r=>r[1]+'|'+r[2];
-  real.forEach(r=>{ if(r[0]===cm) m.set(key(r), r); });
+  const m=new Map(), key=r=>r[1]+'|'+norm(r[2]);   // detail names match whatever their capitals
+  real.forEach(r=>{ if(r[0]!==cm) return; const k=key(r), a=m.get(k); m.set(k, a ? [a[0],a[1],a[2],a[3]+r[3]] : r); });
   plan.forEach(r=>{ if(r[0]!==cm) return; const k=key(r), a=m.get(k); if(!a || Math.abs(r[3])>Math.abs(a[3])) m.set(k, r); });
   return real.filter(r=>r[0]!==cm).concat([...m.values()]);
 }
@@ -5112,9 +5112,11 @@ function planActual(mi){
   const R=PV_REAL||{data:DATA, detail:DETAIL}, a={};
   R.data.forEach(([m,k,grp,leaf,val])=>{ if(m!==mi || k!=='I') return;
     const key=leaf==='STOCKS' ? 'I:RSU|RSU' : 'I:'+leaf+'|'+leaf; a[key]=(a[key]||0)+val; });
-  R.detail.forEach(([m,leaf,dn,val])=>{ if(m!==mi) return; const key=leaf+'|'+(PLAN_ONE_ROW.includes(leaf)?leaf:dn); a[key]=(a[key]||0)+val; });
+  R.detail.forEach(([m,leaf,dn,val])=>{ if(m!==mi) return; const key=leaf+'|'+norm(PLAN_ONE_ROW.includes(leaf)?leaf:dn); a[key]=(a[key]||0)+val; });
   return a;
 }
+/* planActual() key of a plan row: detail names match whatever their capitals ("Tfrtaxes" = "TFRTaxes") */
+const planKeyN=r=> r.k==='I' ? planKey(r) : r.l+'|'+norm(PLAN_ONE_ROW.includes(r.l)?r.l:r.d);
 const PLAN_AM_KEY='fs2-plan-month-v1';
 let planAmOn=true; try{ planAmOn=localStorage.getItem(PLAN_AM_KEY)!=='0'; }catch(e){}
 /* a redraw that fails used to leave the old table on screen and every button dead with no
@@ -5163,11 +5165,12 @@ function renderPlanCore(force){
      used to be missed (TAXES spent 176 showed as under its 100 plan). A label planned as one
      row takes the whole label's spend; a label with details gets a "(not in plan)" detail
      holding what its plan details do not catch. */
-  const lblOne=new Set(), act0=planActual(planStart());
+  const lblOne=new Set(), act0=planActual(planStart()), actFirst=new Map();   // actFirst: one row per name gets the spend, never two
+  PLAN.rows.forEach((r,ri)=>{ if(r.k!=='I' && !actFirst.has(planKeyN(r))) actFirst.set(planKeyN(r), ri); });
   { const byL=new Map(); PLAN.rows.forEach(r=>{ if(r.k==='I') return; const k=r.g+'|'+r.l; if(!byL.has(k)) byL.set(k,[]); byL.get(k).push(r); });
     for(const [k,rs] of byL){ const l=rs[0].l;
       if(rs.length===1 && norm(rs[0].d)===norm(l)){ lblOne.add(k); continue; }
-      const rest=(leafAct[l]||0)-rs.reduce((s,r)=>s+(act0[planKey(r)]||0),0);
+      const rest=(leafAct[l]||0)-[...new Set(rs.map(planKeyN))].reduce((s,kn)=>s+(act0[kn]||0),0);
       if(Math.round(rest)) items.push({r:{k:'E', g:rs[0].g, l, d:'(not in plan)', m:{}}, ri:null, ro:'rest', act:rest}); } }
   if(Math.round(unplT)) items.push({r:{k:'E', g:'Not in plan', l:'NOT IN PLAN', d:'NOT IN PLAN', m:{}}, ri:null, ro:'unpl'});
   const cell=(it,c)=> c.mi!=null ? (+it.r.m[c.mi]||0) : ms.reduce((a,mi)=> Math.floor(mi/12)===c.y ? a+(+it.r.m[mi]||0) : a, 0);
@@ -5187,7 +5190,9 @@ function renderPlanCore(force){
   const cm=planStart(), act=planActual(cm), dN=new Date(), dim=new Date(dN.getFullYear(), dN.getMonth()+1, 0).getDate();
   const pace=dN.getDate()/dim, MONL=MON[cm%12]+' '+String(Math.floor(cm/12)).slice(2);
   const actOf=it=> (it.ro==='infl' || it.ro==='sal') ? 0 : it.ro==='unpl' ? unplT : it.ro==='rest' ? it.act
-    : it.r.k!=='I' && !it.ro && lblOne.has(it.r.g+'|'+it.r.l) ? (leafAct[it.r.l]||0) : (act[planKey(it.r)]||0);
+    : it.r.k!=='I' && !it.ro && lblOne.has(it.r.g+'|'+it.r.l) ? (leafAct[it.r.l]||0)
+    : it.r.k!=='I' && !it.ro ? (actFirst.get(planKeyN(it.r))===it.ri ? (act[planKeyN(it.r)]||0) : 0)
+    : (act[planKey(it.r)]||0);
   const plOf=it=> +it.r.m[cm]||0;
   const amTd=(a,p,kind)=>{
     if(!planAmOn) return '';
@@ -5219,7 +5224,7 @@ function renderPlanCore(force){
   const groupsHtml=(t, base)=>{ let body='';
     for(const [g,L] of t){
       if(!L.size && !base.includes(g)) continue;
-      const all=[...L.values()].flat(), shut=planShutG.has(g), gq=planEsc(g), canAdd=g!=='Inflation' && g!=='Not in plan';
+      const all=[...L.values()].flat(), shut=planShutG.has(g), gq=planEsc(g), canAdd=g!=='Inflation' && g!=='Not in plan'; planGrpKeys.push(g);
       body+=`<tr class="g" style="--gc:${PLAN_GC[g]||'var(--budget)'}"><td class="n"><span class="nm">`+
         `<button type="button" class="tw" data-pg="${gq}" aria-expanded="${!shut}" aria-label="${(shut?'Open ':'Close ')+gq}">${shut?'&#9656;':'&#9662;'}</button>`+
         `<span>${gq}</span>${canAdd?`<button type="button" data-padd="${gq}" title="Add a label" aria-label="Add a label to ${gq}">+</button>`:''}</span></td>${sums(all)}</tr>`;
@@ -5249,7 +5254,7 @@ function renderPlanCore(force){
   const sav=`<tr class="tot sav"><td class="n">Savings</td><td class="ref">${fv(refSum(inc)-refSum(exp))}</td>`+
     amTd(inc.reduce((s,it)=>s+actOf(it),0)-exp.reduce((s,it)=>s+actOf(it),0), inc.reduce((s,it)=>s+plOf(it),0)-exp.reduce((s,it)=>s+plOf(it),0), 'S')+
     cols.map(c=>tdv(sumOf(inc,c)-sumOf(exp,c), c.y!=null)).join('')+`</tr>`;
-  planDetKeys=[];
+  planDetKeys=[]; planGrpKeys=[];
   const body=sav+
     `<tr class="tot"><td class="n">Total income</td>${sums(inc)}</tr>`+groupsHtml(tree(PLAN_IGROUPS.slice(0,2),inc), PLAN_IGROUPS.slice(0,2))+
     `<tr class="tot"><td class="n">Total expenses</td>${sums(exp)}</tr>`+groupsHtml(tree(PLAN_GROUPS.concat(['Inflation']),exp), PLAN_GROUPS);
@@ -5259,14 +5264,14 @@ function renderPlanCore(force){
       : `<th class="yt"><button type="button" data-py="${c.y}" aria-expanded="${planOpenY.has(c.y)}" title="${planOpenY.has(c.y)?'Fold the months of '+c.y:'Show the months of '+c.y}">${planOpenY.has(c.y)?'&#9666;':'&#9656;'} ${c.y}</button></th>`).join('')+`</tr>`;
   const anyOpen=planOpenY.size>0, at=PLAN.at ? new Date(PLAN.at) : null;
   const detAll=!planShutG.size && planDetKeys.length>0 && planDetKeys.every(k=>planOpenL.has(k)),
-        detNone=!planDetKeys.some(k=>planOpenL.has(k));
+        detNone=!planDetKeys.some(k=>planOpenL.has(k)) && planGrpKeys.every(g=>planShutG.has(g));
   const msg=planNote ? `<b>${planEsc(planNote)}</b>` : fcErr ? `<b>${planEsc(fcErr)}</b>` :
     `Saved${at?' \u00b7 '+at.toLocaleDateString()+' '+at.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):''}. Export keeps a copy.`;
   const sc=wrap.querySelector('.planscroll'), sl=sc?sc.scrollLeft:0, st=sc?sc.scrollTop:0;
   wrap.innerHTML=ytBoxHtml(fc, px)+fcBoxHtml(fc, px, ms)+`<div class="plantools"><span class="planmsg" role="status">${msg}</span>`+
     `<button type="button" data-pa="years">${anyOpen?'Fold all years':'Show all months'}</button>`+
     `<button type="button" data-pa="detopen"${detAll?' disabled':''} title="Open every group and every label's details">Expand all</button>`+
-    `<button type="button" data-pa="detclose"${detNone?' disabled':''} title="Close every label's details">Collapse all</button>`+
+    `<button type="button" data-pa="detclose"${detNone?' disabled':''} title="Close every group (NEEDS, WANTS, ...) and every label's details">Collapse all</button>`+
     `<button type="button" data-pa="actual" aria-pressed="${planAmOn}" title="Show or hide this month's actual vs plan">${planAmOn?'Hide':'Show'} ${MONL} actual</button>`+
     `<button type="button" data-pa="undo"${planUndo.length?'':' disabled'}>Undo</button>`+
     `<button type="button" data-pa="export">Export</button>`+
@@ -5409,6 +5414,16 @@ function planImport(file){
 function planInit(){
   const wrap=document.getElementById('planwrap'), menu=document.getElementById('planMenu'), file=document.getElementById('planFile');
   if(!wrap || wrap.dataset.ready) return; wrap.dataset.ready='1';
+  /* Expand all / Collapse all act on the press itself (27 Oct 2026): a redraw landing between
+     press and release (data refresh, window focus) swallowed the click, so the buttons looked
+     dead. The click that follows the press is then ignored; a keyboard Enter still clicks. */
+  const planDet=pa=>{ if(pa==='detopen'){ planShutG.clear(); planDetKeysNow().forEach(k=>planOpenL.add(k)); }
+    else { planOpenL.clear(); wrap.querySelectorAll('button[data-pg]').forEach(b=>planShutG.add(b.dataset.pg)); }   // groups (NEEDS, WANTS, ...) fold too
+    renderPlan(true); };
+  let planDetAt=0;
+  wrap.addEventListener('pointerdown',e=>{ if(e.button) return;
+    const t=e.target.closest && e.target.closest('button[data-pa="detopen"],button[data-pa="detclose"]'); if(!t || t.disabled) return;
+    e.preventDefault(); planDetAt=Date.now(); planDet(t.dataset.pa); });
   wrap.addEventListener('click',e=>{
     const t=e.target.closest ? e.target.closest('button') : null; if(!t || !wrap.contains(t)) return;
     const ds=t.dataset;
@@ -5421,8 +5436,7 @@ function planInit(){
     else if(ds.pt!=null){ e.stopPropagation(); if(planMenuR===+ds.pt && !menu.hidden) planCloseMenu(); else planOpenMenu(t, +ds.pt); }
     else if(ds.pa==='years'){ if(planOpenY.size) planOpenY.clear();
       else planMonths().forEach(mi=>planOpenY.add(Math.floor(mi/12))); renderPlan(true); }
-    else if(ds.pa==='detopen'){ planShutG.clear(); planDetKeysNow().forEach(k=>planOpenL.add(k)); renderPlan(true); }
-    else if(ds.pa==='detclose'){ planOpenL.clear(); renderPlan(true); }
+    else if(ds.pa==='detopen' || ds.pa==='detclose'){ if(Date.now()-planDetAt>1500) planDet(ds.pa); }
     else if(ds.pa==='undo'){ if(!planUndo.length) return; PLAN.rows=JSON.parse(planUndo.pop()); planNote='Undone.'; planSave(); renderPlan(true); }
     else if(ds.pa==='actual'){ planAmOn=!planAmOn; try{ localStorage.setItem(PLAN_AM_KEY, planAmOn?'1':'0'); }catch(e){} renderPlan(true); }
   else if(ds.pa==='export') planExport();
