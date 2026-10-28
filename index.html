@@ -4622,6 +4622,83 @@ async function fixDetailAccts(){
     if(FS2.fake || Date.now()-t0>180e3){ clearInterval(iv); return; }
     if(!FS_MONTHS.size || !aprOn() || !FS2.data || !FS2.data.putTx) return;
     clearInterval(iv); fixDetailAccts().catch(e=>console.warn('fixDetailAccts', e)); }, 2000); }
+
+/* ---- Automatic monthly rows (28 Oct 2026) --------------------------------------------
+   The sheet used to add these by itself; after the cutover the app does it, once per open,
+   for every month from the cutover month to today:
+   1. Depreciation: on the 1st of each month, a copy of every Depreciation row (DETAIL
+      "Depreciation", value < 0) of the month before, same object and value, unless that
+      month already has one for the object. settings.depMonth = last month done, so a row
+      you delete or edit stays as you left it. To change or stop one: edit or delete it in
+      a month, the next months copy that.
+   2. TFRTaxes: -15% of the TFR added in the month (rows ACCOUNT TFR, DETAIL TFR, value > 0),
+      rounded to whole euros, dated like the first TFR row. One row id 'tfrt'+hash(month)
+      tops up any TFRTaxes row already there. settings.autoTfr[month] = the TFR sum used:
+      it is redone only when the TFR of that month changes. */
+const TFR_TAX=0.15;
+const ymNext=ym=>{ const [y,m]=ym.split('-').map(Number), i=y*12+m; return Math.floor(i/12)+'-'+pad2(i%12+1); };
+const ymPrev=ym=>{ const [y,m]=ym.split('-').map(Number), i=y*12+m-2; return Math.floor(i/12)+'-'+pad2(i%12+1); };
+/* pure: months map + settings + today's month -> {put:{ym:{id:row}}, del:{ym:[ids]}, depMonth, autoTfr} */
+function autoRowsPlan(months, S, nowYm){
+  const put={}, del={}, autoTfr=Object.assign({}, S.autoTfr||{});
+  const c=S.cutoverAt ? new Date(+S.cutoverAt) : new Date();
+  const start=c.getFullYear()+'-'+pad2(c.getMonth()+1);
+  const isDep=t=>norm(t.dt)==='DEPRECIATION' && (+t.v||0)<0, depKey=t=>norm(t.a)+'|'+norm(t.l)+'|'+norm(t.acd);
+  const newest=f=>{ let b=null; for(const m of months.values()) for(const id in (m.tx||{})){ const t=m.tx[id];
+    if(f(t) && (!b || String(t.d||'')>=String(b.d||''))) b=t; } return b; };
+  const tfrTpl=newest(t=>norm(t.dt)==='TFRTAXES');
+  let depMonth=String(S.depMonth||'');
+  for(let ym=start; ym<=nowYm; ym=ymNext(ym)){
+    const m=months.get(ym), tx=(m && m.tx)||{};
+    let maxO=0; for(const k in tx) maxO=Math.max(maxO, +tx[k].o||0);
+    if(ym>depMonth){
+      const pm=months.get(ymPrev(ym)), prev=Object.assign({}, (pm && pm.tx)||{}, put[ymPrev(ym)]||{}), have=new Set();   // + rows just planned for it
+      for(const id in tx) if(norm(tx[id].dt)==='DEPRECIATION') have.add(depKey(tx[id]));
+      for(const id in prev){ const t=prev[id]; if(!isDep(t) || have.has(depKey(t))) continue;
+        have.add(depKey(t));
+        const r=Object.assign({}, t, {d:ym+'-01', o:++maxO}); delete r.live;
+        (put[ym]=put[ym]||{})['dep'+fsHash(ym+'|'+depKey(t))]=r; }
+      depMonth=ym;
+    }
+    let sum=0, day=''; const aid='tfrt'+fsHash(ym); let other=0;
+    for(const id in tx){ const t=tx[id];
+      if(norm(t.a)==='TFR' && norm(t.dt)==='TFR' && (+t.v||0)>0){ sum+=+t.v; const d=String(t.d||''); if(!day || d<day) day=d; }
+      if(norm(t.dt)==='TFRTAXES' && id!==aid) other+=+t.v||0; }
+    sum=Math.round(sum*100)/100;
+    if(autoTfr[ym]===sum) continue;
+    autoTfr[ym]=sum;
+    const want=-Math.round(sum*TFR_TAX)-Math.round(other);
+    if(sum>0 && want!==0 && tfrTpl){
+      const r=Object.assign({}, tfrTpl, {d:day||ym+'-01', v:want, o: tx[aid] ? tx[aid].o : ++maxO}); delete r.live;
+      (put[ym]=put[ym]||{})[aid]=r;
+    } else if(tx[aid]) (del[ym]=del[ym]||[]).push(aid);
+  }
+  return {put, del, depMonth, autoTfr};
+}
+let autoBusy=false;
+async function autoRows(){
+  if(autoBusy || !aprOn()) return 0; autoBusy=true;
+  try{
+    const d=new Date(), nowYm=d.getFullYear()+'-'+pad2(d.getMonth()+1);
+    const P=autoRowsPlan(FS_MONTHS, FS_SETTINGS, nowYm);
+    let n=0;
+    for(const ym in P.put){ await FS2.data.putTx(ym, P.put[ym]); n+=Object.keys(P.put[ym]).length; }
+    for(const ym in P.del){ await FS2.data.delTx(ym, P.del[ym]); n+=P.del[ym].length; }
+    const ch={};
+    if(P.depMonth!==String(FS_SETTINGS.depMonth||'')) ch.depMonth=P.depMonth;
+    if(JSON.stringify(P.autoTfr)!==JSON.stringify(FS_SETTINGS.autoTfr||{})) ch.autoTfr=P.autoTfr;
+    if(Object.keys(ch).length){ await FS2.data.setSettings(ch); FS_SETTINGS=Object.assign({}, FS_SETTINGS, ch); }
+    if(n){ console.info('autoRows: wrote', n, 'row(s)', Object.keys(P.put).concat(Object.keys(P.del)).join(', ')); dbAt=0; refreshDB(); }
+    return n;
+  } finally{ autoBusy=false; }
+}
+/* once after the data is in, then again whenever the months change (a TFR row added later) */
+{ const t0=Date.now(), iv=setInterval(()=>{
+    if(FS2.fake || Date.now()-t0>180e3){ clearInterval(iv); return; }
+    if(!FS_MONTHS.size || !aprOn() || !FS2.data || !FS2.data.putTx) return;
+    clearInterval(iv); autoRows().catch(e=>console.warn('autoRows', e));
+    let last=''; setInterval(()=>{ const fp=[...FS_MONTHS.values()].map(m=>m.month+'@'+(m.updatedAt||0)).join(',');
+      if(fp===last) return; last=fp; autoRows().catch(e=>console.warn('autoRows', e)); }, 15000); }, 2000); }
 function qEditOpen(r){
   const old=document.getElementById('txDlg'); if(old) old.remove();
   const hit=qEditFind(r), can=hit && aprOn();

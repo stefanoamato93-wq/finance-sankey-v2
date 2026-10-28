@@ -34,6 +34,15 @@ status: `Personal Finance\finance-v2-plan\PLAN.md`.
   100 rows and never over 5 % of all rows per delete (no select-all), layer 1 = confirm with count,
   total and months, layer 2 = type DELETE <count> exactly; the rows are kept on this device and
   Undo last delete writes them back. Code: qBulkDelete(), qBulkUndoRun(). One-off repair
+- **Automatic monthly rows (28 Oct 2026, after the cutover):** each open, for every month from the
+  cutover month to today, `autoRows()` / `autoRowsPlan()` add (1) on the 1st a copy of every
+  Depreciation row of the month before (car -50, iPhone -20, Apple Watch -10, iPad -10, ...),
+  unless the month has one for that object; `settings.depMonth` marks months done, so an edited or
+  deleted row stays so and the next months copy the change; (2) TFRTaxes = -15 % of the TFR added
+  that month (ACCOUNT TFR, DETAIL TFR, value > 0), whole euros, dated like the TFR row, one row
+  `tfrt<hash>` topping up any TFRTaxes already there; `settings.autoTfr[month]` = TFR sum used, so it
+  is redone only when that month's TFR changes. Rechecks every 15 s while open.
+
   fixDetailAccts() puts CREDITS / DEBTS rows back in their account holding.
 - **Trends shows the plan for the rest of this year** (Plan pill off): real Jan..this month + Plan page
   months to Dec, tagged +Plan, so 2026 matches the Plan page outlook. The to-the-day last-year bar is
