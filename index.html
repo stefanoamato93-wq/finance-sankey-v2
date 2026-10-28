@@ -5931,8 +5931,10 @@ const TAX_RATE=0.26;   // conservative: 26% on the gains of every VARIABLE holdi
 let HOLDINGS=null;     // [{a, e, isin, t, sh}]
 function holdingsLoad(){
   if(HOLDINGS) return HOLDINGS;
-  const S=FS_SETTINGS||{};
-  let h=null; try{ h=JSON.parse(S.holdingsj||'null'); }catch(e){ h=null; }
+  // settings not read yet (fast open draws the page first): show the seed but do NOT
+  // keep it, or the saved share counts would never replace it after a refresh
+  if(!FS_SETTINGS) return HOLD_SEED.map(x=>Object.assign({},x));
+  let h=null; try{ h=JSON.parse(FS_SETTINGS.holdingsj||'null'); }catch(e){ h=null; }
   HOLDINGS=Array.isArray(h) ? h : HOLD_SEED.map(x=>Object.assign({},x));
   return HOLDINGS;
 }
@@ -5975,7 +5977,7 @@ async function loadLive(){
   if(liveBusy) return; liveBusy=true; liveAt=Date.now();
   try{
     // the saved share counts live in meta/settings: read them before the first price check
-    if(!HOLDINGS && !FS_SETTINGS && FS2.data){ try{ FS_SETTINGS=await FS2.data.getSettings(); }catch(e){} }
+    if(!FS_SETTINGS && FS2.data){ try{ FS_SETTINGS=await FS2.data.getSettings(); HOLDINGS=null; }catch(e){} }
     if(!FS_SETTINGS && FS2.data) return;   // settings not readable yet: retry on the next tick
     const list=holdingsLoad().filter(h=>h && h.isin && Number(h.sh)>0);
     const isins=[...new Set(list.map(h=>h.isin))];
