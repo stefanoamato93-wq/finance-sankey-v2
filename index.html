@@ -4865,14 +4865,33 @@ function fcRsuByMi(fc, price, fromMi, toMi){
   fc.rsu.forEach(x=>{ const mi=ymMi(x.date); if(mi<fromMi || mi>toMi) return; o[mi]=(o[mi]||0)+x.shares*price*fc.rsuNet; });
   return o;
 }
-/* live AMZN EUR price: the DIRECTA|AMZN holding if it is priced, else one onvista read */
+/* live AMZN EUR price: the DIRECTA|AMZN holding if it is priced, else one onvista read.
+   30 Oct 2026: the last good price is kept in this browser (AMZN_KEY), so a reload draws
+   the stock vests at once instead of 0; the live read still runs and redraws the open page
+   (Trends included) when it lands. A failed read retries (5s, 15s, 45s, 2 min, 5 min). */
+const AMZN_KEY='fs2-amzn-px-v1';
+let AMZN_FRESH=false, amznTry=0;
+try{ const c=JSON.parse(localStorage.getItem(AMZN_KEY)||'null'); if(c && c.p>0) AMZN_PX=c.p; }catch(e){}
+function amznKeep(p){ AMZN_PX=p; AMZN_FRESH=true; amznTry=0; try{ localStorage.setItem(AMZN_KEY, JSON.stringify({p, at:Date.now()})); }catch(e){} }
+/* a new price from outside a render: keep it and redraw the open page if it moved */
+function amznSet(p){
+  if(!(p>0)) return;
+  const moved=p!==AMZN_PX; amznKeep(p);
+  if(moved){ PV_SAV=null; cfSig=null; if(controlsReady) renderPage(); }
+}
 function amznPrice(){
   const k=LIVE && LIVE.hold ? Object.keys(LIVE.hold).find(x=>x.endsWith('|AMZN')) : null, L=k ? LIVE.hold[k] : null;
-  if(L && L.price>0) return L.price;
-  if(AMZN_PX) return AMZN_PX;
-  if(!amznBusy){ amznBusy=true;
-    priceOf({isin:AMZN_ISIN, t:'STOCK'}).then(p=>{ if(p && p.price>0){ AMZN_PX=p.price; renderPlan(true); if(controlsReady && pageOn('networth')) buildNetWorth(); } }).catch(()=>{}).finally(()=>{ amznBusy=false; }); }
-  return null;
+  if(L && L.price>0){ if(L.price!==AMZN_PX || !AMZN_FRESH) amznKeep(L.price); return L.price; }
+  if(!AMZN_FRESH && !amznBusy){ amznBusy=true;
+    priceOf({isin:AMZN_ISIN, t:'STOCK'}).then(p=>{
+      if(p && p.price>0){ amznBusy=false; amznSet(p.price); return; }
+      throw new Error('no price');
+    }).catch(()=>{
+      amznBusy=false;
+      const wait=[5,15,45,120,300][Math.min(amznTry++,4)]*1000;
+      setTimeout(()=>{ if(!AMZN_FRESH) amznPrice(); }, wait);
+    }); }
+  return AMZN_PX;
 }
 const planEsc=s=> String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 /* "1.200" / "1200" / "1,2K" / "€ 950" -> whole euros (always spend, so the sign is dropped); NaN if not a number */
@@ -5986,7 +6005,8 @@ async function loadLive(){
     const hold={}, miss=[];
     list.forEach(h=>{ const p=px[h.isin]; if(!p){ miss.push(h.e); return; }
       const sh=Number(h.sh); hold[norm(h.a)+'|'+norm(h.e)]={shares:sh, price:p.price, value:sh*p.price, src:p.market, pat:p.at}; });
-    if(Object.keys(hold).length){ LIVE={hold,miss,at:Date.now()}; if(controlsReady) buildNetWorth(); }
+    if(Object.keys(hold).length){ LIVE={hold,miss,at:Date.now()}; if(controlsReady) buildNetWorth();
+      const ak=Object.keys(hold).find(x=>x.endsWith('|AMZN')); if(ak) amznSet(hold[ak].price); }   // Trends / Plan use it too
   }catch(e){ /* keep the DB values on screen */ }
   finally{ liveBusy=false; }
 }

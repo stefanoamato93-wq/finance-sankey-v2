@@ -345,6 +345,10 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
 - **RSU** (read-only line in Work income): for each vest, shares × live AMZN EUR price ×
   the part kept. Price = the `…|AMZN` holding's live price, else one onvista read
   (`amznPrice()`, ISIN US0231351067). Stefano sells the shares at once, so it is cash income.
+  The last good price is kept in this browser (`fs2-amzn-px-v1`, 30 Oct 2026), so a reload
+  draws the vests at once instead of 0 on the Trends bars (STOCKS); the live read still runs,
+  retries on failure (5 s, 15 s, 45 s, 2 min, 5 min) and redraws the open page when the price
+  lands or moves (`amznSet()`; before, only Plan / Net Worth redrew and Trends stayed at 0).
   Vests before this month show as `past` and count nothing.
 - **INFLATION** (read-only line, own group): for every month, all planned expenses ×
   ((1 + rate)^years − 1), one step every January after the year of `inflationFrom`
