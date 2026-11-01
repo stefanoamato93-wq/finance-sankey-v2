@@ -1328,7 +1328,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v2.25';
+const APP_VER='v2.26';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 const NEED_COLS=["YEAR","MONTH","ACCOUNT","LABEL","DETAIL","ASSETCLASSDETAILS","VARIABLE","TYPE","CATEGORY1","CATEGORY3","VALUE"];
 const SLIM_KEY="fs2-cols-v1";
@@ -5243,7 +5243,7 @@ function ytBoxHtml(fc, px){
   const tin=(f,y,v,own,lab)=>`<input class="fcin num yti${own?'':' dflt'}" data-fc="${f}" data-y="${y}" type="text" inputmode="decimal" value="${String(Math.round(v*1000)/10).replace('.',',')}" aria-label="${lab} ${y} %" title="${own?'Target for '+y:'Default target (type to set one for '+y+')'}">%`;
   const rows=Y.map(e=>{ const T=ytTarget(fc, e.y), o=(fc.tYears||{})[e.y]||{}, r=T.s ? roomOf(e,T.s) : null, mo=e.left||12;
     /* spare against the total target (FIRE): income x (1 - target) - expenses */
-    const r2=T.t ? e.inc*(1-T.t)-e.exp : null;
+    const r2=T.t || T.tOver ? e.inc*(1-T.t)-e.exp : null;   // an override of 0 % is a real target
     const rt=r2==null ? '<td>\u2013</td>' : `<td class="${r2>=0?'ok':'over'}" title="${r2>=0?'Spare':'Spend less'}: ${fmt(Math.abs(r2)/mo)} a month">${r2>=0?'+':'\u2212'}${fmt(Math.abs(r2))}</td>`;
     const rc=r==null ? '<td>\u2013</td>' : `<td class="${r>=0?'ok':'over'}" title="${r>=0?'Spare':'Spend less'}: ${fmt(Math.abs(r)/mo)} a month">${r>=0?'+':'\u2212'}${fmt(Math.abs(r))}</td>`;
     return `<tr><td>${e.y}${e.ytd?' <small>actual + plan</small>':' <small>plan</small>'}</td><td>${fmt(e.safe)}</td><td>${fmt(e.exp)}</td>`+
