@@ -940,8 +940,20 @@
     .plan thead th.ref{font-size:9.5px; white-space:normal;}
     .plan th:not(.n):not(.am), .plan td:not(.n):not(.am){width:64px; min-width:64px; max-width:64px;}
     .plan th.am, .plan td.am{width:72px; min-width:72px; max-width:72px;}
-    .plan th.pmob{white-space:normal; padding:3px 0;} .plan th.pmob span{display:block; order:-1;}
-    .plan th.pmob{text-align:center;} .plan th.pmob button{padding:0 6px;}
+    /* month / year picker: name on top, the two arrows side by side under it */
+    .plan th.pmob{white-space:nowrap; padding:3px 0; text-align:center;} .plan th.pmob > span{display:block;}
+    .plan th.pmob .pmar{display:flex; justify-content:center; gap:2px; margin-top:2px;}
+    .plan th.pmob .pmar button{padding:0 9px; border:1px solid var(--grid); border-radius:6px;}
+    /* Month view fits the screen (1 Nov 2026): fixed columns, the name takes what is left */
+    table.plan.pfit{table-layout:fixed; width:100%;}
+    .plan.pfit th.n, .plan.pfit td.n{width:auto; min-width:0; max-width:none;}
+    .plan.pfit th.ref, .plan.pfit td.ref{width:44px; min-width:0; max-width:none;}
+    .plan.pfit th.am, .plan.pfit td.am{width:64px; min-width:0; max-width:none;}
+    .plan.pfit th:not(.n):not(.am):not(.ref), .plan.pfit td:not(.n):not(.am):not(.ref){width:58px; min-width:0; max-width:none;}
+    .plan.pfit th, .plan.pfit td{padding-left:3px; padding-right:3px; overflow:hidden;}
+    .plan.pfit .am .av{font-size:11px;} .plan.pfit .am .ap{font-size:9px;}
+    .plan.pfit thead th.am{font-size:9.5px; white-space:normal;}
+    .plan.pfit td.n button.tw{width:14px;}
     /* 16px: iPhone zooms into any box with smaller text when you tap it */
     .plan input.pc{padding:6px 3px; font-size:16px; border-color:var(--grid); background:var(--bg);}
     .pmv{display:inline-flex; gap:0; flex:0 0 auto;} .pmv button:first-child{border-radius:7px 0 0 7px;} .pmv button:last-child{border-radius:0 7px 7px 0; margin-left:-1px;}
@@ -1358,7 +1370,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v2.30';
+const APP_VER='v2.31';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 const NEED_COLS=["YEAR","MONTH","ACCOUNT","LABEL","DETAIL","ASSETCLASSDETAILS","VARIABLE","TYPE","CATEGORY1","CATEGORY3","VALUE"];
 const SLIM_KEY="fs2-cols-v1";
@@ -5564,10 +5576,12 @@ function renderPlanCore(force){
   planFoldOnOpen=false;
   const head=`<tr><th class="n">Category</th><th class="ref" title="Average per month, last 12 complete months">12M avg</th>`+
     (planAmOn ? `<th class="am" title="This month: actual so far / plan. The white tick is today's pace.">${MONL} actual<small>day ${dN.getDate()} of ${dim}</small></th>` : '')+
-    cols.map(c=> c.y!=null && mob && planMobV==='y' ? `<th class="yt pmob"><button type="button" data-pm="-12"${c.y<=y0?' disabled':''} aria-label="Year before">\u2039</button>`+
-        `<span>${c.y}</span><button type="button" data-pm="12"${c.y>=fc.endYear?' disabled':''} aria-label="Next year">\u203a</button></th>`
-      : c.mi!=null && mob && planMobV!=='y' ? `<th class="pmob"><button type="button" data-pm="-1"${c.mi<=ms[0]?' disabled':''} aria-label="Month before">\u2039</button>`+
-        `<span>${MON[c.mi%12]} ${String(Math.floor(c.mi/12)).slice(2)}</span><button type="button" data-pm="1"${c.mi>=ms[ms.length-1]?' disabled':''} aria-label="Next month">\u203a</button></th>`
+    cols.map(c=> c.y!=null && mob && planMobV==='y' ? `<th class="yt pmob"><span>${c.y}</span><span class="pmar">`+
+        `<button type="button" data-pm="-12"${c.y<=y0?' disabled':''} aria-label="Year before">\u2039</button>`+
+        `<button type="button" data-pm="12"${c.y>=fc.endYear?' disabled':''} aria-label="Next year">\u203a</button></span></th>`
+      : c.mi!=null && mob && planMobV!=='y' ? `<th class="pmob"><span>${MON[c.mi%12]} ${String(Math.floor(c.mi/12)).slice(2)}</span><span class="pmar">`+
+        `<button type="button" data-pm="-1"${c.mi<=ms[0]?' disabled':''} aria-label="Month before">\u2039</button>`+
+        `<button type="button" data-pm="1"${c.mi>=ms[ms.length-1]?' disabled':''} aria-label="Next month">\u203a</button></span></th>`
       : c.y!=null && mob ? `<th class="yt">${c.y}</th>`
       : c.mi!=null ? `<th>${MON[c.mi%12]} ${String(Math.floor(c.mi/12)).slice(2)}</th>`
       : `<th class="yt"><button type="button" data-py="${c.y}" aria-expanded="${planOpenY.has(c.y)}" title="${planOpenY.has(c.y)?'Fold the months of '+c.y:'Show the months of '+c.y}">${planOpenY.has(c.y)?'&#9666;':'&#9656;'} ${c.y}</button></th>`).join('')+`</tr>`;
@@ -5588,7 +5602,7 @@ function renderPlanCore(force){
     `<button type="button" data-pa="export">Export</button>`+
     `<button type="button" data-pa="import">Import</button>`+
     `<button type="button" data-pa="restart" title="Fill every row again with the last-12-month averages">Restart</button></div>`+
-    `<div class="planscroll"><table class="plan"><thead>${head}</thead><tbody>${body}</tbody></table></div>`+
+    `<div class="planscroll"><table class="plan${mob && planMobV!=='y' ? ' pfit' : ''}"><thead>${head}</thead><tbody>${body}</tbody></table></div>`+
     `<div class="plansettings">${YT.box}${fcBoxHtml(fc, px, ms)}</div>`;   // settings under the table (1 Nov 2026)
   const sc2=wrap.querySelector('.planscroll'); sc2.scrollLeft=sl; sc2.scrollTop=st;
 }
