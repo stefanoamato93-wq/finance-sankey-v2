@@ -1,6 +1,6 @@
 {
-  "name": "Personal Finance v2",
-  "short_name": "Finance v2",
+  "name": "Personal Finance",
+  "short_name": "Finance",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

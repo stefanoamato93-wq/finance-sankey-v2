@@ -7,7 +7,7 @@
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js" crossorigin>
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js" crossorigin>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Personal Finance v2</title>
+<title>Personal Finance</title>
 <!-- v2 icon set (teal square + "2" badge so the home-screen icon differs from v1) -->
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
@@ -74,6 +74,9 @@
   .acctwrap{position:relative; margin-left:auto;}
   #acct #acctBtn{width:30px; height:30px; padding:0; border-radius:50%; display:inline-flex; align-items:center; justify-content:center;}
   #acctBtn svg{width:16px; height:16px; fill:currentColor;}
+#acct #acctBtn{position:relative; overflow:visible;}
+#acctBtn .appver{position:absolute; bottom:-8px; left:50%; transform:translateX(-50%); font-size:8.5px; line-height:1;
+  font-weight:700; color:#e7c14a; background:var(--bg); padding:1px 3px; border-radius:6px; white-space:nowrap; pointer-events:none;}
   #acctMenu{position:absolute; right:0; top:calc(100% + 6px); z-index:45; min-width:230px; max-width:min(320px,90vw);
             display:flex; flex-direction:column; gap:7px; padding:10px 12px; background:var(--panel); color:var(--ink);
             border:1px solid var(--grid); border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.5); font-size:12px;}
@@ -983,7 +986,7 @@
 <!-- v2 sign-in gate (hidden in fake/test mode; data.js drives it) -->
 <div id="gate" role="dialog" aria-modal="true" aria-labelledby="gateTitle" hidden>
   <div class="box">
-    <h1 id="gateTitle">Personal Finance v2</h1>
+    <h1 id="gateTitle">Personal Finance</h1>
     <p id="gateMsg">Checking sign-in…</p>
     <button type="button" id="gateBtn" hidden>
       <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.6-.4-3.9z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.9z"/></svg>
@@ -993,19 +996,20 @@
   </div>
 </div>
 <header>
-  <h1>Personal Finance <span style="color:var(--muted);font-weight:600">v2</span></h1>
+  <h1>Personal Finance</h1>
   <div id="acct" hidden>
     <button type="button" id="acctData" aria-expanded="false" aria-controls="fsPanel">Data</button>
     <button type="button" id="acctArch" title="Download this app with today's data as one file, to keep a record">Archive</button>
     <button type="button" id="acctApr" title="Write last month's value changes (APPRECIATION rows)">Month-end</button>
     <span class="acctwrap">
       <button type="button" id="acctBtn" aria-haspopup="true" aria-expanded="false" aria-controls="acctMenu" aria-label="Account" title="Account">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9zm0 2c-4.4 0-8 2.2-8 5v2h16v-2c0-2.8-3.6-5-8-5z"/></svg>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9zm0 2c-4.4 0-8 2.2-8 5v2h16v-2c0-2.8-3.6-5-8-5z"/></svg><span class="appver" id="appVer"></span>
       </button>
       <div id="acctMenu" role="menu" aria-label="Account" hidden>
         <div><div class="amk">Signed in as</div><div class="amv" id="acctEmail"></div></div>
         <div><div class="amk">uid</div><code class="amv" id="acctUid"></code></div>
         <div class="amk" id="acctDb"></div>
+        <div class="amk">Version <span id="appVerM"></span></div>
         <div class="amrow"><button type="button" id="acctCopy">Copy uid</button><button type="button" id="acctOut">Sign out</button></div>
       </div>
     </span>
@@ -1312,6 +1316,10 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    so every answer is checked against the header names (slimOk) and, if the sheet's
    columns ever move, the full export is read instead and the letters are re-learned from
    its header for the next load (SLIM_KEY in localStorage). */
+/* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
+   shown under the account icon and in its menu */
+const APP_VER='v2.20';
+['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 const NEED_COLS=["YEAR","MONTH","ACCOUNT","LABEL","DETAIL","ASSETCLASSDETAILS","VARIABLE","TYPE","CATEGORY1","CATEGORY3","VALUE"];
 const SLIM_KEY="fs2-cols-v1";
 const SLIM_DEFAULT={YEAR:"A",MONTH:"B",ACCOUNT:"H",VALUE:"I",LABEL:"J",DETAIL:"K",ASSETCLASSDETAILS:"L",
