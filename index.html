@@ -4659,15 +4659,22 @@ function autoRowsPlan(months, S, nowYm){
     if(f(t) && (!b || String(t.d||'')>=String(b.d||''))) b=t; } return b; };
   const tfrTpl=newest(t=>norm(t.dt)==='TFRTAXES');
   let depMonth=String(S.depMonth||'');
+  /* value of each asset (ACCOUNT + ASSETCLASSDETAILS, every row so far): a depreciation stops
+     once the asset is at 0, and the last one only takes it down to 0 (1 Nov 2026, iPad) */
+  const hk=t=>norm(t.a)+'|'+norm(t.acd), book=new Map(), addB=t=>book.set(hk(t),(book.get(hk(t))||0)+(+t.v||0));
+  for(const [k,m] of months) if(k<start) for(const id in (m.tx||{})) addB(m.tx[id]);
   for(let ym=start; ym<=nowYm; ym=ymNext(ym)){
     const m=months.get(ym), tx=(m && m.tx)||{};
     let maxO=0; for(const k in tx) maxO=Math.max(maxO, +tx[k].o||0);
+    for(const id in tx) addB(tx[id]);
     if(ym>depMonth){
       const pm=months.get(ymPrev(ym)), prev=Object.assign({}, (pm && pm.tx)||{}, put[ymPrev(ym)]||{}), have=new Set();   // + rows just planned for it
       for(const id in tx) if(norm(tx[id].dt)==='DEPRECIATION') have.add(depKey(tx[id]));
       for(const id in prev){ const t=prev[id]; if(!isDep(t) || have.has(depKey(t))) continue;
         have.add(depKey(t));
-        const r=Object.assign({}, t, {d:ym+'-01', t:depTime(ym), o:++maxO}); delete r.live;
+        const left=Math.round((book.get(hk(t))||0)*100)/100; if(left<=0) continue;   // fully written off
+        const v=Math.max(+t.v, -left);
+        const r=Object.assign({}, t, {d:ym+'-01', t:depTime(ym), v, o:++maxO}); delete r.live; addB(r);
         (put[ym]=put[ym]||{})['dep'+fsHash(ym+'|'+depKey(t))]=r; }
       depMonth=ym;
     }
