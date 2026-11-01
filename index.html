@@ -892,6 +892,8 @@
   .yttab td{text-align:right;} .yttab td:first-child{text-align:left;} .yttab small{color:var(--muted);}
   .yttab td.ok{color:#5fc28a; font-weight:700;} .yttab td.over{color:#e58a8a; font-weight:700;}
   .yttab input.yti{width:44px; padding:2px 4px; text-align:right;} .yttab input.yti.dflt{color:var(--muted); border-style:dashed;}
+.yttab .ytov{margin-left:4px; padding:0 5px; border-radius:6px; font-size:10px; font-weight:700; background:#3a3110; color:#e7c14a;}
+.yttab .ytundo{margin-left:3px; padding:0 6px; font:inherit; font-size:12px; color:#e7c14a; background:none; border:1px solid #6b5a1c; border-radius:6px; cursor:pointer;}
   .ytchip{margin-left:6px; padding:0 6px; border-radius:8px; font-size:10.5px; font-weight:700;}
   .ytchip.ok{background:#1d3a2a; color:#5fc28a;} .ytchip.over{background:#3a1d22; color:#e58a8a;}
 /* Plan page top line (1 Nov 2026): big OK / NOT OK for this year, small flags for the others */
@@ -1326,7 +1328,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v2.23';
+const APP_VER='v2.24';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 const NEED_COLS=["YEAR","MONTH","ACCOUNT","LABEL","DETAIL","ASSETCLASSDETAILS","VARIABLE","TYPE","CATEGORY1","CATEGORY3","VALUE"];
 const SLIM_KEY="fs2-cols-v1";
@@ -4863,7 +4865,7 @@ function fcNorm(o, nowYear){
   rsu.sort((a,b)=> a.date<b.date?-1:a.date>b.date?1:0);
   /* per-year savings targets {"2027":{s:0.22, t:0.3}}; a year without its own uses tSafe / tTot */
   const tY={}; if(o.tYears && typeof o.tYears==='object') for(const y in o.tYears){ const v=o.tYears[y];
-    if(/^\d{4}$/.test(y) && v && typeof v==='object') tY[y]={s:n(v.s,0,1,null), t:n(v.t,0,1,null)}; }
+    if(/^\d{4}$/.test(y) && v && typeof v==='object') tY[y]={s:n(v.s,0,1,null), t:n(v.t,0,1,null), tf:n(v.tf,0,1,null)}; }
   return {v:1, inflation:n(o.inflation,0,0.5,0.02), salary:n(o.salary,0,0.5,0), yield:n(o.yield,-0.5,0.5,0.08),
     endYear:Math.max(nowYear, Math.round(n(o.endYear,2000,2100,2030))),
     inflationFrom: ym(o.inflationFrom) ? o.inflationFrom : nowYear+'-01',
@@ -5193,7 +5195,9 @@ function ytYears(real, plan, cm, y0, y1){
 /* the targets of year y: its own (tYears) where set, else the defaults tSafe / tTot */
 function ytTarget(fc, y){ const o=(fc.tYears||{})[y]||{};
   /* total target: every year = FIRE minimum save when known (1 Nov 2026), its own typed one is ignored */
-  return {s: o.s!=null ? o.s : fc.tSafe, t: typeof FIRE_NEED==='number' ? FIRE_NEED : o.t!=null ? o.t : fc.tTot, own: o.s!=null || o.t!=null}; }
+  /* tf = an override typed against FIRE (its own key, so the old pre-FIRE "t" values stay ignored) */
+  const fire=typeof FIRE_NEED==='number', tOver=fire && o.tf!=null;
+  return {s: o.s!=null ? o.s : fc.tSafe, t: fire ? (tOver ? o.tf : FIRE_NEED) : o.t!=null ? o.t : fc.tTot, tOver, own: o.s!=null || o.t!=null}; }
 /* default total target = FIRE "Minimum save" when known, else the typed one */
 const tTotDef=fc=> typeof FIRE_NEED==='number' ? FIRE_NEED : fc.tTot;
 /* the month in progress (27 Oct 2026): per category the BIGGER of what happened so far and
@@ -5236,10 +5240,17 @@ function ytBoxHtml(fc, px){
       `<span class="ytv">so far <b>${pc(ytd)}</b> \u00b7 outlook <b>${pc(out)}</b>${t?` \u00b7 target ${pc(t)}`:''}</span></div>`; };
   const tin=(f,y,v,own,lab)=>`<input class="fcin num yti${own?'':' dflt'}" data-fc="${f}" data-y="${y}" type="text" inputmode="decimal" value="${String(Math.round(v*1000)/10).replace('.',',')}" aria-label="${lab} ${y} %" title="${own?'Target for '+y:'Default target (type to set one for '+y+')'}">%`;
   const rows=Y.map(e=>{ const T=ytTarget(fc, e.y), o=(fc.tYears||{})[e.y]||{}, r=T.s ? roomOf(e,T.s) : null, mo=e.left||12;
+    /* spare against the total target (FIRE): income x (1 - target) - expenses */
+    const r2=T.t ? e.inc*(1-T.t)-e.exp : null;
+    const rt=r2==null ? '<td>\u2013</td>' : `<td class="${r2>=0?'ok':'over'}" title="${r2>=0?'Spare':'Spend less'}: ${fmt(Math.abs(r2)/mo)} a month">${r2>=0?'+':'\u2212'}${fmt(Math.abs(r2))}</td>`;
     const rc=r==null ? '<td>\u2013</td>' : `<td class="${r>=0?'ok':'over'}" title="${r>=0?'Spare':'Spend less'}: ${fmt(Math.abs(r)/mo)} a month">${r>=0?'+':'\u2212'}${fmt(Math.abs(r))}</td>`;
     return `<tr><td>${e.y}${e.ytd?' <small>actual + plan</small>':' <small>plan</small>'}</td><td>${fmt(e.safe)}</td><td>${fmt(e.exp)}</td>`+
       `<td class="${ok(e.safeRate,T.s)}">${pc(e.safeRate)}</td><td>${tin('tys',e.y,T.s,o.s!=null,'Safe savings target')}</td>`+
-      `<td class="${ok(e.totRate,T.t)}">${pc(e.totRate)}</td><td>${typeof FIRE_NEED==='number' ? `<span title="FIRE minimum save">${pc(T.t)}</span>` : tin('tyt',e.y,T.t,o.t!=null,'Total savings target')}</td>${rc}</tr>`; }).join('');
+      `<td class="${ok(e.totRate,T.t)}">${pc(e.totRate)}</td><td>${typeof FIRE_NEED==='number'
+        ? tin('tyt',e.y,T.t,T.tOver,'Total savings target')+(T.tOver
+          ? ` <span class="ytov" title="Your own target; FIRE says ${pc(FIRE_NEED)}">override</span><button type="button" class="ytundo" data-fca="untf" data-i="${e.y}" title="Back to FIRE minimum save ${pc(FIRE_NEED)}" aria-label="Undo the ${e.y} override">\u21ba</button>`
+          : ` <small class="fcsub">FIRE</small>`)
+        : tin('tyt',e.y,T.t,o.t!=null,'Total savings target')}</td>${rc}${rt}</tr>`; }).join('');
   const nOn=Y.filter(e=>{ const T=ytTarget(fc,e.y); return T.s && e.safeRate!=null && e.safeRate>=T.s; }).length;
   /* top of the page: OK = every target the year has is met (safe, and total when set) */
   const yOk=e=>{ const T=ytTarget(fc,e.y); if(!T.s && !T.t) return null;
@@ -5261,7 +5272,7 @@ function ytBoxHtml(fc, px){
     meter('Safe savings', cur.ytd && cur.ytd.safeRate, cur.safeRate, T0.s)+
     meter('Total savings', cur.ytd && cur.ytd.totRate, cur.totRate, T0.t)+
     (msg?`<div class="ytmsg ${room>=0?'ok':'over'}">${msg}</div>`:'')+
-    `<table class="fcvest yttab"><thead><tr><th>Year</th><th>Safe income</th><th>Expenses</th><th>Safe %</th><th>Safe target</th><th>Total %</th><th>Total target</th><th title="Expenses you can still add (+) or must cut (\u2212) to hit the safe target">Spare / cut</th></tr></thead><tbody>${rows}</tbody></table>`+
+    `<table class="fcvest yttab"><thead><tr><th>Year</th><th>Safe income</th><th>Expenses</th><th>Safe %</th><th>Safe target</th><th>Total %</th><th>Total target</th><th title="Expenses you can still add (+) or must cut (\u2212) to hit the safe target">Spare / cut safe</th><th title="Expenses you can still add (+) or must cut (\u2212) to hit the total target (FIRE)">Spare / cut total</th></tr></thead><tbody>${rows}</tbody></table>`+
     `<div class="fcsub">Each year has its own targets: type in a row to change that year (grey = the default). Safe income = BASE + TFR + FOODTICKETS. Savings = income \u2212 all expenses (inflation included).</div></details>`};
 }
 let ytOpen=true; try{ ytOpen=localStorage.getItem('fs2-yt-open-v1')!=='0'; }catch(e){}
@@ -5474,7 +5485,8 @@ function fcField(t){
     fc[f]=num/100;
   } else if(f==='tys' || f==='tyt'){
     if(!isFinite(num) || num<0 || num>100) return bad('Use a number from 0 to 100.');
-    const y=t.dataset.y, k=f==='tys'?'s':'t'; fc.tYears=fc.tYears||{}; fc.tYears[y]=Object.assign({s:null,t:null}, fc.tYears[y]);
+    const y=t.dataset.y, k=f==='tys'?'s':typeof FIRE_NEED==='number'?'tf':'t'; fc.tYears=fc.tYears||{}; fc.tYears[y]=Object.assign({s:null,t:null,tf:null}, fc.tYears[y]);
+    if(k==='tf' && Math.round(num*10)===Math.round(FIRE_NEED*1000)){ fc.tYears[y].tf=null; planNote=''; fcSave(fc).then(()=>renderPlan(true)); renderPlan(true); return; }   // typed the FIRE value: no override
     fc.tYears[y][k]=num/100;
   } else if(f==='vdate'){ if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(t.value)) return bad('Pick a month.'); fc.rsu[+t.dataset.i].date=t.value; }
   else if(f==='vsh'){ if(!(num>0)) return bad('Shares must be more than 0. Use \u2715 to remove a vest.'); fc.rsu[+t.dataset.i].shares=num; }
@@ -5483,6 +5495,8 @@ function fcField(t){
 }
 function fcAct(a, i){
   const fc=JSON.parse(JSON.stringify(fcGet()));
+  if(a==='untf'){ const o=(fc.tYears||{})[i]; if(o) o.tf=null;   // undo a total-target override: back to FIRE
+    planNote=`${i}: total target back to FIRE minimum save.`; fcSave(fc).then(()=>renderPlan(true)); renderPlan(true); return; }
   if(a==='addyear'){ const from=fc.endYear*12+11; fc.endYear++;
     planPush(); planExtendRows(PLAN.rows, from, fc.endYear*12+11); planSave();
     planNote=`Added ${fc.endYear}: each row carries its Dec ${fc.endYear-1} amount.`; }
