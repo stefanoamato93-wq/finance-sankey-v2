@@ -894,6 +894,14 @@
   .yttab input.yti{width:44px; padding:2px 4px; text-align:right;} .yttab input.yti.dflt{color:var(--muted); border-style:dashed;}
   .ytchip{margin-left:6px; padding:0 6px; border-radius:8px; font-size:10.5px; font-weight:700;}
   .ytchip.ok{background:#1d3a2a; color:#5fc28a;} .ytchip.over{background:#3a1d22; color:#e58a8a;}
+/* Plan page top line (1 Nov 2026): big OK / NOT OK for this year, small flags for the others */
+.ytstat{display:flex; flex-wrap:wrap; align-items:center; gap:4px 14px; margin:4px 0 6px; padding:10px 14px; border-radius:10px; border:1px solid var(--grid);}
+.ytstat.ok{background:#14271d; border-color:#2b5a3d;} .ytstat.over{background:#2a1418; border-color:#5a2b33;}
+.ytstat .big{font-size:26px; font-weight:800; letter-spacing:.5px;} .ytstat.ok .big{color:#5fc28a;} .ytstat.over .big{color:#e58a8a;}
+.ytstat .yr{font-size:15px; font-weight:700; color:var(--ink);} .ytstat .why{color:var(--muted); font-size:12px;}
+.ytstat .ytmsg{margin:0; flex-basis:100%;}
+.ytflags{display:flex; flex-wrap:wrap; gap:6px; margin:0 0 10px; font-size:11.5px; color:var(--muted); align-items:center;}
+.ytflags .ytchip{margin-left:0;}
   @media (max-width:560px){ .ytm{grid-template-columns:80px 1fr;} .ytm .ytv{grid-column:1 / -1;} }
   .fcbox summary{cursor:pointer; color:var(--muted); font-size:11.5px; padding:2px 0;}
   .fcbox[open] summary{color:var(--ink); margin-bottom:6px;}
@@ -1318,7 +1326,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v2.20';
+const APP_VER='v2.21';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 const NEED_COLS=["YEAR","MONTH","ACCOUNT","LABEL","DETAIL","ASSETCLASSDETAILS","VARIABLE","TYPE","CATEGORY1","CATEGORY3","VALUE"];
 const SLIM_KEY="fs2-cols-v1";
@@ -5230,8 +5238,18 @@ function ytBoxHtml(fc, px){
       `<td class="${ok(e.safeRate,T.s)}">${pc(e.safeRate)}</td><td>${tin('tys',e.y,T.s,o.s!=null,'Safe savings target')}</td>`+
       `<td class="${ok(e.totRate,T.t)}">${pc(e.totRate)}</td><td>${tin('tyt',e.y,T.t,o.t!=null,'Total savings target')}</td>${rc}</tr>`; }).join('');
   const nOn=Y.filter(e=>{ const T=ytTarget(fc,e.y); return T.s && e.safeRate!=null && e.safeRate>=T.s; }).length;
+  /* top of the page: OK = every target the year has is met (safe, and total when set) */
+  const yOk=e=>{ const T=ytTarget(fc,e.y); if(!T.s && !T.t) return null;
+    return (!T.s || e.safeRate!=null && e.safeRate>=T.s) && (!T.t || e.totRate!=null && e.totRate>=T.t); };
+  const cOk=yOk(cur), cCls=cOk==null ? '' : cOk ? 'ok' : 'over';
+  const status=`<div class="ytstat ${cCls}" role="status"><span class="big">${cOk==null ? 'NO TARGET' : cOk ? 'OK' : 'NOT OK'}</span>`+
+    `<span class="yr">${y0}</span><span class="why">safe savings ${pc(cur.safeRate)} vs ${pc(T0.s)}`+
+    `${T0.t ? ` \u00b7 total ${pc(cur.totRate)} vs ${pc(T0.t)}` : ''} \u00b7 actual + plan</span>`+
+    (msg?`<div class="ytmsg ${room>=0?'ok':'over'}">${msg}</div>`:'')+`</div>`+
+    (Y.length>1 ? `<div class="ytflags">`+Y.slice(1).map(e=>{ const o=yOk(e);
+      return `<span class="ytchip ${o==null?'':o?'ok':'over'}" title="${e.y}: safe ${pc(e.safeRate)}, total ${pc(e.totRate)}">${e.y} ${o==null?'\u2013':o?'\u2713':'\u2717'}</span>`; }).join('')+`</div>` : '');
   const num=(f,v,lab)=>`<label>${lab} <input class="fcin num" data-fc="${f}" type="text" inputmode="decimal" value="${String(Math.round(v*1000)/10).replace('.',',')}" aria-label="${lab} %">%</label>`;
-  return `<details class="fcbox ytbox" id="ytbox"${ytOpen?' open':''}><summary>Savings targets \u00b7 ${y0} outlook ${pc(cur.safeRate)} vs ${pc(T0.s)} `+
+  return {status, box:`<details class="fcbox ytbox" id="ytbox"${ytOpen?' open':''}><summary>Savings targets \u00b7 ${y0} outlook ${pc(cur.safeRate)} vs ${pc(T0.s)} `+
     `<span class="ytchip ${ok(cur.safeRate,T0.s)}">${cur.safeRate!=null && cur.safeRate>=T0.s ? 'on track' : 'off track'}</span> \u00b7 ${nOn} of ${Y.length} years on target</summary>`+
     `<div class="fcrow">${num('tSafe',fc.tSafe,'Default safe target')}${num('tTot',fc.tTot,'Default total target')}<span class="fcsub">Used by every year without its own. 0 = no target.</span></div>`+
     `<div class="fcsub"><b>${y0}</b></div>`+
@@ -5239,7 +5257,7 @@ function ytBoxHtml(fc, px){
     meter('Total savings', cur.ytd && cur.ytd.totRate, cur.totRate, T0.t)+
     (msg?`<div class="ytmsg ${room>=0?'ok':'over'}">${msg}</div>`:'')+
     `<table class="fcvest yttab"><thead><tr><th>Year</th><th>Safe income</th><th>Expenses</th><th>Safe %</th><th>Safe target</th><th>Total %</th><th>Total target</th><th title="Expenses you can still add (+) or must cut (\u2212) to hit the safe target">Spare / cut</th></tr></thead><tbody>${rows}</tbody></table>`+
-    `<div class="fcsub">Each year has its own targets: type in a row to change that year (grey = the default). Safe income = BASE + TFR + FOODTICKETS. Savings = income \u2212 all expenses (inflation included).</div></details>`;
+    `<div class="fcsub">Each year has its own targets: type in a row to change that year (grey = the default). Safe income = BASE + TFR + FOODTICKETS. Savings = income \u2212 all expenses (inflation included).</div></details>`};
 }
 let ytOpen=true; try{ ytOpen=localStorage.getItem('fs2-yt-open-v1')!=='0'; }catch(e){}
 /* actuals of month mi per planKey (euros, spend positive), with the same keys as planRef();
@@ -5274,6 +5292,7 @@ function renderPlanCore(force){
       .catch(()=>{}).finally(()=>{ fcLoading=false; }); }
   if(!planEnsure()) return;
   const fc=fcGet(), ms=planMonths(), y0=Math.floor(ms[0]/12), {ref}=planRef();
+  if(planFoldOnOpen) planOpenY.add(y0);   // the page opens with this year's months shown (1 Nov 2026)
   const MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const cols=[];
   for(let y=y0; y<=fc.endYear; y++){
@@ -5407,7 +5426,8 @@ function renderPlanCore(force){
   const msg=planNote ? `<b>${planEsc(planNote)}</b>` : fcErr ? `<b>${planEsc(fcErr)}</b>` :
     `Saved${at?' \u00b7 '+at.toLocaleDateString()+' '+at.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):''}. Export keeps a copy.`;
   const sc=wrap.querySelector('.planscroll'), sl=sc?sc.scrollLeft:0, st=sc?sc.scrollTop:0;
-  wrap.innerHTML=ytBoxHtml(fc, px)+fcBoxHtml(fc, px, ms)+`<div class="plantools"><span class="planmsg" role="status">${msg}</span>`+
+  const YT=ytBoxHtml(fc, px);
+  wrap.innerHTML=YT.status+`<div class="plantools"><span class="planmsg" role="status">${msg}</span>`+
     `<button type="button" data-pa="years">${anyOpen?'Fold all years':'Show all months'}</button>`+
     `<button type="button" data-pa="detopen"${detAll?' disabled':''} title="Open every group and every label's details">Expand all</button>`+
     `<button type="button" data-pa="detclose"${detNone?' disabled':''} title="Close every group (NEEDS, WANTS, ...) and every label's details">Collapse all</button>`+
@@ -5416,7 +5436,8 @@ function renderPlanCore(force){
     `<button type="button" data-pa="export">Export</button>`+
     `<button type="button" data-pa="import">Import</button>`+
     `<button type="button" data-pa="restart" title="Fill every row again with the last-12-month averages">Restart</button></div>`+
-    `<div class="planscroll"><table class="plan"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
+    `<div class="planscroll"><table class="plan"><thead>${head}</thead><tbody>${body}</tbody></table></div>`+
+    `<div class="plansettings">${YT.box}${fcBoxHtml(fc, px, ms)}</div>`;   // settings under the table (1 Nov 2026)
   const sc2=wrap.querySelector('.planscroll'); sc2.scrollLeft=sl; sc2.scrollTop=st;
 }
 /* the "Forecast settings" box on top of the Plan page */
