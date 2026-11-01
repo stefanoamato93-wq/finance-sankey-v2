@@ -2746,7 +2746,14 @@ function renderRolling(svgEl, W, narrow, perMonth){
   svgEl.innerHTML='';
   if(N<2) return;
   const info=cfSel ? CF_OPTS.get(cfSel) : null, ov=!cfSel, div=perMonth?12:1;
-  let layers=cfRollLayers(cfSel, DATA, DETAIL, m1, deselected)
+  /* plan view: this month = mixMonth (bigger of real so far and plan, per label), as in the
+     bars. Fix 1 Nov 2026: it took the month's real rows alone, so on the 1st (one day of
+     data) the month counted ~0 and every 12-month sum through next October sagged. */
+  const nowD=new Date(), nowMi=nowD.getFullYear()*12+nowD.getMonth();
+  const pvMix=pvOn() && PLAN && PLAN.rows && nowMi>=m0 && nowMi<=m1;
+  const RDATA=pvMix ? pvSavData(nowMi) : DATA;
+  const RDET=pvMix ? mixDetail(DETAIL, planToData(PLAN.rows, fcGet(), amznPrice(), nowMi, nowMi).detail, nowMi) : DETAIL;
+  let layers=cfRollLayers(cfSel, RDATA, RDET, m1, deselected)
     .map(l=>Object.assign(l,{r:rolling12(l.m,m0,m1).map(v=>v/div)}));
   const single=layers.length===1 && !ov;
   /* order (first = closest to the zero line) and colours */
@@ -2976,7 +2983,9 @@ function renderCashBars(){
   if(!n){ svgEl.innerHTML=''; return; }
   /* single-series mode: one bar per year (or month) for the picked entry, no savings % lines */
   const info=cfSel ? CF_OPTS.get(cfSel) : null;
-  const ser=info ? cfSeriesByYear(cfSel, OL ? SD : DATA, OL ? mixDetail(DETAIL, OL.detail, nowMi).concat(OL.detail.filter(r=>r[0]>nowMi)) : DETAIL, lastMi, deselected, drill ? mBucket(cfDrill) : null) : null;
+  const SDT=OL ? mixDetail(DETAIL, OL.detail, nowMi).concat(OL.detail.filter(r=>r[0]>nowMi))
+    : pvOn() && PLAN && PLAN.rows ? mixDetail(DETAIL, planToData(PLAN.rows, fcGet(), amznPrice(), nowMi, nowMi).detail, nowMi) : DETAIL;
+  const ser=info ? cfSeriesByYear(cfSel, OL || pvOn() ? SD : DATA, SDT, lastMi, deselected, drill ? mBucket(cfDrill) : null) : null;
   const serLY=info && lyB ? cfSeriesByYear(cfSel, lyPart.data, lyPart.detail, lastMi, deselected, lyB) : {};
   const serOf=r=> ((r.ly ? serLY : ser)[r.year]||0);
   const sv=ser ? rows.map(r=>serOf(r)/dv(r)) : null;
@@ -4567,7 +4576,7 @@ function qEditFind(r, used){
   return null;
 }
 const TX_EDIT_F=[['d','Date','date'],['v','Value \u20ac','num'],['a','Account','list'],['l','Label','list'],['dt','Detail','list'],
-  ['ty','Type','list'],['c1','Group','list'],['c2','Category 2','list']];
+  ['ty','Type','list'],['c1','Group','list'],['c2','Category 2','list'],['acd','Asset class detail','list']];
 /* the columns that place a row in Net Worth (holding = VARIABLE | ASSETCLASSDETAILS | ACCOUNT |
    CATEGORY3): they belong to the ACCOUNT, so they are only ever copied from a row of the same
    account. Fix 27 Oct 2026: they used to come from any row with the same label, so DEBTS /
@@ -4636,6 +4645,8 @@ async function fixDetailAccts(){
       tops up any TFRTaxes row already there. settings.autoTfr[month] = the TFR sum used:
       it is redone only when the TFR of that month changes. */
 const TFR_TAX=0.15;
+/* the tracker's timestamp format "M/D/YYYY H:MM:SS": 1st of the month, 0:00:01 */
+const depTime=ym=>{ const [y,m]=ym.split('-').map(Number); return m+'/1/'+y+' 0:00:01'; };
 const ymNext=ym=>{ const [y,m]=ym.split('-').map(Number), i=y*12+m; return Math.floor(i/12)+'-'+pad2(i%12+1); };
 const ymPrev=ym=>{ const [y,m]=ym.split('-').map(Number), i=y*12+m-2; return Math.floor(i/12)+'-'+pad2(i%12+1); };
 /* pure: months map + settings + today's month -> {put:{ym:{id:row}}, del:{ym:[ids]}, depMonth, autoTfr} */
@@ -4656,10 +4667,14 @@ function autoRowsPlan(months, S, nowYm){
       for(const id in tx) if(norm(tx[id].dt)==='DEPRECIATION') have.add(depKey(tx[id]));
       for(const id in prev){ const t=prev[id]; if(!isDep(t) || have.has(depKey(t))) continue;
         have.add(depKey(t));
-        const r=Object.assign({}, t, {d:ym+'-01', o:++maxO}); delete r.live;
+        const r=Object.assign({}, t, {d:ym+'-01', t:depTime(ym), o:++maxO}); delete r.live;
         (put[ym]=put[ym]||{})['dep'+fsHash(ym+'|'+depKey(t))]=r; }
       depMonth=ym;
     }
+    /* auto depreciation rows stamped 00:00:01 on the 1st (1 Nov 2026): without a time the
+       tracker sorts them at noon, above what you add that morning. Fixes rows already there. */
+    for(const id in tx) if(/^dep/.test(id) && tx[id].t!==depTime(ym) && !(put[ym] && put[ym][id]))
+      (put[ym]=put[ym]||{})[id]=Object.assign({}, tx[id], {t:depTime(ym)});
     let sum=0, day=''; const aid='tfrt'+fsHash(ym); let other=0;
     for(const id in tx){ const t=tx[id];
       if(norm(t.a)==='TFR' && norm(t.dt)==='TFR' && (+t.v||0)>0){ sum+=+t.v; const d=String(t.d||''); if(!day || d<day) day=d; }
@@ -4703,7 +4718,7 @@ function qEditOpen(r){
   const old=document.getElementById('txDlg'); if(old) old.remove();
   const hit=qEditFind(r), can=hit && aprOn();
   const dlg=document.createElement('dialog'); dlg.id='txDlg'; dlg.className='txdlg'; dlg.setAttribute('aria-labelledby','txH');
-  const lists={a:new Set(), l:new Set(), dt:new Set(), ty:new Set(), c1:new Set(), c2:new Set()};
+  const lists={a:new Set(), l:new Set(), dt:new Set(), ty:new Set(), c1:new Set(), c2:new Set(), acd:new Set()};
   for(const m of FS_MONTHS.values()) for(const id in (m.tx||{})){ const t=m.tx[id]; for(const k in lists) if(t[k]) lists[k].add(String(t[k])); }
   const t0=hit ? hit.t : {};
   const val=k=> k==='v' ? (t0.v==null ? '' : String(t0.v).replace('.',',')) : (t0[k]==null ? '' : String(t0[k]));
@@ -4713,7 +4728,7 @@ function qEditOpen(r){
   const dls=Object.keys(lists).map(k=>`<datalist id="txl-${k}">${[...lists[k]].sort().map(v=>`<option value="${planEsc(v)}">`).join('')}</datalist>`).join('');
   const why=!hit ? 'This row was not found in the database (reload and try again).'
     : !aprOn() ? (FS2.fake ? 'This is an archive: nothing can be saved.' : 'Editing works after Data \u2192 Switch to Firebase for good.') : '';
-  dlg.innerHTML=`<h3 id="txH">Edit transaction</h3><div class="txg">${TX_EDIT_F.map(field).join('')}</div>${dls}<div class="txnw" id="txNw"></div>`+
+  dlg.innerHTML=`<h3 id="txH" tabindex="-1" autofocus>Edit transaction</h3><div class="txg">${TX_EDIT_F.map(field).join('')}</div>${dls}<div class="txnw" id="txNw"></div>`+
     `<div class="txb"><button type="button" class="pri" id="txSave"${can?'':' disabled'}>Save</button><button type="button" id="txClose">Cancel</button>`+
     `<button type="button" class="del" id="txDel"${can?'':' disabled'}>Delete</button><span class="txmsg" id="txMsg" role="status">${planEsc(why)}</span></div>`;
   document.body.appendChild(dlg);
@@ -4732,6 +4747,10 @@ function qEditOpen(r){
     const was=norm(t0.c3)!==norm(h.c3) ? ` (now ${cap(t0.c3)}: Save fixes it)` : '';
     dlg.querySelector('#txNw').textContent=`Net Worth: ${cap(h.c3)} \u203a ${cap($f('a').value)}${was}`; };
   dlg.addEventListener('input', nwLine); nwLine();
+  /* asset class detail follows the account / label / detail typed, until you type it yourself */
+  let acdOwn=false; $f('acd').addEventListener('input', ()=>{ acdOwn=true; });
+  ['a','l','dt'].forEach(k=>$f(k).addEventListener('change', ()=>{ if(acdOwn) return; const h=holdNow();
+    if(h && h.acd!==undefined) $f('acd').value=h.acd==null ? '' : String(h.acd); }));
   dlg.querySelector('#txClose').onclick=()=>dlg.close();
   dlg.addEventListener('close',()=>dlg.remove());
   const busy=on=>{ dlg.querySelector('#txSave').disabled=on; dlg.querySelector('#txDel').disabled=on; };
@@ -4762,6 +4781,9 @@ function qEditOpen(r){
     catch(e){ msg('Not deleted: '+((e && (e.code||e.message))||e)); busy(false); }
   };
   dlg.showModal();
+  /* no box gets the focus on open: on a phone a focused date box pops the calendar at once */
+  const h3=dlg.querySelector('#txH'); if(h3) h3.focus({preventScroll:true});
+  if(document.activeElement && document.activeElement.tagName==='INPUT') document.activeElement.blur();
 }
 
 /* ---- PAGE Plan (income and expenses, v2 25 Oct 2026) ------------------------
@@ -6839,6 +6861,7 @@ function aprScan(months, ym){
   return [...H.values()].filter(h=>h.tpl).map(h=>Object.assign(h, {book:Math.round(h.book*100)/100}));
 }
 const aprFmt=v=> (v<0?'-':'')+Math.abs(v).toLocaleString('it-IT',{minimumFractionDigits:2, maximumFractionDigits:2});
+const aprFmt0=v=> (v<0?'-':'')+Math.abs(v).toLocaleString('it-IT',{maximumFractionDigits:0});
 /* "463.000,50" / "463000.50" / "463.000" -> number; blank -> null */
 function aprNum(s){
   s=String(s||'').replace(/[\s\u20ac]/g,''); if(!s) return null;
@@ -6869,7 +6892,7 @@ function aprOpen(){
   const ch=()=>{ dlg.querySelectorAll('input[data-i]').forEach(inp=>{ const i=+inp.dataset.i, v=aprNum(inp.value), c=dlg.querySelector(`[data-ch="${i}"]`);
     if(v==null){ c.textContent='\u2013'; c.className='n'; return; }
     if(Number.isNaN(v)){ c.textContent='not a number'; c.className='n dn'; return; }
-    const d=v-list[i].book; c.textContent=(d>0?'+':'')+aprFmt(d); c.className='n '+(d>=0?'up':'dn'); }); };
+    const d=Math.round(v-list[i].book); c.textContent=(d>0?'+':'')+aprFmt0(d); c.className='n '+(d>=0?'up':'dn'); }); };
   dlg.addEventListener('input', ch); ch();
   const msg=t=>{ dlg.querySelector('#aprMsg').textContent=t; };
   dlg.querySelector('#aprClose').onclick=()=>dlg.close();
@@ -6887,8 +6910,8 @@ function aprOpen(){
       let maxO=0; for(const k in tx) maxO=Math.max(maxO, +tx[k].o||0);
       let n=0;
       list.forEach((h0,i)=>{ const v=vals[i], h=fresh.get(h0.hk); if(v==null || !h) return;
-        const d=Math.round((v-h.book)*100)/100;
-        if(Math.abs(d)<0.005){ delete tx[h.id]; return; }
+        const d=Math.round(v-h.book);                        // whole euros (1 Nov 2026)
+        if(!d){ delete tx[h.id]; return; }
         const t=Object.assign({}, h.tpl, {d:P.day, v:d, o: tx[h.id] ? tx[h.id].o : ++maxO}); delete t.live;
         tx[h.id]=t; n++; });
       await FS2.data.writeMonths({[P.ym]:{tx, source:'app'}});
