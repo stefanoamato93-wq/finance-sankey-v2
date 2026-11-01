@@ -1374,7 +1374,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v2.38';
+const APP_VER='v2.39';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 /* self-update (1 Nov 2026): GitHub Pages lets phones keep the page up to 10 min, and a home-
    screen app resumed from the background keeps running its old code for hours. That old code
@@ -5389,7 +5389,7 @@ function ytBoxHtml(fc, px){
   const plan=planToData(PLAN.rows, fc, px, cm+1, planEnd()).data;
   const Y=ytYears(real, plan, cm, y0, fc.endYear), cur=Y[0], T0=ytTarget(fc, y0);
   { const yr=ytYears((PV_REAL||{data:DATA}).data, plan, cm, y0, y0)[0]; if(yr && yr.ytd) cur.ytd=yr.ytd; }   // "so far" = real only
-  const pc=x=> x==null ? '\u2013' : String(Math.round(x*1000)/10).replace('.',',')+'%';
+  const pc=x=> x==null ? '\u2013' : (Math.round(x*1000)/10).toFixed(1).replace('.',',')+'%';
   const ok=(r,t)=> r==null || !t ? '' : r>=t ? 'ok' : 'over';
   /* room left in a year to still hit its safe target: safe income x (1 - target) - expenses */
   const roomOf=(e,t)=> e.safe*(1-t)-e.exp;
@@ -5403,7 +5403,7 @@ function ytBoxHtml(fc, px){
       `<span class="ytbar" title="Bar = ${y0} outlook, white tick = target, dot = actual so far">`+
       `<i style="width:${w(out)}%"></i>${t?`<b style="left:${w(t)}%"></b>`:''}${ytd!=null?`<u style="left:${w(ytd)}%"></u>`:''}</span>`+
       `<span class="ytv">so far <b>${pc(ytd)}</b> \u00b7 outlook <b>${pc(out)}</b>${t?` \u00b7 target ${pc(t)}`:''}</span></div>`; };
-  const tin=(f,y,v,own,lab)=>`<input class="fcin num yti${own?'':' dflt'}" data-fc="${f}" data-y="${y}" type="text" inputmode="decimal" value="${String(Math.round(v*1000)/10).replace('.',',')}" aria-label="${lab} ${y} %" title="${own?'Target for '+y:'Default target (type to set one for '+y+')'}">%`;
+  const tin=(f,y,v,own,lab)=>`<input class="fcin num yti${own?'':' dflt'}" data-fc="${f}" data-y="${y}" type="text" inputmode="decimal" value="${(Math.round(v*1000)/10).toFixed(1).replace('.',',')}" aria-label="${lab} ${y} %" title="${own?'Target for '+y:'Default target (type to set one for '+y+')'}">%`;
   const rows=Y.map(e=>{ const T=ytTarget(fc, e.y), o=(fc.tYears||{})[e.y]||{}, r=T.s ? roomOf(e,T.s) : null, mo=e.left||12;
     /* spare against the total target (FIRE): income x (1 - target) - expenses */
     const r2=T.t || T.tOver ? e.inc*(1-T.t)-e.exp : null;   // an override of 0 % is a real target
@@ -5427,7 +5427,7 @@ function ytBoxHtml(fc, px){
     `<span class="yr">${y0}</span><span class="why">Safe ${st(cur.safeRate, T0.s)}${T0.t ? ` \u00b7 Total ${st(cur.totRate, T0.t)}` : ''}</span>`+
     (Y.length>1 ? `<span class="ytflags">`+Y.slice(1).map(e=>{ const o=yOk(e);
       return `<span class="ytchip ${o==null?'':o?'ok':'over'}" title="${e.y}: safe ${pc(e.safeRate)}, total ${pc(e.totRate)}">${String(e.y).slice(2)}${o==null?'\u2013':o?'\u2713':'\u2717'}</span>`; }).join('')+`</span>` : '')+`</div>`;
-  const num=(f,v,lab)=>`<label>${lab} <input class="fcin num" data-fc="${f}" type="text" inputmode="decimal" value="${String(Math.round(v*1000)/10).replace('.',',')}" aria-label="${lab} %">%</label>`;
+  const num=(f,v,lab)=>`<label>${lab} <input class="fcin num" data-fc="${f}" type="text" inputmode="decimal" value="${(Math.round(v*1000)/10).toFixed(1).replace('.',',')}" aria-label="${lab} %">%</label>`;
   return {status, box:`<details class="fcbox ytbox" id="ytbox"${ytOpen?' open':''}><summary>Savings targets \u00b7 ${y0} outlook ${pc(cur.safeRate)} vs ${pc(T0.s)} `+
     `<span class="ytchip ${ok(cur.safeRate,T0.s)}">${cur.safeRate!=null && cur.safeRate>=T0.s ? 'on track' : 'off track'}</span> \u00b7 ${nOn} of ${Y.length} years on target</summary>`+
     `<div class="fcrow">${num('tSafe',fc.tSafe,'Default safe target')}`+
@@ -5538,7 +5538,30 @@ function renderPlanCore(force){
       if(!byL.has(k)) byL.set(k,[]); byL.get(k).push(it); });
     for(const L of byL.values()){ const a=L.reduce((s,it)=>s+actOfA(it,A0),0), p=L.reduce((s,it)=>s+(+it.r.m[cm0]||0),0);
       if(Math.abs(a)>Math.abs(p) && Math.round(a-p)) mixX.set(L.find(it=>it.ro==='rest')||L[0], Math.round(a-p)); } }
-  const ytdOf=it=> Math.round(actOfA(it, AY))+(mixX.get(it)||0);   // whole euros, so the year sums add up
+  /* ONE logic with Trends (1 Nov 2026): this year's total per label is read from the very same
+     data Trends draws (real months before this one + mixMonth() for this month + planToData()
+     for the rest of the year). Each label's gap to what the rows show goes on one of its rows;
+     a label the plan does not have goes to NOT IN PLAN (expenses) or its own line (income). */
+  const yFix=new Map(); { const yE=Math.min(planEnd(), y0*12+11), R0=(PV_REAL||{data:DATA}).data;
+    const TD=R0.filter(r=>r[0]>=y0*12 && r[0]<cm0)
+      .concat(mixMonth(R0, planToData(PLAN.rows, fc, px, cm0, cm0).data, cm0).filter(r=>r[0]===cm0))
+      .concat(yE>cm0 ? planToData(PLAN.rows, fc, px, cm0+1, yE).data : []);
+    const lk=(k,l)=> k+'|'+(k==='I' && l==='STOCKS' ? 'RSU' : l);
+    const tgt=new Map(), grpOf=new Map();
+    TD.forEach(([m,k,g,l,v])=>{ const key=lk(k,l); tgt.set(key,(tgt.get(key)||0)+(k==='I'?v:-v)); if(!grpOf.has(key)) grpOf.set(key,g); });
+    const byL=new Map(); items.forEach(it=>{ const key=lk(it.r.k==='I'?'I':'E', it.r.l); if(!byL.has(key)) byL.set(key,[]); byL.get(key).push(it); });
+    const shown=it=> ms.reduce((a,mi)=> Math.floor(mi/12)===y0 ? a+(+it.r.m[mi]||0) : a, 0);
+    let unplY=0;
+    for(const [key,v] of tgt){ const L=byL.get(key);
+      if(!L || key.startsWith('E|') && L.every(it=>it.ro==='unpl')){ if(key.startsWith('E|')){ unplY+=v; continue; }
+        const it={r:{k:'I', g:grpOf.get(key), l:key.slice(2), d:key.slice(2), m:{}}, ri:null, ro:'yx'}; items.push(it); yFix.set(it, v); continue; }
+      const parts=L.map(it=> it.ro==='unpl' ? 0 : actOfA(it, AY)+(mixX.get(it)||0));
+      const gap=v-L.reduce((s,it,i)=>s+shown(it)+parts[i],0);
+      L.forEach((it,i)=> yFix.set(it, parts[i]+(i===0 ? gap : 0))); }
+    let u=items.find(it=>it.ro==='unpl');
+    if(Math.round(unplY) && !u){ u={r:{k:'E', g:'Not in plan', l:'NOT IN PLAN', d:'NOT IN PLAN', m:{}}, ri:null, ro:'unpl'}; items.push(u); }
+    if(u) yFix.set(u, unplY-shown(u)); }
+  const ytdOf=it=> yFix.get(it)||0;
   /* year column: plan months, and for this year also what already happened before this month */
   /* Avg/m pill: a year column = its total / the months it covers (this year: actual months + plan months) */
   const perM=!!(typeof monthlyEl!=='undefined' && monthlyEl && monthlyEl.checked);
@@ -5593,11 +5616,12 @@ function renderPlanCore(force){
     return refTd(refOf(it), [it])+amL([it])+cols.map(c=>{
       const v=cell(it,c), when=c.mi!=null ? miLabel(c.mi) : 'year '+c.y;
       return `<td${c.y!=null?' class="yt"':''}><input class="pc" type="text" inputmode="decimal" autocomplete="off" `+
-        `data-r="${ri}" ${c.mi!=null?'data-mi="'+c.mi+'"':'data-y="'+c.y+'"'+(c.y===y0 && ytdOf(it) ? ' data-a="'+ytdOf(it)+'"' : '')+(ydiv(c)>1 ? ' data-n="'+ydiv(c)+'"' : '')} value="${Math.round(v)?grp(Math.round(v)):''}" placeholder="0" `+
+        `data-r="${ri}" ${c.mi!=null?'data-mi="'+c.mi+'"':'data-y="'+c.y+'"'+(c.y===y0 && ytdOf(it) ? ' data-a="'+Math.round(ytdOf(it))+'"' : '')+(ydiv(c)>1 ? ' data-n="'+ydiv(c)+'"' : '')} value="${Math.round(v)?grp(Math.round(v)):''}" placeholder="0" `+
         `aria-label="${planEsc(name+', '+when)}"></td>`; }).join(''); };
   const tools=(it,name)=> it.ro ? '' : `<button type="button" data-pt="${it.ri}" aria-haspopup="menu" title="Row tools" aria-label="${planEsc('Tools for '+name)}">&#8943;</button>`;
   const roNote={rsu:`stock plans \u00d7 AMZN ${px?'\u20ac'+px.toFixed(2).replace('.',','):'(price loading)'} \u00d7 ${Math.round(fc.rsuNet*100)}% kept`,
                 infl:`${String(Math.round(fc.inflation*1000)/10).replace('.',',')}% a year, from Jan ${Math.floor(ymMi(fc.inflationFrom)/12)+1}`,
+                yx:'actual this year, no plan row',
                 unpl:'this month, no plan row: '+Object.entries(unplBy).filter(([,v])=>Math.round(v)).sort((a,b)=>b[1]-a[1]).map(([l,v])=>l+' '+fmt(v)).join(', '),
                 sal:`BASE + TFR \u00d7 ${String(Math.round(fc.salary*1000)/10).replace('.',',')}% a year, from Jan ${Math.floor(ymMi(fc.inflationFrom)/12)+1}`};
   const groupsHtml=(t, base)=>{ let body='';
