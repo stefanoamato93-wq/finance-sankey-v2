@@ -1374,7 +1374,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v2.43';
+const APP_VER='v2.44';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 /* self-update (1 Nov 2026): GitHub Pages lets phones keep the page up to 10 min, and a home-
    screen app resumed from the background keeps running its old code for hours. That old code
@@ -3488,13 +3488,13 @@ function renderCompare(){
   const rate=(inc,exp)=> inc>0 ? Math.round((inc-exp)/inc*100)+'%' : '\u2014';
   /* one row; good=+1 when up is good (income, savings), -1 when up is bad (spend) */
   const row=o=>{
-    const d=o.a-o.b, z=zero(d), cls=z ? '' : ((d>0)===(o.good>0) ? 'up' : 'dn');
+    const d=o.b-o.a, z=zero(d)   /* change from the first period (A, before) to the second (B, after) */, cls=z ? '' : ((d>0)===(o.good>0) ? 'up' : 'dn');
     const w=o.scale>0 ? Math.min(50, Math.abs(d)/o.scale*50) : 0;
     const bar=z ? '' : `<i class="${cls}" style="${d>0?'left':'right'}:50%;width:${w.toFixed(1)}%"></i>`;
     return `<tr class="${o.cls}${o.excl?' excl':''}"${o.attrs||''}>`+
       `<td class="n"${o.bl?` style="border-left-color:${o.bl}"`:''}>${o.name}<span class="ab">${fmt(o.a)} vs ${fmt(o.b)}</span>${o.sub||''}</td>`+
       `<td class="bar"><div class="bz">${bar}</div></td><td class="dl ${cls}">${z?'0':sgn(d)}</td>`+
-      `<td class="pc ${cls}">${pctTxt(o.a,o.b)}</td><td class="v">${fmt(o.a)}</td><td class="v">${fmt(o.b)}</td></tr>`; };
+      `<td class="pc ${cls}">${pctTxt(o.b,o.a)}</td><td class="v">${fmt(o.a)}</td><td class="v">${fmt(o.b)}</td></tr>`; };
   /* totals block, on top, with its own bar scale */
   const ta={inc:R.tot.a.inc/da, exp:R.tot.a.exp/da, safe:R.tot.a.safe/da},
         tb={inc:R.tot.b.inc/db, exp:R.tot.b.exp/db, safe:R.tot.b.safe/db};
