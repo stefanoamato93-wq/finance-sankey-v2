@@ -819,8 +819,7 @@
   @media (prefers-reduced-motion:reduce){ .sk::after{animation:none;} }
   /* Plan page (Future Expenses): editable grid, group > label > detail rows, one column per
      month to Dec 2030 (each year folds to one total). Saved in this browser only. */
-  body[data-page="plan"] #tgAvg{display:none;}
-  body[data-page="plan"] #tgK{border-left:0;}
+  /* Plan page: Avg/m shows the year columns as a month on average (1 Nov 2026) */
   /* the Plan pill (planned months) only where the pages read it */
   body[data-page="plan"] #tgPlan, body[data-page="networth"] #tgPlan, body[data-page="query"] #tgPlan{display:none;}
   .planchip{display:inline-block; margin-left:6px; padding:0 6px; border:1px dashed #e7c14a; border-radius:8px; color:#e7c14a; font-size:11px; font-weight:600;}
@@ -1375,7 +1374,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v2.37';
+const APP_VER='v2.38';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 /* self-update (1 Nov 2026): GitHub Pages lets phones keep the page up to 10 min, and a home-
    screen app resumed from the background keeps running its old code for hours. That old code
@@ -5532,9 +5531,20 @@ function renderPlanCore(force){
     : it.r.k!=='I' && !it.ro && lblOne.has(it.r.g+'|'+it.r.l) ? (A.leafAct[it.r.l]||0)
     : it.r.k!=='I' && !it.ro ? (actFirst.get(planKeyN(it.r))===it.ri ? (A.act[planKeyN(it.r)]||0) : 0)
     : (A.act[planKey(it.r)]||0);
-  const ytdOf=it=> Math.round(actOfA(it, AY));   // whole euros, so the year sums add up
+  /* this month in the year column the Trends way (mixMonth): per label the BIGGER of actual so
+     far and plan. The extra (actual above plan) is put on one row of the label. */
+  const mixX=new Map(); { const byL=new Map();
+    items.forEach(it=>{ if(it.ro==='infl' || it.ro==='sal') return; const k=(it.r.k==='I'?'I':'E')+'|'+it.r.l;
+      if(!byL.has(k)) byL.set(k,[]); byL.get(k).push(it); });
+    for(const L of byL.values()){ const a=L.reduce((s,it)=>s+actOfA(it,A0),0), p=L.reduce((s,it)=>s+(+it.r.m[cm0]||0),0);
+      if(Math.abs(a)>Math.abs(p) && Math.round(a-p)) mixX.set(L.find(it=>it.ro==='rest')||L[0], Math.round(a-p)); } }
+  const ytdOf=it=> Math.round(actOfA(it, AY))+(mixX.get(it)||0);   // whole euros, so the year sums add up
   /* year column: plan months, and for this year also what already happened before this month */
-  const cell=(it,c)=> c.mi!=null ? (+it.r.m[c.mi]||0) : ms.reduce((a,mi)=> Math.floor(mi/12)===c.y ? a+(+it.r.m[mi]||0) : a, 0)+(c.y===y0 ? ytdOf(it) : 0);
+  /* Avg/m pill: a year column = its total / the months it covers (this year: actual months + plan months) */
+  const perM=!!(typeof monthlyEl!=='undefined' && monthlyEl && monthlyEl.checked);
+  const ynOf=y=> ms.filter(mi=>Math.floor(mi/12)===y).length+(y===y0 ? pastY.length : 0);
+  const ydiv=c=> perM && c.y!=null ? Math.max(1, ynOf(c.y)) : 1;
+  const cell=(it,c)=> (c.mi!=null ? (+it.r.m[c.mi]||0) : ms.reduce((a,mi)=> Math.floor(mi/12)===c.y ? a+(+it.r.m[mi]||0) : a, 0)+(c.y===y0 ? ytdOf(it) : 0))/ydiv(c);
   const sumOf=(L,c)=> L.reduce((a,it)=>a+cell(it,c),0);
   const refOf=it=> ref[planKey(it.r)]||0;
   const refSum=L=> L.reduce((a,it)=>a+refOf(it),0);
@@ -5583,7 +5593,7 @@ function renderPlanCore(force){
     return refTd(refOf(it), [it])+amL([it])+cols.map(c=>{
       const v=cell(it,c), when=c.mi!=null ? miLabel(c.mi) : 'year '+c.y;
       return `<td${c.y!=null?' class="yt"':''}><input class="pc" type="text" inputmode="decimal" autocomplete="off" `+
-        `data-r="${ri}" ${c.mi!=null?'data-mi="'+c.mi+'"':'data-y="'+c.y+'"'+(c.y===y0 && AY ? ' data-a="'+ytdOf(it)+'"' : '')} value="${v?grp(v):''}" placeholder="0" `+
+        `data-r="${ri}" ${c.mi!=null?'data-mi="'+c.mi+'"':'data-y="'+c.y+'"'+(c.y===y0 && ytdOf(it) ? ' data-a="'+ytdOf(it)+'"' : '')+(ydiv(c)>1 ? ' data-n="'+ydiv(c)+'"' : '')} value="${Math.round(v)?grp(Math.round(v)):''}" placeholder="0" `+
         `aria-label="${planEsc(name+', '+when)}"></td>`; }).join(''); };
   const tools=(it,name)=> it.ro ? '' : `<button type="button" data-pt="${it.ri}" aria-haspopup="menu" title="Row tools" aria-label="${planEsc('Tools for '+name)}">&#8943;</button>`;
   const roNote={rsu:`stock plans \u00d7 AMZN ${px?'\u20ac'+px.toFixed(2).replace('.',','):'(price loading)'} \u00d7 ${Math.round(fc.rsuNet*100)}% kept`,
@@ -5639,7 +5649,7 @@ function renderPlanCore(force){
         `<button type="button" data-pm="1"${c.mi>=ms[ms.length-1]?' disabled':''} aria-label="Next month">\u203a</button></span></th>`
       : c.y!=null && mob ? `<th class="yt"${c.y===y0 && AY ? ' title="Actual so far + plan"' : ''}>${c.y}</th>`
       : c.mi!=null ? `<th>${MON[c.mi%12]} ${String(Math.floor(c.mi/12)).slice(2)}</th>`
-      : `<th class="yt"><button type="button" data-py="${c.y}" aria-expanded="${planOpenY.has(c.y)}" title="${(planOpenY.has(c.y)?'Fold the months of '+c.y:'Show the months of '+c.y)+(c.y===y0 && AY ? ' \u00b7 actual so far + plan' : '')}">${planOpenY.has(c.y)?'&#9666;':'&#9656;'} ${c.y}${c.y===y0 && AY ? '<small> act+plan</small>' : ''}</button></th>`).join('')+`</tr>`;
+      : `<th class="yt"><button type="button" data-py="${c.y}" aria-expanded="${planOpenY.has(c.y)}" title="${(planOpenY.has(c.y)?'Fold the months of '+c.y:'Show the months of '+c.y)+(c.y===y0 && AY ? ' \u00b7 actual so far + plan' : '')}">${planOpenY.has(c.y)?'&#9666;':'&#9656;'} ${c.y}${c.y===y0 && AY ? '<small> act+plan</small>' : ''}${perM ? '<small> /m</small>' : ''}</button></th>`).join('')+`</tr>`;
   const anyOpen=planOpenY.size>0, at=PLAN.at ? new Date(PLAN.at) : null;
   const detAll=!planShutG.size && planDetKeys.length>0 && planDetKeys.every(k=>planOpenL.has(k)),
         detNone=!planDetKeys.some(k=>planOpenL.has(k)) && planGrpKeys.every(g=>planShutG.has(g));
@@ -5846,7 +5856,7 @@ function planInit(){
     else { /* a folded year: spread the total evenly over its months (the rounding lands on the last one) */
       const y=+t.dataset.y, yms=planMonths().filter(mi=>Math.floor(mi/12)===y); if(!yms.length) return;
       /* this year's cell shows actual so far + plan: only the plan part is spread */
-      const pv=v-(+t.dataset.a||0);
+      const pv=v*(+t.dataset.n||1)-(+t.dataset.a||0);   // Avg/m on: the typed amount is a month, times the months
       planPush(); const each=Math.round(pv/yms.length); let left=pv;
       yms.forEach((mi,i)=>{ const x= i===yms.length-1 ? left : each; r.m[mi]=x; left-=x; }); }
     planNote=''; planSave(); setTimeout(planRedraw,0);
