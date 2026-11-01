@@ -854,6 +854,9 @@
 .plan th:not(.n):not(.am), .plan td:not(.n):not(.am){width:74px; min-width:74px; max-width:74px;}
 .plan th.am, .plan td.am{width:92px; min-width:92px; max-width:92px;}
 .plan td input.pc{width:100%; box-sizing:border-box;}
+.plan td.am.dev{background:#3a1d22 !important; box-shadow:inset 0 0 0 2px #e58a8a;} .plan td.am.dev .av{color:#ffb3b3;}
+.plan tr:has(td.am.dev) td.n{color:#ff9d9d;}
+.plantools button[data-pa="dev"][aria-pressed="true"]{border-color:#e58a8a; color:#ffb3b3;}
 .pmv{display:none;} .pmv button[aria-pressed="true"]{background:#24345a; border-color:#8fb0ff;}
   .plan th button{background:none; border:0; color:var(--ink); font:inherit; font-weight:700; cursor:pointer; padding:2px 4px; border-radius:5px;}
   .plan th button:hover{background:#1d2840;}
@@ -1370,7 +1373,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v2.31';
+const APP_VER='v2.32';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 const NEED_COLS=["YEAR","MONTH","ACCOUNT","LABEL","DETAIL","ASSETCLASSDETAILS","VARIABLE","TYPE","CATEGORY1","CATEGORY3","VALUE"];
 const SLIM_KEY="fs2-cols-v1";
@@ -4951,6 +4954,8 @@ const PLAN_GC={Needs:'var(--needs)',Wants:'var(--wants)',Liberality:'var(--liber
 let PLAN=null, planUndo=[], planNote='', planFocus=null, planMenuR=null;
 const planOpenY=new Set(), planShutG=new Set(), planOpenL=new Set();
 let planMobMi=null;   // phone: the one month shown
+let planDev=null, planDevLast=0.1;   // "Highlight over plan": share above plan that lights up (null = off)
+try{ const o=JSON.parse(localStorage.getItem('fs2-plan-dev-v1')||'null'); if(o && isFinite(o.v)){ planDevLast=o.v; if(o.on) planDev=o.v; } }catch(e){}
 let planMobV='m'; try{ planMobV=localStorage.getItem('fs2-plan-mobv-v1')==='y' ? 'y' : 'm'; }catch(e){}   // phone: Month / Year view
 /* display names (1 Nov 2026): the sheet's ALL-CAPS names read as "Holidays", "Salary rise";
    names already in mixed case ("TFRTaxes", "Work income") stay as they are */
@@ -5513,10 +5518,11 @@ function renderPlanCore(force){
     const none=!Math.round(a) && !Math.round(p);
     const cls=none ? 'none' : kind==='I' ? 'inc' : kind==='S' ? (a<0 ? 'over' : 'inc')
       : a>p+0.5 ? 'over' : a>p*pace+0.5 ? 'warn' : 'ok';
+    const dev=planDev!=null && kind==='E' && a>p*(1+planDev)+0.5 ? ' dev' : '';   // "Highlight over plan" (1 Nov 2026)
     const w=p>0 ? Math.max(0,Math.min(100, a/p*100)) : (a>0 ? 100 : 0);
     const pct=p>0 ? Math.round(a/p*100)+'% of plan' : 'no plan';
     const tip=`${MONL} so far: ${fmt(a)} \u00b7 plan ${fmt(p)} \u00b7 ${pct}`+(kind==='E' && p>0 ? ` \u00b7 at today's pace: ${fmt(p*pace)}` : '');
-    return `<td class="am ${cls}" title="${planEsc(tip)}"><span class="av">${fv(a)} <span class="ap">/ ${fv(p)}</span></span>`+
+    return `<td class="am ${cls}${dev}" title="${planEsc(tip)}"><span class="av">${fv(a)} <span class="ap">/ ${fv(p)}</span></span>`+
       (none ? '' : `<span class="bar"><i style="width:${w.toFixed(1)}%"></i>${kind!=='S' && p>0 ? `<b style="left:${(pace*100).toFixed(1)}%"></b>` : ''}</span>`)+`</td>`; };
   const amL=L=>{ const k=L.length && L.every(it=>it.r.k==='I') ? 'I' : 'E';
     return amTd(L.reduce((s,it)=>s+actOf(it),0), L.reduce((s,it)=>s+plOf(it),0), k); };
@@ -5599,9 +5605,7 @@ function renderPlanCore(force){
     `<button type="button" data-pa="detclose"${detNone?' disabled':''} title="Close every group (NEEDS, WANTS, ...) and every label's details">Collapse all</button>`+
     `<button type="button" data-pa="actual" aria-pressed="${planAmOn}" title="Show or hide this month's actual vs plan">${planAmOn?'Hide':'Show'} ${MONL} actual</button>`+
     `<button type="button" data-pa="undo"${planUndo.length?'':' disabled'}>Undo</button>`+
-    `<button type="button" data-pa="export">Export</button>`+
-    `<button type="button" data-pa="import">Import</button>`+
-    `<button type="button" data-pa="restart" title="Fill every row again with the last-12-month averages">Restart</button></div>`+
+    `<button type="button" data-pa="dev" aria-pressed="${planDev!=null}" title="Highlight this month's spend above plan by more than a %">${planDev!=null ? 'Over plan &gt;'+Math.round(planDev*100)+'% \u2715' : 'Highlight over plan'}</button></div>`+
     `<div class="planscroll"><table class="plan${mob && planMobV!=='y' ? ' pfit' : ''}"><thead>${head}</thead><tbody>${body}</tbody></table></div>`+
     `<div class="plansettings">${YT.box}${fcBoxHtml(fc, px, ms)}</div>`;   // settings under the table (1 Nov 2026)
   const sc2=wrap.querySelector('.planscroll'); sc2.scrollLeft=sl; sc2.scrollTop=st;
@@ -5770,7 +5774,10 @@ function planInit(){
     else if(ds.pa==='detopen' || ds.pa==='detclose'){ if(Date.now()-planDetAt>1500) planDet(ds.pa); }
     else if(ds.pa==='undo'){ if(!planUndo.length) return; PLAN.rows=JSON.parse(planUndo.pop()); planNote='Undone.'; planSave(); renderPlan(true); }
     else if(ds.pa==='actual'){ planAmOn=!planAmOn; try{ localStorage.setItem(PLAN_AM_KEY, planAmOn?'1':'0'); }catch(e){} renderPlan(true); }
-  else if(ds.pa==='export') planExport();
+    else if(ds.pa==='dev'){ if(planDev!=null) planDev=null; else { const s=window.prompt('Highlight spend above plan by more than (%):', String(Math.round(planDevLast*100))); if(s==null) return;
+      const v=parseFloat(String(s).replace(',','.').replace('%','')); if(!isFinite(v) || v<0) return; planDev=planDevLast=v/100; }
+      try{ localStorage.setItem('fs2-plan-dev-v1', JSON.stringify({on:planDev!=null, v:planDevLast})); }catch(x){} renderPlan(true); }
+    else if(ds.pa==='export') planExport();
     else if(ds.pa==='import') file.click();
     else if(ds.pa==='restart'){ if(!window.confirm('Fill the whole plan again with your last-12-month averages?\nUndo brings your plan back.')) return;
       planPush(); PLAN.rows=planSeed().rows; PLAN.incSeeded=true; planNote='Filled again with your last-12-month averages.'; planSave(); renderPlan(true); }
