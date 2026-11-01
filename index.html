@@ -1328,7 +1328,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v2.24';
+const APP_VER='v2.25';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 const NEED_COLS=["YEAR","MONTH","ACCOUNT","LABEL","DETAIL","ASSETCLASSDETAILS","VARIABLE","TYPE","CATEGORY1","CATEGORY3","VALUE"];
 const SLIM_KEY="fs2-cols-v1";
@@ -4855,7 +4855,9 @@ let FC=null, fcErr='', fcOpen=false, fcLoading=false, AMZN_PX=null, amznBusy=fal
 /* pure: any stored object -> valid settings (bad or missing fields take the defaults) */
 function fcNorm(o, nowYear){
   o=(o && typeof o==='object') ? o : {};
-  const n=(x,lo,hi,d)=>{ x=Number(x); return (x!=null && isFinite(x) && x>=lo && x<=hi) ? x : d; };
+  /* blank (null / '') = the default. Fix 1 Nov 2026: Number(null) is 0, so a cleared
+     per-year target was saved as 0 % and "back to FIRE" became a 0 % override */
+  const n=(x,lo,hi,d)=>{ if(x==null || x==='') return d; x=Number(x); return (isFinite(x) && x>=lo && x<=hi) ? x : d; };
   const ym=s=> typeof s==='string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(s);
   let rsu=(Array.isArray(o.rsu)?o.rsu:[]).filter(x=>x && ym(x.date) && Number(x.shares)>0)
     .map(x=>({date:x.date, shares:Number(x.shares)}));
