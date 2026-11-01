@@ -1326,7 +1326,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v2.21';
+const APP_VER='v2.22';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 const NEED_COLS=["YEAR","MONTH","ACCOUNT","LABEL","DETAIL","ASSETCLASSDETAILS","VARIABLE","TYPE","CATEGORY1","CATEGORY3","VALUE"];
 const SLIM_KEY="fs2-cols-v1";
@@ -5192,7 +5192,9 @@ function ytYears(real, plan, cm, y0, y1){
 }
 /* the targets of year y: its own (tYears) where set, else the defaults tSafe / tTot */
 function ytTarget(fc, y){ const o=(fc.tYears||{})[y]||{};
-  return {s: o.s!=null ? o.s : fc.tSafe, t: o.t!=null ? o.t : fc.tTot, own: o.s!=null || o.t!=null}; }
+  return {s: o.s!=null ? o.s : fc.tSafe, t: o.t!=null ? o.t : tTotDef(fc), own: o.s!=null || o.t!=null}; }
+/* default total target = FIRE "Minimum save" when known, else the typed one */
+const tTotDef=fc=> typeof FIRE_NEED==='number' ? FIRE_NEED : fc.tTot;
 /* the month in progress (27 Oct 2026): per category the BIGGER of what happened so far and
    what the plan says (the month is not over: a planned taxi not yet paid still counts, a
    spend already above plan counts as spent). Used by the Plan page outlook and by Trends,
@@ -5251,7 +5253,9 @@ function ytBoxHtml(fc, px){
   const num=(f,v,lab)=>`<label>${lab} <input class="fcin num" data-fc="${f}" type="text" inputmode="decimal" value="${String(Math.round(v*1000)/10).replace('.',',')}" aria-label="${lab} %">%</label>`;
   return {status, box:`<details class="fcbox ytbox" id="ytbox"${ytOpen?' open':''}><summary>Savings targets \u00b7 ${y0} outlook ${pc(cur.safeRate)} vs ${pc(T0.s)} `+
     `<span class="ytchip ${ok(cur.safeRate,T0.s)}">${cur.safeRate!=null && cur.safeRate>=T0.s ? 'on track' : 'off track'}</span> \u00b7 ${nOn} of ${Y.length} years on target</summary>`+
-    `<div class="fcrow">${num('tSafe',fc.tSafe,'Default safe target')}${num('tTot',fc.tTot,'Default total target')}<span class="fcsub">Used by every year without its own. 0 = no target.</span></div>`+
+    `<div class="fcrow">${num('tSafe',fc.tSafe,'Default safe target')}`+
+    (typeof FIRE_NEED==='number' ? `<label>Default total target <b>${pc(FIRE_NEED)}</b> <span class="fcsub">= FIRE minimum save</span></label>` : num('tTot',fc.tTot,'Default total target'))+
+    `<span class="fcsub">Used by every year without its own. 0 = no target.</span></div>`+
     `<div class="fcsub"><b>${y0}</b></div>`+
     meter('Safe savings', cur.ytd && cur.ytd.safeRate, cur.safeRate, T0.s)+
     meter('Total savings', cur.ytd && cur.ytd.totRate, cur.totRate, T0.t)+
@@ -5426,7 +5430,7 @@ function renderPlanCore(force){
   const msg=planNote ? `<b>${planEsc(planNote)}</b>` : fcErr ? `<b>${planEsc(fcErr)}</b>` :
     `Saved${at?' \u00b7 '+at.toLocaleDateString()+' '+at.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):''}. Export keeps a copy.`;
   const sc=wrap.querySelector('.planscroll'), sl=sc?sc.scrollLeft:0, st=sc?sc.scrollTop:0;
-  const YT=ytBoxHtml(fc, px);
+  const YT=ytBoxHtml(fc, px); fireNeedRefresh();
   wrap.innerHTML=YT.status+`<div class="plantools"><span class="planmsg" role="status">${msg}</span>`+
     `<button type="button" data-pa="years">${anyOpen?'Fold all years':'Show all months'}</button>`+
     `<button type="button" data-pa="detopen"${detAll?' disabled':''} title="Open every group and every label's details">Expand all</button>`+
@@ -6653,9 +6657,29 @@ function fireCompute(P, B){
   res.rows=fireRows(res); res.order=fireHeatOrder(res.rows);
   res.solve=fireSolveAge(P, B); res.today=fireOk(P, B, B.m0); res.in1=fireOk(P, B, B.m0+12);
   res.save=fireSaveNeed(res.inp, res.R, P.n, P.safeAge, 1-P.target);
+  fireNeedSet(res.save && res.save.need!=null ? Math.max(0, res.save.need) : null);
   res.ms=Date.now()-t0;
   FIRE_RES=res; FIRE_FP=fp; if(FIRE_HL!=null && FIRE_HL>=P.n) FIRE_HL=null;
   return res;
+}
+/* FIRE "Minimum save" -> the Plan page's default total target (1 Nov 2026). Kept on this
+   device; the Plan page works it out in the background when the FIRE page was not opened. */
+const FIRE_NEED_KEY='fs2-fire-need-v1';
+let FIRE_NEED=null; try{ const v=JSON.parse(localStorage.getItem(FIRE_NEED_KEY)||'null'); if(typeof v==='number' && isFinite(v)) FIRE_NEED=v; }catch(e){}
+function fireNeedSet(v){
+  v=v==null ? null : Math.round(v*1000)/1000;               // 0.1 % steps, like the % boxes
+  if(v===FIRE_NEED) return false; FIRE_NEED=v;
+  try{ localStorage.setItem(FIRE_NEED_KEY, JSON.stringify(v)); }catch(e){}
+  return true;
+}
+let fireNeedT=0;
+function fireNeedRefresh(){
+  clearTimeout(fireNeedT);
+  fireNeedT=setTimeout(()=>{ try{
+    const before=FIRE_NEED, B=fireBase(); if(!B) return;
+    fireCompute(fireGet(), B);                              // cached: free when nothing changed
+    if(FIRE_NEED!==before && pageOn('plan')) renderPlan(true);
+  }catch(e){ console.warn('fireNeedRefresh', e); } }, 400);
 }
 function fireHeroHtml(res, B){
   const {P, inp, st, avg}=res;
