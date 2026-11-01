@@ -925,16 +925,21 @@
     /* phone (1 Nov 2026): names on one line, cut with "..." (no "RESTAUR/ANTS" breaks), group
        names not in capitals, no "+" buttons (add rows on the computer), tools in one
        swipeable line, 12M column slimmer, taller rows to tap */
-    .plan .n{width:112px; min-width:112px; max-width:112px; font-size:11.5px;}
-    .plan td.n .nm > span, .plan td.n button.tg{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; word-break:normal;}
-    .plan tr.g td.n{text-transform:none; letter-spacing:0; font-size:11.5px;}
+    table.plan{width:100%; font-size:13px;}
+    .plan .n{width:auto; min-width:120px; max-width:150px; font-size:12.5px;}
+    .plan td.n .nm > span, .plan td.n button.tg{white-space:normal; word-break:normal; overflow-wrap:normal; line-height:1.2;}
+    .plan tr.g td.n{text-transform:none; letter-spacing:0; font-size:12.5px;}
     .plan tr.l td.n{padding-left:10px;} .plan tr.d td.n{padding-left:18px;}
-    .plan td.n button[data-padd], .plan td.n button[data-paddl]{display:none;}
-    .plan th,.plan td{padding:5px 4px;}
-    .plan .ref{font-size:10.5px; min-width:0;}
-    .plan thead th.ref{font-size:9.5px; white-space:normal; width:38px;}
-    .plan .am{min-width:66px;}
-    .plan input.pc{width:50px; padding:4px 2px;}
+    .plan th,.plan td{padding:6px 4px;}
+    .plan .ref{font-size:11px;}
+    .plan thead th.ref{font-size:9.5px; white-space:normal;}
+    .plan .am{min-width:64px;}
+    /* 16px: iPhone zooms into any box with smaller text when you tap it */
+    .plan input.pc{width:62px; padding:6px 3px; font-size:16px; border-color:var(--grid); background:var(--bg);}
+    .plan th.pmob{white-space:nowrap;} .plan th.pmob span{font-size:12px; color:var(--ink);}
+    .plan th.pmob button{font-size:20px; line-height:1; padding:0 8px; color:#8fb0ff;}
+    .plan th.pmob button:disabled{opacity:.3;}
+    .plantools button[data-pa="years"]{display:none;}
     .planscroll{max-height:calc(100vh - 170px);}
     /* tools: one line you swipe sideways; the "Saved" note small above it */
     .plantools{padding:0 8px 6px; gap:5px; flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none;}
@@ -4924,6 +4929,10 @@ const PLAN_GC={Needs:'var(--needs)',Wants:'var(--wants)',Liberality:'var(--liber
   'Work income':'var(--income)','Non-work income':'var(--income)','Other income':'var(--income)',Inflation:'#e7c14a'};
 let PLAN=null, planUndo=[], planNote='', planFocus=null, planMenuR=null;
 const planOpenY=new Set(), planShutG=new Set(), planOpenL=new Set();
+let planMobMi=null;   // phone: the one month shown
+const PLAN_MQ=window.matchMedia ? window.matchMedia('(max-width:680px)') : null;
+const planMob=()=> !!(PLAN_MQ && PLAN_MQ.matches);
+if(PLAN_MQ && PLAN_MQ.addEventListener) PLAN_MQ.addEventListener('change', ()=>{ if(typeof renderPlan==='function') renderPlan(true); });
 let planDetKeys=[], planGrpKeys=[], planFoldOnOpen=true;   // every "group|label" that has details / every group shown (filled by renderPlan)
 /* the same list read straight from the plan rows, so Expand all never depends on what the
    last redraw left behind (27 Oct 2026: it did nothing until "Show all months" was clicked) */
@@ -5411,7 +5420,12 @@ function renderPlanCore(force){
   if(planFoldOnOpen) planOpenY.add(y0);   // the page opens with this year's months shown (1 Nov 2026)
   const MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const cols=[];
-  for(let y=y0; y<=fc.endYear; y++){
+  /* phone (1 Nov 2026): ONE month at a time (‹ › to move) + its year total, so names and
+     amounts fit and every box is big enough to tap */
+  const mob=planMob();
+  if(mob){ if(planMobMi==null || planMobMi<ms[0] || planMobMi>ms[ms.length-1]) planMobMi=ms[0];
+    cols.push({mi:planMobMi}); cols.push({y:Math.floor(planMobMi/12)}); }
+  else for(let y=y0; y<=fc.endYear; y++){
     if(planOpenY.has(y)) ms.forEach(mi=>{ if(Math.floor(mi/12)===y) cols.push({mi}); });
     cols.push({y});
   }
@@ -5534,7 +5548,10 @@ function renderPlanCore(force){
   planFoldOnOpen=false;
   const head=`<tr><th class="n">Category</th><th class="ref" title="Average per month, last 12 complete months">12M avg</th>`+
     (planAmOn ? `<th class="am" title="This month: actual so far / plan. The white tick is today's pace.">${MONL} actual<small>day ${dN.getDate()} of ${dim}</small></th>` : '')+
-    cols.map(c=> c.mi!=null ? `<th>${MON[c.mi%12]} ${String(Math.floor(c.mi/12)).slice(2)}</th>`
+    cols.map(c=> c.mi!=null && mob ? `<th class="pmob"><button type="button" data-pm="-1"${c.mi<=ms[0]?' disabled':''} aria-label="Month before">\u2039</button>`+
+        `<span>${MON[c.mi%12]} ${String(Math.floor(c.mi/12)).slice(2)}</span><button type="button" data-pm="1"${c.mi>=ms[ms.length-1]?' disabled':''} aria-label="Next month">\u203a</button></th>`
+      : c.y!=null && mob ? `<th class="yt">${c.y}</th>`
+      : c.mi!=null ? `<th>${MON[c.mi%12]} ${String(Math.floor(c.mi/12)).slice(2)}</th>`
       : `<th class="yt"><button type="button" data-py="${c.y}" aria-expanded="${planOpenY.has(c.y)}" title="${planOpenY.has(c.y)?'Fold the months of '+c.y:'Show the months of '+c.y}">${planOpenY.has(c.y)?'&#9666;':'&#9656;'} ${c.y}</button></th>`).join('')+`</tr>`;
   const anyOpen=planOpenY.size>0, at=PLAN.at ? new Date(PLAN.at) : null;
   const detAll=!planShutG.size && planDetKeys.length>0 && planDetKeys.every(k=>planOpenL.has(k)),
@@ -5707,6 +5724,7 @@ function planInit(){
     const t=e.target.closest ? e.target.closest('button') : null; if(!t || !wrap.contains(t)) return;
     const ds=t.dataset;
     if(ds.fca!=null){ fcAct(ds.fca, ds.i!=null ? +ds.i : null); return; }
+    if(ds.pm!=null){ planMobMi=(planMobMi||planStart())+(+ds.pm); renderPlan(true); return; }
     if(ds.py!=null){ const y=+ds.py; planOpenY.has(y)?planOpenY.delete(y):planOpenY.add(y); renderPlan(true); }
     else if(ds.pg!=null){ planShutG.has(ds.pg)?planShutG.delete(ds.pg):planShutG.add(ds.pg); renderPlan(true); }
     else if(ds.pl!=null){ planOpenL.has(ds.pl)?planOpenL.delete(ds.pl):planOpenL.add(ds.pl); renderPlan(true); }
