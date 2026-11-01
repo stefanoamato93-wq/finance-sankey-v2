@@ -908,9 +908,10 @@
   .ytchip{margin-left:6px; padding:0 6px; border-radius:8px; font-size:10.5px; font-weight:700;}
   .ytchip.ok{background:#1d3a2a; color:#5fc28a;} .ytchip.over{background:#3a1d22; color:#e58a8a;}
 /* Plan page top line (1 Nov 2026): big OK / NOT OK for this year, small flags for the others */
-.ytstat{display:flex; flex-wrap:wrap; align-items:center; gap:4px 14px; margin:4px 0 6px; padding:10px 14px; border-radius:10px; border:1px solid var(--grid);}
+.ytstat{display:flex; flex-wrap:wrap; align-items:center; gap:4px 10px; margin:4px 0 6px; padding:5px 10px; border-radius:10px; border:1px solid var(--grid);}
+.ytstat .why b.ok{color:#5fc28a;} .ytstat .why b.over{color:#e58a8a;} .ytstat .ytflags{margin:0 0 0 auto; gap:4px;}
 .ytstat.ok{background:#14271d; border-color:#2b5a3d;} .ytstat.over{background:#2a1418; border-color:#5a2b33;}
-.ytstat .big{font-size:26px; font-weight:800; letter-spacing:.5px;} .ytstat.ok .big{color:#5fc28a;} .ytstat.over .big{color:#e58a8a;}
+.ytstat .big{font-size:18px; font-weight:800; letter-spacing:.5px;} .ytstat.ok .big{color:#5fc28a;} .ytstat.over .big{color:#e58a8a;}
 .ytstat .yr{font-size:15px; font-weight:700; color:var(--ink);} .ytstat .why{color:var(--muted); font-size:12px;}
 .ytstat .ytmsg{margin:0; flex-basis:100%;}
 .ytflags{display:flex; flex-wrap:wrap; gap:6px; margin:0 0 10px; font-size:11.5px; color:var(--muted); align-items:center;}
@@ -960,7 +961,7 @@
     .plan.pfit td.n button.tw{width:14px;}
     /* 16px: iPhone zooms into any box with smaller text when you tap it */
     .plan input.pc{padding:6px 3px; font-size:16px; border-color:var(--grid); background:var(--bg);}
-    .pmv{display:inline-flex; gap:0; flex:0 0 auto;} .pmv button:first-child{border-radius:7px 0 0 7px;} .pmv button:last-child{border-radius:0 7px 7px 0; margin-left:-1px;}
+    .pmv{display:inline-flex; gap:0; flex:0 0 auto;} .pmv button:first-child{border-radius:7px 0 0 7px;} .pmv button:last-child{border-radius:0 7px 7px 0; margin-left:-1px;} .pmv button{position:relative;} .pmv button[aria-pressed="true"]{z-index:1;}
     .plan th.pmob span{font-size:12px; color:var(--ink);}
     .plan th.pmob button{font-size:20px; line-height:1; padding:0 8px; color:#8fb0ff;}
     .plan th.pmob button:disabled{opacity:.3;}
@@ -971,7 +972,7 @@
     .plantools::-webkit-scrollbar{display:none;}
     .plantools .planmsg{display:none;}
     .plantools button{padding:6px 9px; flex:0 0 auto; white-space:nowrap;}
-    .ytstat{padding:8px 10px; margin:4px 8px 6px;} .ytstat .big{font-size:22px;}
+    .ytstat{padding:5px 8px; margin:4px 8px 6px;} .ytstat .big{font-size:17px;}
     .ytflags{margin:0 8px 8px;}
     /* setting boxes: wide tables scroll inside their box instead of running over the page */
     .fcbox{margin:0 8px 8px; padding:6px 8px; min-width:0;}
@@ -1374,7 +1375,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v2.33';
+const APP_VER='v2.34';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 const NEED_COLS=["YEAR","MONTH","ACCOUNT","LABEL","DETAIL","ASSETCLASSDETAILS","VARIABLE","TYPE","CATEGORY1","CATEGORY3","VALUE"];
 const SLIM_KEY="fs2-cols-v1";
@@ -5396,12 +5397,12 @@ function ytBoxHtml(fc, px){
   const yOk=e=>{ const T=ytTarget(fc,e.y); if(!T.s && !T.t) return null;
     return (!T.s || e.safeRate!=null && e.safeRate>=T.s) && (!T.t || e.totRate!=null && e.totRate>=T.t); };
   const cOk=yOk(cur), cCls=cOk==null ? '' : cOk ? 'ok' : 'over';
-  const status=`<div class="ytstat ${cCls}" role="status"><span class="big">${cOk==null ? 'NO TARGET' : cOk ? 'OK' : 'NOT OK'}</span>`+
-    `<span class="yr">${y0}</span><span class="why">safe savings ${pc(cur.safeRate)} vs ${pc(T0.s)}`+
-    `${T0.t ? ` \u00b7 total ${pc(cur.totRate)} vs ${pc(T0.t)}` : ''} \u00b7 actual + plan</span>`+
-    (msg?`<div class="ytmsg ${room>=0?'ok':'over'}">${msg}</div>`:'')+`</div>`+
-    (Y.length>1 ? `<div class="ytflags">`+Y.slice(1).map(e=>{ const o=yOk(e);
-      return `<span class="ytchip ${o==null?'':o?'ok':'over'}" title="${e.y}: safe ${pc(e.safeRate)}, total ${pc(e.totRate)}">${e.y} ${o==null?'\u2013':o?'\u2713':'\u2717'}</span>`; }).join('')+`</div>` : '');
+  /* compact (1 Nov 2026): OK / NOT OK + year, the two rates against their targets, the later years as chips */
+  const st=(r,t)=> `<b class="${r!=null && r>=t ? 'ok' : 'over'}">${pc(r)}</b> / ${pc(t)}`;
+  const status=`<div class="ytstat ${cCls}" role="status" title="${planEsc(msg)}"><span class="big">${cOk==null ? '\u2013' : cOk ? 'OK' : 'NOT OK'}</span>`+
+    `<span class="yr">${y0}</span><span class="why">Safe ${st(cur.safeRate, T0.s)}${T0.t ? ` \u00b7 Total ${st(cur.totRate, T0.t)}` : ''}</span>`+
+    (Y.length>1 ? `<span class="ytflags">`+Y.slice(1).map(e=>{ const o=yOk(e);
+      return `<span class="ytchip ${o==null?'':o?'ok':'over'}" title="${e.y}: safe ${pc(e.safeRate)}, total ${pc(e.totRate)}">${String(e.y).slice(2)}${o==null?'\u2013':o?'\u2713':'\u2717'}</span>`; }).join('')+`</span>` : '')+`</div>`;
   const num=(f,v,lab)=>`<label>${lab} <input class="fcin num" data-fc="${f}" type="text" inputmode="decimal" value="${String(Math.round(v*1000)/10).replace('.',',')}" aria-label="${lab} %">%</label>`;
   return {status, box:`<details class="fcbox ytbox" id="ytbox"${ytOpen?' open':''}><summary>Savings targets \u00b7 ${y0} outlook ${pc(cur.safeRate)} vs ${pc(T0.s)} `+
     `<span class="ytchip ${ok(cur.safeRate,T0.s)}">${cur.safeRate!=null && cur.safeRate>=T0.s ? 'on track' : 'off track'}</span> \u00b7 ${nOn} of ${Y.length} years on target</summary>`+
