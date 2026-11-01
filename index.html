@@ -922,14 +922,27 @@
   @media (max-width:680px){
     .planwrap{margin:8px 8px 30px; min-width:0;}
     .planhead h2{font-size:16px;}
-    .plan .n{width:118px; min-width:118px; max-width:118px; font-size:11.5px;}
-    .plan th,.plan td{padding:3px 4px;}
-    .plan .am{min-width:70px;}
-    .plan input.pc{width:52px; padding:3px 2px;}
-    /* tools: the message on its own line, buttons wrap under it */
-    .plantools{padding:0 8px 8px; gap:5px;}
-    .plantools .planmsg{flex:1 1 100%;}
-    .plantools button{padding:6px 9px;}
+    /* phone (1 Nov 2026): names on one line, cut with "..." (no "RESTAUR/ANTS" breaks), group
+       names not in capitals, no "+" buttons (add rows on the computer), tools in one
+       swipeable line, 12M column slimmer, taller rows to tap */
+    .plan .n{width:112px; min-width:112px; max-width:112px; font-size:11.5px;}
+    .plan td.n .nm > span, .plan td.n button.tg{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; word-break:normal;}
+    .plan tr.g td.n{text-transform:none; letter-spacing:0; font-size:11.5px;}
+    .plan tr.l td.n{padding-left:10px;} .plan tr.d td.n{padding-left:18px;}
+    .plan td.n button[data-padd], .plan td.n button[data-paddl]{display:none;}
+    .plan th,.plan td{padding:5px 4px;}
+    .plan .ref{font-size:10.5px; min-width:0;}
+    .plan thead th.ref{font-size:9.5px; white-space:normal; width:38px;}
+    .plan .am{min-width:66px;}
+    .plan input.pc{width:50px; padding:4px 2px;}
+    .planscroll{max-height:calc(100vh - 170px);}
+    /* tools: one line you swipe sideways; the "Saved" note small above it */
+    .plantools{padding:0 8px 6px; gap:5px; flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none;}
+    .plantools::-webkit-scrollbar{display:none;}
+    .plantools .planmsg{display:none;}
+    .plantools button{padding:6px 9px; flex:0 0 auto; white-space:nowrap;}
+    .ytstat{padding:8px 10px; margin:4px 8px 6px;} .ytstat .big{font-size:22px;}
+    .ytflags{margin:0 8px 8px;}
     /* setting boxes: wide tables scroll inside their box instead of running over the page */
     .fcbox{margin:0 8px 8px; padding:6px 8px; min-width:0;}
     .fcbox table{display:block; max-width:100%; overflow-x:auto;}
@@ -5519,7 +5532,7 @@ function renderPlanCore(force){
     `<tr class="tot"><td class="n">Total income</td>${sums(inc)}</tr>`+groupsHtml(tree(PLAN_IGROUPS.slice(0,2),inc), PLAN_IGROUPS.slice(0,2))+
     `<tr class="tot"><td class="n">Total expenses</td>${sums(exp)}</tr>`+groupsHtml(tree(PLAN_GROUPS.concat(['Inflation']),exp), PLAN_GROUPS);
   planFoldOnOpen=false;
-  const head=`<tr><th class="n">Category</th><th class="ref" title="Average per month, last 12 complete months">Last 12M /m</th>`+
+  const head=`<tr><th class="n">Category</th><th class="ref" title="Average per month, last 12 complete months">12M avg</th>`+
     (planAmOn ? `<th class="am" title="This month: actual so far / plan. The white tick is today's pace.">${MONL} actual<small>day ${dN.getDate()} of ${dim}</small></th>` : '')+
     cols.map(c=> c.mi!=null ? `<th>${MON[c.mi%12]} ${String(Math.floor(c.mi/12)).slice(2)}</th>`
       : `<th class="yt"><button type="button" data-py="${c.y}" aria-expanded="${planOpenY.has(c.y)}" title="${planOpenY.has(c.y)?'Fold the months of '+c.y:'Show the months of '+c.y}">${planOpenY.has(c.y)?'&#9666;':'&#9656;'} ${c.y}</button></th>`).join('')+`</tr>`;
