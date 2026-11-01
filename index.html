@@ -1326,7 +1326,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v2.22';
+const APP_VER='v2.23';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 const NEED_COLS=["YEAR","MONTH","ACCOUNT","LABEL","DETAIL","ASSETCLASSDETAILS","VARIABLE","TYPE","CATEGORY1","CATEGORY3","VALUE"];
 const SLIM_KEY="fs2-cols-v1";
@@ -5192,7 +5192,8 @@ function ytYears(real, plan, cm, y0, y1){
 }
 /* the targets of year y: its own (tYears) where set, else the defaults tSafe / tTot */
 function ytTarget(fc, y){ const o=(fc.tYears||{})[y]||{};
-  return {s: o.s!=null ? o.s : fc.tSafe, t: o.t!=null ? o.t : tTotDef(fc), own: o.s!=null || o.t!=null}; }
+  /* total target: every year = FIRE minimum save when known (1 Nov 2026), its own typed one is ignored */
+  return {s: o.s!=null ? o.s : fc.tSafe, t: typeof FIRE_NEED==='number' ? FIRE_NEED : o.t!=null ? o.t : fc.tTot, own: o.s!=null || o.t!=null}; }
 /* default total target = FIRE "Minimum save" when known, else the typed one */
 const tTotDef=fc=> typeof FIRE_NEED==='number' ? FIRE_NEED : fc.tTot;
 /* the month in progress (27 Oct 2026): per category the BIGGER of what happened so far and
@@ -5238,7 +5239,7 @@ function ytBoxHtml(fc, px){
     const rc=r==null ? '<td>\u2013</td>' : `<td class="${r>=0?'ok':'over'}" title="${r>=0?'Spare':'Spend less'}: ${fmt(Math.abs(r)/mo)} a month">${r>=0?'+':'\u2212'}${fmt(Math.abs(r))}</td>`;
     return `<tr><td>${e.y}${e.ytd?' <small>actual + plan</small>':' <small>plan</small>'}</td><td>${fmt(e.safe)}</td><td>${fmt(e.exp)}</td>`+
       `<td class="${ok(e.safeRate,T.s)}">${pc(e.safeRate)}</td><td>${tin('tys',e.y,T.s,o.s!=null,'Safe savings target')}</td>`+
-      `<td class="${ok(e.totRate,T.t)}">${pc(e.totRate)}</td><td>${tin('tyt',e.y,T.t,o.t!=null,'Total savings target')}</td>${rc}</tr>`; }).join('');
+      `<td class="${ok(e.totRate,T.t)}">${pc(e.totRate)}</td><td>${typeof FIRE_NEED==='number' ? `<span title="FIRE minimum save">${pc(T.t)}</span>` : tin('tyt',e.y,T.t,o.t!=null,'Total savings target')}</td>${rc}</tr>`; }).join('');
   const nOn=Y.filter(e=>{ const T=ytTarget(fc,e.y); return T.s && e.safeRate!=null && e.safeRate>=T.s; }).length;
   /* top of the page: OK = every target the year has is met (safe, and total when set) */
   const yOk=e=>{ const T=ytTarget(fc,e.y); if(!T.s && !T.t) return null;
