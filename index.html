@@ -1374,7 +1374,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v2.45';
+const APP_VER='v2.46';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 /* self-update (1 Nov 2026): GitHub Pages lets phones keep the page up to 10 min, and a home-
    screen app resumed from the background keeps running its old code for hours. That old code
@@ -4434,10 +4434,12 @@ function qBulkCap(){ return Math.max(1, Math.min(BULK_MAX, Math.floor((TX ? TX.l
 function qBulkUndo(){ try{ return JSON.parse(localStorage.getItem(BULK_UNDO_KEY)||'null'); }catch(e){ return null; } }
 function qSelBar(){
   const u=qBulkUndo(), undo=u && u.n ? `<button type="button" class="qbtn" data-qsel="undo" title="Write back the ${u.n} rows deleted ${new Date(u.at).toLocaleString('en-GB')}">Undo last delete (${u.n})</button>` : '';
-  if(!qSelMode) return `<div class="qselbar"><span class="qsn"></span>${undo}<button type="button" class="qbtn" data-qsel="on">Select</button></div>`;
+  const ue=qBulkEditUndo(), undoE=ue && ue.n ? `<button type="button" class="qbtn" data-qsel="undoset" title="Put back the old values of the ${ue.n} rows edited ${new Date(ue.at).toLocaleString('en-GB')}">Undo last value edit (${ue.n})</button>` : '';
+  if(!qSelMode) return `<div class="qselbar"><span class="qsn"></span>${undo}${undoE}<button type="button" class="qbtn" data-qsel="dep">Depreciations</button><button type="button" class="qbtn" data-qsel="on">Select</button></div>`;
   const n=qSel.size, cap=qBulkCap();
-  return `<div class="qselbar"><span class="qsn">${n} selected \u00b7 max ${cap} per delete</span>`+
+  return `<div class="qselbar"><span class="qsn">${n} selected \u00b7 max ${cap}</span>`+
     `<button type="button" class="qbtn" data-qsel="shown">Tick shown</button><button type="button" class="qbtn" data-qsel="clear"${n?'':' disabled'}>Clear</button>`+
+    `<button type="button" class="qbtn" data-qsel="set"${n && n<=cap ? '' : ' disabled'}>Set value</button>`+
     `<button type="button" class="qbtn qdel" data-qsel="del"${n && n<=cap ? '' : ' disabled'}>Delete ${n}</button>`+
     `<button type="button" class="qbtn" data-qsel="off">Done</button></div>`;
 }
@@ -4472,6 +4474,99 @@ async function qBulkUndoRun(){
   try{ for(const ym in u.rows) await FS2.data.putTx(ym, u.rows[ym]);
     localStorage.removeItem(BULK_UNDO_KEY); dbAt=0; refreshDB(); renderQuery(true); alert(`Restored ${u.n} rows.`); }
   catch(e){ alert('Undo failed: '+((e && (e.code||e.message))||e)); }
+}
+/* ---- bulk value edit (2 Nov 2026) ----------------------------------------------------
+   In Select mode, "Set value" gives every ticked row the same amount. A plain number keeps
+   each row's own sign (50 on an expense = -50); type - or + to force the sign. Same cap as
+   delete, a confirm with old and new totals, and "Undo last value edit" puts the old rows back. */
+const BULK_EDIT_UNDO_KEY='fs2-bulkedit-v1';
+function qBulkEditUndo(){ try{ return JSON.parse(localStorage.getItem(BULK_EDIT_UNDO_KEY)||'null'); }catch(e){ return null; } }
+async function qBulkSetValue(){
+  if(!aprOn()){ alert(FS2.fake ? 'This is an archive: nothing can be edited.' : 'Editing works after Data \u2192 Switch to Firebase for good.'); return; }
+  const rows=[...qSel], n=rows.length, cap=qBulkCap();
+  if(!n) return;
+  if(n>cap){ alert(`At most ${cap} rows per edit. You ticked ${n}.`); return; }
+  const used=new Set(), hits=rows.map(r=>{ const h=qEditFind(r, used); if(h) used.add(h.ym+'|'+h.id); return h; });
+  if(hits.some(h=>!h)){ alert('Some rows were not found in the database. Reload and try again. Nothing was changed.'); return; }
+  const got=prompt(`New value for the ${n} ticked row${n===1?'':'s'} (\u20ac).\nA plain number keeps each row's sign; start with - or + to force it.`);
+  if(got==null) return;
+  const s=got.trim(), v=aprNum(s.replace(/^\+/,''));
+  if(!s || v==null || Number.isNaN(v)){ alert('Not a number. Nothing was changed.'); return; }
+  const forced=/^[+-]/.test(s), abs=Math.round(Math.abs(v)*100)/100;
+  const newV=t=> forced ? (s[0]==='-' ? -abs : abs) : ((+t.v||0)<0 ? -abs : abs);
+  const oldTot=hits.reduce((a,h)=>a+(+h.t.v||0),0), newTot=hits.reduce((a,h)=>a+newV(h.t),0);
+  if(!confirm(`Set ${n} row${n===1?'':'s'} to ${fmtE(forced ? newV({}) : abs)}?\n\nTotal now ${fmtE(oldTot)}\nTotal after ${fmtE(newTot)}`)) return;
+  const old={}, put={};
+  hits.forEach(h=>{ (old[h.ym]=old[h.ym]||{})[h.id]=h.t;
+    const nt=Object.assign({}, h.t, {v:newV(h.t)}); delete nt.live; (put[h.ym]=put[h.ym]||{})[h.id]=nt; });
+  try{ localStorage.setItem(BULK_EDIT_UNDO_KEY, JSON.stringify({at:Date.now(), n, rows:old})); }
+  catch(e){ if(!confirm('Could not keep an undo copy on this device. Edit anyway?')) return; }
+  try{
+    for(const ym in put) await FS2.data.putTx(ym, put[ym]);
+    qSel.clear(); qSelMode=false; dbAt=0; refreshDB(); renderQuery(true);
+  }catch(e){ alert('Edit stopped: '+((e && (e.code||e.message))||e)+'\nUse "Undo last value edit" to put the old values back.'); dbAt=0; refreshDB(); }
+}
+async function qBulkEditUndoRun(){
+  const u=qBulkEditUndo(); if(!u || !u.rows) return;
+  if(!aprOn()){ alert('Undo works after the cutover only.'); return; }
+  if(!confirm(`Put back the old values of the ${u.n} rows edited ${new Date(u.at).toLocaleString('en-GB')}?`)) return;
+  try{ for(const ym in u.rows) await FS2.data.putTx(ym, u.rows[ym]);
+    localStorage.removeItem(BULK_EDIT_UNDO_KEY); dbAt=0; refreshDB(); renderQuery(true); }
+  catch(e){ alert('Undo failed: '+((e && (e.code||e.message))||e)); }
+}
+/* ---- Depreciations editor (2 Nov 2026) -----------------------------------------------
+   One line per object that still depreciates (DETAIL "Depreciation", value < 0; key =
+   account | label | asset class detail, like autoRowsPlan). The monthly amount is the
+   object's newest Depreciation row. Saving changes this month's row (or the newest one);
+   the next months copy it, so the new amount carries on. 0 deletes that row: it stops. */
+function depObjects(){
+  const key=t=>norm(t.a)+'|'+norm(t.l)+'|'+norm(t.acd), hk=t=>norm(t.a)+'|'+norm(t.acd);
+  const book=new Map(), last=new Map();
+  for(const [ym,m] of FS_MONTHS) for(const id in (m.tx||{})){ const t=m.tx[id];
+    book.set(hk(t), (book.get(hk(t))||0)+(+t.v||0));
+    if(norm(t.dt)!=='DEPRECIATION' || (+t.v||0)>=0) continue;
+    const k=key(t), b=last.get(k), d=String(t.d||'');
+    if(!b || d>b.d || (d===b.d && ym>b.ym)) last.set(k, {ym, id, t, d}); }
+  const d=new Date(), nowYm=d.getFullYear()+'-'+pad2(d.getMonth()+1), prevYm=ymPrev(nowYm);
+  const done=String((FS_SETTINGS && FS_SETTINGS.depMonth)||'')>=nowYm;   // this month's copies already made
+  return [...last.values()].filter(o=>o.ym===nowYm || (o.ym===prevYm && !done))
+    .map(o=>Object.assign(o, {left:Math.round((book.get(hk(o.t))||0)*100)/100}))
+    .sort((a,b)=>String(a.t.l||'').localeCompare(String(b.t.l||'')));
+}
+function depEditOpen(){
+  const old=document.getElementById('depDlg'); if(old) old.remove();
+  const can=aprOn(), objs=can ? depObjects() : [];
+  const cap=x=>{ x=String(x||'\u2014'); return x.charAt(0)+x.slice(1).toLowerCase(); };
+  const dlg=document.createElement('dialog'); dlg.id='depDlg'; dlg.className='txdlg'; dlg.setAttribute('aria-labelledby','depH');
+  const rows=objs.map((o,i)=>`<tr><td>${planEsc(cap(o.t.l))}<span class="sub" style="display:block;color:var(--muted);font-size:11px">${planEsc(cap(o.t.acd||o.t.a))} \u00b7 left ${fmtE(o.left)}</span></td>`+
+    `<td style="text-align:right"><input data-di="${i}" type="text" inputmode="decimal" value="${String(Math.abs(+o.t.v||0)).replace('.',',')}" style="width:80px;text-align:right" autocomplete="off"></td></tr>`).join('');
+  const why=!can ? (FS2.fake ? 'This is an archive: nothing can be saved.' : 'Editing works after Data \u2192 Switch to Firebase for good.')
+    : !objs.length ? 'No object is depreciating right now.' : '';
+  dlg.innerHTML=`<h3 id="depH" tabindex="-1">Depreciations</h3>`+
+    `<p style="color:var(--muted);font-size:12px;margin:0 0 8px">\u20ac per month. Changes this month and the next ones. 0 stops it.</p>`+
+    (rows ? `<table class="q" style="width:100%"><tbody>${rows}</tbody></table>` : '')+
+    `<div class="txb"><button type="button" class="pri" id="depSave"${can && objs.length?'':' disabled'}>Save</button><button type="button" id="depClose">Cancel</button>`+
+    `<span class="txmsg" id="depMsg" role="status">${planEsc(why)}</span></div>`;
+  document.body.appendChild(dlg);
+  const msg=s=>{ dlg.querySelector('#depMsg').textContent=s; };
+  dlg.querySelector('#depClose').onclick=()=>dlg.close();
+  dlg.addEventListener('close',()=>dlg.remove());
+  dlg.querySelector('#depSave').onclick=async()=>{
+    const ch=[];
+    for(const inp of dlg.querySelectorAll('input[data-di]')){ const o=objs[+inp.getAttribute('data-di')], v=aprNum(inp.value);
+      if(v==null || Number.isNaN(v)){ msg(cap(o.t.l)+': not a number.'); inp.focus(); return; }
+      const nv=-Math.round(Math.abs(v)*100)/100; if(Math.abs(nv-(+o.t.v||0))>0.005) ch.push({o, nv}); }
+    if(!ch.length){ dlg.close(); return; }
+    dlg.querySelector('#depSave').disabled=true; msg('Saving\u2026');
+    try{
+      for(const {o,nv} of ch){
+        if(nv===0) await FS2.data.delTx(o.ym, [o.id]);
+        else { const nt=Object.assign({}, o.t, {v:nv}); delete nt.live; await FS2.data.putTx(o.ym, {[o.id]:nt}); } }
+      msg('Saved.'); dbAt=0; refreshDB(); renderQuery(true); setTimeout(()=>{ if(dlg.open) dlg.close(); }, 900);
+    }catch(e){ msg('Not saved: '+((e && (e.code||e.message))||e)); dlg.querySelector('#depSave').disabled=false; }
+  };
+  dlg.showModal();
+  const h3=dlg.querySelector('#depH'); if(h3) h3.focus({preventScroll:true});
 }
 function qTxTable(rows){
   const sorted=querySortTx(rows, q.sortTx), show=sorted.slice(0,qShown), s=q.sortTx;
@@ -4708,6 +4803,9 @@ function qInit(){
       else if(a==='shown'){ const cap=qBulkCap(); for(const r of qShowRows){ if(qSel.size>=cap) break; qSel.add(r); } }
       else if(a==='del'){ qBulkDelete(); return; }
       else if(a==='undo'){ qBulkUndoRun(); return; }
+    else if(a==='set'){ qBulkSetValue(); return; }
+    else if(a==='undoset'){ qBulkEditUndoRun(); return; }
+    else if(a==='dep'){ depEditOpen(); return; }
       renderQuery(true); return; }
     const er=t.closest('tr.er');
     if(er && qSelMode){ const r=qShowRows[+er.getAttribute('data-ti')]; if(qSel.has(r)) qSel.delete(r); else qSel.add(r); renderQuery(true); return; }
