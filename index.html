@@ -1374,7 +1374,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v2.46';
+const APP_VER='v2.47';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 /* self-update (1 Nov 2026): GitHub Pages lets phones keep the page up to 10 min, and a home-
    screen app resumed from the background keeps running its old code for hours. That old code
@@ -2817,6 +2817,31 @@ function rolling12(m, m0, m1){
   for(let mi=m0; mi<=m1; mi++){ s+=m[mi]||0; out.push(s); s-=m[mi-11]||0; }
   return out;
 }
+/* order + colours of the stacked layers of a picked entry, shared by R12M and the bars
+   (2 Nov 2026). In place, first = closest to the zero line.
+   Sankey order: macro groups in ORDER from the zero line up (Needs, Wants, Liberality,
+   Taxes / Work income, Non-work income), then Stable_Order inside each group (biggest at
+   the bottom of its group). Every label keeps its own layer: small ones are NOT folded
+   into an "Other" layer (Stefano's call, Oct 2026). */
+function cfStyleLayers(layers){
+  const gOrd=g=>{ const i=ORDER.indexOf(g); return i<0?99:i; };
+  layers.sort((a,b)=> gOrd(a.grp)-gOrd(b.grp) || rankCmp(a.key,b.key));
+  /* several groups stacked (Total expenses / Total income / Safe income): tint each
+     layer with its Sankey group colour, darker at the bottom of the group, lighter
+     towards the top, so the group bands read as blocks. One group: palette colours. */
+  const groups=[...new Set(layers.map(l=>l.grp))];
+  if(groups.length>1){
+    const hue=g=> GROUPCOL[g] || (g==='Work income' ? INCOME : g==='Non-work income' ? '#2fb7a6' : g==='Other income' ? '#7fc8a0' : '#9aa6bd');
+    const mix=(hex,t)=>{ const n=parseInt(hex.slice(1),16), c=[n>>16,(n>>8)&255,n&255]
+        .map(v=>Math.round(t<0 ? v*(1+t) : v+(255-v)*t)); return '#'+c.map(v=>v.toString(16).padStart(2,'0')).join(''); };
+    groups.forEach(g=>{ const ls=layers.filter(l=>l.grp===g), n=ls.length;
+      ls.forEach((l,i)=>{ l.color=mix(hue(g), n>1 ? -0.3+0.75*i/(n-1) : 0); }); });
+  }
+  /* one group: the fixed palette, then golden-angle hues once it runs out, so
+     neighbouring layers never share a colour */
+  layers.forEach((l,i)=>{ if(!l.color) l.color= i<CF_PAL.length ? CF_PAL[i] : `hsl(${Math.round((i*137.5)%360)},62%,70%)`; });
+  return layers;
+}
 const niceStep=x=>{ if(!(x>0)) return 1; const p=Math.pow(10,Math.floor(Math.log10(x))), f=x/p;
   return (f<=1?1:f<=2?2:f<=2.5?2.5:f<=5?5:10)*p; };
 function renderRolling(svgEl, W, narrow, perMonth){
@@ -2845,28 +2870,8 @@ function renderRolling(svgEl, W, narrow, perMonth){
   } else if(single){
     layers[0].color=info.color; layers[0].label=info.label;
   } else {
-    /* Sankey order: macro groups in ORDER from the zero line up (Needs, Wants,
-       Liberality, Taxes / Work income, Non-work income), then Stable_Order inside each
-       group (biggest at the bottom of its group). Every label keeps its own layer:
-       small ones are NOT folded into an "Other" layer (Stefano's call, Oct 2026). */
-    const gOrd=g=>{ const i=ORDER.indexOf(g); return i<0?99:i; };
-    const sankeyCmp=(a,b)=> gOrd(a.grp)-gOrd(b.grp) || rankCmp(a.key,b.key);
     layers=layers.filter(l=>l.r.some(v=>Math.abs(v)>0.5));   // drop layers that are empty over the whole axis
-    layers.sort(sankeyCmp);
-    /* several groups stacked (Total expenses / Total income / Safe income): tint each
-       layer with its Sankey group colour, darker at the bottom of the group, lighter
-       towards the top, so the group bands read as blocks. One group: palette colours. */
-    const groups=[...new Set(layers.map(l=>l.grp))];
-    if(groups.length>1){
-      const hue=g=> GROUPCOL[g] || (g==='Work income' ? INCOME : g==='Non-work income' ? '#2fb7a6' : g==='Other income' ? '#7fc8a0' : '#9aa6bd');
-      const mix=(hex,t)=>{ const n=parseInt(hex.slice(1),16), c=[n>>16,(n>>8)&255,n&255]
-          .map(v=>Math.round(t<0 ? v*(1+t) : v+(255-v)*t)); return '#'+c.map(v=>v.toString(16).padStart(2,'0')).join(''); };
-      groups.forEach(g=>{ const ls=layers.filter(l=>l.grp===g), n=ls.length;
-        ls.forEach((l,i)=>{ l.color=mix(hue(g), n>1 ? -0.3+0.75*i/(n-1) : 0); }); });
-    }
-    /* one group: the fixed palette, then golden-angle hues once it runs out, so
-       neighbouring layers never share a colour */
-    layers.forEach((l,i)=>{ if(!l.color) l.color= i<CF_PAL.length ? CF_PAL[i] : `hsl(${Math.round((i*137.5)%360)},62%,70%)`; });
+    cfStyleLayers(layers);
   }
   /* stacking: positive side up, negative side down; a single series stays signed */
   const posT=new Array(N).fill(0), negT=new Array(N).fill(0);
@@ -3069,6 +3074,21 @@ function renderCashBars(){
   const serLY=info && lyB ? cfSeriesByYear(cfSel, lyPart.data, lyPart.detail, lastMi, deselected, lyB) : {};
   const serOf=r=> ((r.ly ? serLY : ser)[r.year]||0);
   const sv=ser ? rows.map(r=>serOf(r)/dv(r)) : null;
+  /* stacked bars with the details (2 Nov 2026), same layers as R12M: a total / group
+     -> its labels, a label -> its DETAIL sub-categories. One layer = a plain bar. */
+  let stk=null;
+  if(info){
+    const bkOf=drill ? (mi=>mi) : (mi=>Math.floor(mi/12));
+    const sumBy=(m,bk)=>{ const o={}; for(const mi in m){ const k=bk(+mi); if(k!=null) o[k]=(o[k]||0)+m[mi]; } return o; };
+    const L=cfRollLayers(cfSel, OL || pvOn() ? SD : DATA, SDT, lastMi, deselected);
+    const LL=lyB ? cfRollLayers(cfSel, lyPart.data, lyPart.detail, lastMi, deselected) : [];
+    if(!(L.length===1 && L[0].single)){
+      L.forEach(l=>{ l.b=sumBy(l.m, bkOf); const x=LL.find(y=>y.key===l.key); l.bly=x ? sumBy(x.m, ()=>'ly') : {}; });
+      const lv=(l,r)=> (r.ly ? l.bly.ly : l.b[r.year])||0;
+      const used=L.filter(l=>rows.some(r=>Math.abs(lv(l,r))>0.5));
+      if(used.length>1){ cfStyleLayers(used); stk={L:used, v:(l,i)=>lv(l,rows[i])/dv(rows[i])}; }
+    }
+  }
   /* geometry (CSS px, viewBox = real width) */
   /* month view keeps 12 fixed slots (Jan..Dec), so a part year leaves its missing
      months blank instead of widening the bars. The LY bar takes the slot after the
@@ -3078,7 +3098,8 @@ function renderCashBars(){
   const nSlots=drill ? Math.max(12, lyB ? lyAt+1 : 12) : (lyB ? lyAt+1 : n);
   const padL=4, padR=4, slot=(W-padL-padR)/nSlots, barW=Math.min(58, slot*0.62);
   const cx=i=> padL+slot*pos(i)+slot/2;
-  const vals=ser ? sv.map(v=>({inc:Math.max(0,v), exp:Math.max(0,-v)}))
+  const vals=stk ? sv.map((v,i)=>({inc:Math.max(0,v,stk.L.reduce((a,l)=>a+Math.max(0,stk.v(l,i)),0)), exp:Math.max(0,-v)}))
+    : ser ? sv.map(v=>({inc:Math.max(0,v), exp:Math.max(0,-v)}))
                  : rows.map(r=>({inc:r.income/dv(r), exp:r.expenses/dv(r)}));
   const maxPos=Math.max(1,...vals.map(v=>Math.max(0,v.inc))), maxNeg=Math.max(0,...vals.map(v=>Math.max(0,v.exp)));
   const lineH=ser?0:(narrow?54:70), barsH=narrow?170:220;
@@ -3102,7 +3123,18 @@ function renderCashBars(){
     svgEl.appendChild(yt); };
   /* the LY bar is a reference: faded fill, slightly dimmed value labels */
   const lyOp=r=> r.ly ? .5 : pvAll(r) ? .45 : 1, lyTx=r=> r.ly ? .75 : pvAll(r) ? .8 : 1;
-  if(ser) rows.forEach((r,i)=>{
+  if(stk) rows.forEach((r,i)=>{
+    /* stacked: each layer up from the zero line, first layer at the bottom; a negative
+       layer (a net refund) adds nothing, as in R12M. Label = the entry's total. */
+    const x=cx(i)-barW/2; let y=baseY;
+    stk.L.forEach(l=>{ const h=Math.max(0,stk.v(l,i))*sc; if(h<=0) return;
+      y-=h; svgEl.appendChild(el('rect',{x,y,width:barW,height:h,fill:l.color,'fill-opacity':.85*lyOp(r)})); });
+    const v=sv[i];
+    if(!/^-?0K?$/.test(fmt(v))) svgEl.appendChild(el('text',{x:cx(i),y:Math.min(y,baseY)-5,'text-anchor':'middle',
+      fill:v<0?'#e58a8a':'#e7ecf5','fill-opacity':lyTx(r),'font-size':fsV,'font-weight':700},fmt(v)));
+    yearLabel(r,i);
+  });
+  else if(ser) rows.forEach((r,i)=>{
     /* one bar: up when positive, down when negative (a savings loss, a net refund) */
     const x=cx(i)-barW/2, v=sv[i], h=Math.abs(v)*sc, neg=v<0, isSav=/^T\|(safe)?sav$/.test(cfSel);
     /* negative savings = red; any other negative (net refund) = its own colour, faded */
@@ -3176,7 +3208,10 @@ function renderCashBars(){
     const baseV=info && info.base==='safe' ? r.safe : r.income;
     const html= ser ? head+
       `<br><i class="sw" style="background:${info.color}"></i>${info.label} <b>${fmt(sv[i])}</b>`+
-      (info.base && baseV>0 ? `<br><span style="color:#9aa6bd">&nbsp;&nbsp;${pc(serOf(r)/baseV*100)} of ${info.base==='safe'?'safe income':'income'}</span>` : '')
+      (info.base && baseV>0 ? `<br><span style="color:#9aa6bd">&nbsp;&nbsp;${pc(serOf(r)/baseV*100)} of ${info.base==='safe'?'safe income':'income'}</span>` : '')+
+      (stk ? (()=>{ const tot=sv[i], it=[...stk.L].reverse().filter(l=>Math.round(stk.v(l,i))).map(l=>`<i class="sw" style="background:${l.color}"></i>${l.label} ${fmt(stk.v(l,i))}`+
+          (tot>0 ? `<span style="color:#9aa6bd"> \u00b7 ${Math.round(stk.v(l,i)/tot*100)}%</span>` : '')), per=it.length>12 ? 2 : 1; let s='';
+        for(let j=0;j<it.length;j+=per) s+=`<br>&nbsp;&nbsp;`+it.slice(j,j+per).join('<span style="color:#9aa6bd"> \u00b7 </span>'); return s; })() : '')
     : head+
       `<br>Income <b>${fmt(r.income/k)}</b>${part(CF_INC,r.inc)}`+
       `<br>Expenses <b>${fmt(r.expenses/k)}</b>${part(CF_EXP,r.exp)}`+
