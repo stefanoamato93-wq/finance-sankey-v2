@@ -1378,7 +1378,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v2.50';
+const APP_VER='v2.51';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 /* self-update (1 Nov 2026): GitHub Pages lets phones keep the page up to 10 min, and a home-
    screen app resumed from the background keeps running its old code for hours. That old code
@@ -6275,6 +6275,7 @@ const FS_KEY={ACCOUNT:'a',VALUE:'v',LABEL:'l',DETAIL:'dt',ASSETCLASSDETAILS:'acd
   LIQUIDITY:'liq',TYPE:'ty',AVAILABLE:'av',CATEGORY1:'c1',CATEGORY2:'c2',CATEGORY3:'c3',ASSETCLASSDETAILSFORM:'acdf'};
 const FS_FULL_KEY='fs2-fsfull-v1', FS_FULL_EVERY=7*24*3600e3;
 let FS_MONTHS=new Map(), FS_MAX=0, FS_CSV=null, FS_FP=null, FS_READS=0;
+const FS_COUNT_KEY='fs2-month-count-v1';   // months seen by the last read (a smaller offline copy = incomplete)
 const pad2=n=>String(n).padStart(2,'0');
 const csvQ=s=>'"'+String(s==null?'':s).replace(/"/g,'""')+'"';
 /* pure: one Tx -> the 21 DB cells, in FS_COLS order */
@@ -6297,10 +6298,19 @@ function fsMerge(list){ (list||[]).forEach(m=>{ FS_MONTHS.set(m.month, m); if((m
 async function fsFetch(){
   const D=FS2.data; if(!D) throw new Error('not signed in');
   let full=false; try{ full=Date.now()-(+localStorage.getItem(FS_FULL_KEY)||0) > FS_FULL_EVERY; }catch(e){ full=true; }
-  if(!FS_MONTHS.size && !full && D.loadCachedMonths){ try{ fsMerge(await D.loadCachedMonths()); }catch(e){} }
+  /* 4 Nov 2026: after a new sign-in the offline copy can hold only the last few months; the
+     "changes since" read then never brought the older ones back (Net Worth from Sep 2026).
+     A copy with fewer months than the last full read = read everything. */
+  let known=0; try{ known=+localStorage.getItem(FS_COUNT_KEY)||0; }catch(e){}
+  if(!known) full=true;                                    // no count saved yet: one full read sets it
+  if(!FS_MONTHS.size && !full && D.loadCachedMonths){ try{ const c=await D.loadCachedMonths();
+    if(known && c.length<known){ console.warn('offline copy has', c.length, 'of', known, 'months: full read'); full=true; }
+    else fsMerge(c); }catch(e){} }
+  if(!full && known && FS_MONTHS.size && FS_MONTHS.size<known) full=true;
   const fresh=await D.loadMonths(full || !FS_MONTHS.size ? 0 : FS_MAX);
   FS_READS+=Math.max(1, fresh.length); fsMerge(fresh);
   if(full || !FS_MONTHS.size){ try{ localStorage.setItem(FS_FULL_KEY, String(Date.now())); }catch(e){} }
+  try{ localStorage.setItem(FS_COUNT_KEY, String(FS_MONTHS.size)); }catch(e){}
   if(!FS_MONTHS.size){ const e=new Error('no data in Firebase yet'); e.code='empty'; throw e; }
   return fsAnswer();
 }
