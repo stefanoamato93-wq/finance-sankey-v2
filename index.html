@@ -278,6 +278,9 @@
   .ylpflags .ylpnote{margin-right:auto; color:var(--muted); font-size:11.5px; font-variant-numeric:tabular-nums;}
   .ylpflags .ylpnote b{color:var(--ink);}
   .ylpg{margin:4px 0 10px;}
+.cfoff .cfdt{margin-left:auto; background:none; border:1px solid var(--grid); border-radius:6px; color:#8fb0ff; font-size:11px; padding:1px 6px; cursor:pointer;}
+.cfoff .cfdets{grid-column:1 / -1; display:flex; flex-wrap:wrap; gap:0 14px; padding:0 0 4px 22px;}
+.cfoff .cfdets label{border-bottom:0; font-size:11.5px;}
   .ylpg label{display:flex; align-items:center; gap:7px; cursor:pointer; min-width:0; user-select:none;}
   .ylpg label.gh{padding:5px 2px 5px 8px; background:#141d30; border-left:3px solid var(--budget); border-radius:4px;
                  font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:.4px;}
@@ -1215,6 +1218,7 @@
     <span class="pills" id="cfBackWrap" style="display:none"><button type="button" class="pill on" id="cfBack" title="Back to all years (Esc)">&lsaquo; Year</button></span>
     <span class="tgslot"></span>
     <!-- R12M: rolling 12-month stacked areas instead of the yearly bars -->
+    <span class="pills"><button type="button" class="pill" id="cfOffBtn" aria-expanded="false" aria-controls="cfOffBox" title="Leave labels, categories or details out of this chart">Exclude<span id="cfOffCnt"></span></button></span>
     <span class="pills"><label class="pill" title="Rolling 12 months, one point per month"><input type="checkbox" id="cfRoll">R12M</label></span>
   </div>
   <!-- what to plot, drilled one level at a time: Overview (stacks + savings %) ›
@@ -1229,6 +1233,7 @@
 </div>
 <div class="cfbwrap framed" id="cfbwrap" style="display:none">
   <svg id="cfbars" viewBox="0 0 900 360"></svg>
+  <div class="ylpflags cfoff" id="cfOffBox" style="display:none"></div>
 </div>
 </section>
 
@@ -1415,7 +1420,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v2.57';
+const APP_VER='v2.58';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 /* self-update (1 Nov 2026): GitHub Pages lets phones keep the page up to 10 min, and a home-
    screen app resumed from the background keeps running its old code for hours. That old code
@@ -2665,6 +2670,57 @@ const CF_LINE_TOT='#e7ecf5', CF_LINE_SAFE='#9aa6bd';
 /* pure: DATA rows -> [{year, months, inc:{safe,stocks,other}, exp:{group:spend}, income, safe,
    expenses, rateTot, rateSafe}] oldest -> newest, rows after lastMi ignored. Rates are %
    (null when their base income is <= 0); expenses are positive spend. */
+/* Trends-only exclusions (8 Nov 2026): labels, categories or details left out of the Trends
+   chart only (the Sankey's own exclusions still apply). Keys like the Sankey's: I|leaf,
+   E|leaf, IG|group, EG|group, plus D|leaf|detail. Kept in localStorage. */
+const CF_OFF_KEY='fs2-cf-off-v1'; let cfOff=new Set(), cfOffOpen=false; const cfOffOpenL=new Set();
+try{ const a=JSON.parse(localStorage.getItem(CF_OFF_KEY)||'[]'); if(Array.isArray(a)) cfOff=new Set(a.map(String)); }catch(e){}
+function cfOffSave(){ try{ localStorage.setItem(CF_OFF_KEY, JSON.stringify([...cfOff].sort())); }catch(e){} }
+function cfDs(){ const s=new Set(deselected); cfOff.forEach(k=>{ if(k.slice(0,2)!=='D|') s.add(k); }); return s; }
+/* an excluded detail leaves its label's total too: its spend is taken off the label row */
+function cfApplyOff(data, detail){
+  const S=new Set([...cfOff].filter(k=>k.slice(0,2)==='D|')); if(!S.size) return {data, detail};
+  const adj=new Map(), det=[];
+  (detail||[]).forEach(r=>{ if(S.has('D|'+r[1]+'|'+r[2])){ const k=r[0]+'|'+r[1]; adj.set(k,(adj.get(k)||0)+r[3]); } else det.push(r); });
+  const dat=(data||[]).map(r=>{ if(r[1]!=='E') return r; const k=r[0]+'|'+r[3], a=adj.get(k); if(!a) return r;
+    adj.delete(k); return [r[0],r[1],r[2],r[3],r[4]+a]; });   // spend is stored negative
+  return {data:dat, detail:det};
+}
+/* the Exclude list: income and expense groups, their labels, and a label's details (â–¸) */
+function renderCfOff(){
+  const box=document.getElementById('cfOffBox'), btn=document.getElementById('cfOffBtn'), cnt=document.getElementById('cfOffCnt');
+  if(cnt) cnt.textContent=cfOff.size ? ' '+cfOff.size : '';
+  if(btn){ btn.classList.toggle('on', cfOffOpen || cfOff.size>0); btn.setAttribute('aria-expanded', String(cfOffOpen)); }
+  if(!box) return; box.style.display=cfOffOpen ? '' : 'none';
+  if(!cfOffOpen){ box.innerHTML=''; return; }
+  const esc=s=> String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const nice=s=> typeof planNice==='function' ? planNice(s) : s;
+  const amt={I:{}, E:{}}, det={};
+  DATA.forEach(([mi,k,g,l,v])=>{ const A=amt[k==='I'?'I':'E'], x=A[l]||(A[l]={}); x[g]=(x[g]||0)+Math.abs(v); });
+  DETAIL.forEach(([mi,l,d])=>{ (det[l]||(det[l]=new Set())).add(d); });
+  const gOrd=g=>{ const i=ORDER.indexOf(g); return i<0?99:i; };
+  let h=`<div class="nwtools"><span class="ylpnote">Untick to leave it out of this chart</span>`+
+    `<button type="button" data-cfoff="reset"${cfOff.size?'':' disabled'}>Include all</button></div>`;
+  ['I','E'].forEach(k=>{
+    const G=new Map();
+    Object.keys(amt[k]).forEach(l=>{ const x=amt[k][l], g=Object.keys(x).sort((a,b)=>x[b]-x[a])[0]; if(!G.has(g)) G.set(g,[]); G.get(g).push(l); });
+    [...G.keys()].sort((a,b)=> gOrd(a)-gOrd(b) || (a<b?-1:1)).forEach(g=>{
+      const gk=(k==='I'?'IG|':'EG|')+g, gOff=cfOff.has(gk);
+      h+=`<div class="ylpg"><label class="gh" style="border-left-color:${GROUPCOL[g]||BUDGET}"><input type="checkbox" data-k="${esc(gk)}"${gOff?'':' checked'}>`+
+         `<span class="nm">${esc(nice(g))}</span></label><div class="ylpitems">`;
+      G.get(g).sort((a,b)=>rankCmp(k+'|'+a, k+'|'+b)).forEach(l=>{
+        const lk=k+'|'+l, off=cfOff.has(lk), ds=k==='E' && det[l] && det[l].size>1 ? [...det[l]].sort() : null, open=ds && cfOffOpenL.has(l);
+        h+=`<label class="${off||gOff?'off':''}${gOff?' lock':''}"><input type="checkbox" data-k="${esc(lk)}"${off?'':' checked'}${gOff?' disabled':''}>`+
+           `<span class="nm">${esc(nice(l))}</span>`+
+           (ds ? `<button type="button" class="cfdt" data-cfl="${esc(l)}" aria-expanded="${!!open}" title="Details">${open?'\u25be':'\u25b8'} ${ds.length}</button>` : '')+`</label>`;
+        if(open) h+=`<div class="cfdets">`+ds.map(d=>{ const dk='D|'+l+'|'+d, dOff=cfOff.has(dk), lock=gOff||off;
+          return `<label class="${dOff||lock?'off':''}${lock?' lock':''}"><input type="checkbox" data-k="${esc(dk)}"${dOff?'':' checked'}${lock?' disabled':''}><span class="nm">${esc(nice(d))}</span></label>`; }).join('')+`</div>`;
+      });
+      h+=`</div></div>`;
+    });
+  });
+  box.innerHTML=h;
+}
 function cashFlowByYear(data, lastMi, excluded, bucket){
   /* bucket(mi) -> output key (calendar year by default); null skips the row. The month
      drill-down passes mi=>(year of mi === Y ? mi : null), so each row is one month */
@@ -2910,7 +2966,8 @@ function renderRolling(svgEl, W, narrow, perMonth){
   const pvMix=pvOn() && PLAN && PLAN.rows && nowMi>=m0 && nowMi<=m1;
   const RDATA=pvMix ? pvSavData(nowMi) : DATA;
   const RDET=pvMix ? mixDetail(DETAIL, planToData(PLAN.rows, fcGet(), amznPrice(), nowMi, nowMi).detail, nowMi) : DETAIL;
-  let layers=cfRollLayers(cfSel, RDATA, RDET, m1, deselected)
+  const RX=cfApplyOff(RDATA, RDET);
+  let layers=cfRollLayers(cfSel, RX.data, RX.detail, m1, cfDs())
     .map(l=>Object.assign(l,{r:rolling12(l.m,m0,m1).map(v=>v/div)}));
   const single=layers.length===1 && !ov;
   /* order (first = closest to the zero line) and colours */
@@ -3056,7 +3113,7 @@ function renderCashBars(){
      cached copy now, a background check that redraws when it lands (txVer / txSnapAt) */
   const d=new Date(), todayDk=d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate();
   if(!cfRoll) ensureTx();
-  const sig=[W,perMonth,showK,cfSel,cfRoll,cfDrill,[...deselected].sort().join(','),todayDk,txVer,txSnapAt,PLAN?PLAN.at:0,JSON.stringify(fcGet())].join('#');
+  const sig=[W,perMonth,showK,cfSel,cfRoll,cfDrill,[...deselected].sort().join(','),[...cfOff].sort().join(','),todayDk,txVer,txSnapAt,PLAN?PLAN.at:0,JSON.stringify(fcGet())].join('#');
   if(sig===cfSig && DATA===cfData) return;
   cfSig=sig; cfData=DATA; cfLastW=W;
   if(cfRoll){ renderRolling(svgEl, W, W<560, perMonth); return; }
@@ -3068,14 +3125,18 @@ function renderCashBars(){
   const OL=!pvOn() && PLAN && PLAN.rows && nowMi<olTo && nowMi<=META.maxMi ? planToData(PLAN.rows, fcGet(), amznPrice(), nowMi, olTo) : null;
   const lastMi=pvOn() ? META.maxMi : OL ? olTo : Math.min(META.maxMi, nowMi);
   /* this month = mixMonth (bigger of real so far and plan, per category), like the Plan page */
-  const SD=pvOn() ? pvSavData(nowMi) : OL ? mixMonth(DATA, OL.data, nowMi).concat(OL.data.filter(r=>r[0]>nowMi)) : DATA;
+  const SD0=pvOn() ? pvSavData(nowMi) : OL ? mixMonth(DATA, OL.data, nowMi).concat(OL.data.filter(r=>r[0]>nowMi)) : DATA;
+  const SDT0=OL ? mixDetail(DETAIL, OL.detail, nowMi).concat(OL.detail.filter(r=>r[0]>nowMi))
+    : pvOn() && PLAN && PLAN.rows ? mixDetail(DETAIL, planToData(PLAN.rows, fcGet(), amznPrice(), nowMi, nowMi).detail, nowMi) : DETAIL;
+  /* Trends-only exclusions (8 Nov 2026): DS = the Sankey's exclusions + the Exclude list */
+  const DS=cfDs(), CX=cfApplyOff(SD0, SDT0), SD=CX.data, SDT=CX.detail;
   const plFrom=pvOn() ? META.planFromMi : OL ? nowMi+1 : null, isPl=mi=> plFrom!=null && mi>=plFrom;
   /* month view: one row per month of the drilled year (row.year holds the mi) */
   const mBucket=y=> mi=> Math.floor(mi/12)===y ? mi : null;
-  let rows=cfDrill!=null ? cashFlowByYear(SD, lastMi, deselected, mBucket(cfDrill)) : null;
+  let rows=cfDrill!=null ? cashFlowByYear(SD, lastMi, DS, mBucket(cfDrill)) : null;
   if(rows && !rows.length){ cfDrill=null; syncCfDrill(); rows=null; }   // year vanished on a data refresh
   const drill=cfDrill!=null;
-  if(!rows) rows=cashFlowByYear(SD, lastMi, deselected);
+  if(!rows) rows=cashFlowByYear(SD, lastMi, DS);
   /* Avg/m: a year / its months; a month is already one month */
   const dv=r=> perMonth && !drill ? Math.max(1,r.months) : 1;
   const MSH=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -3101,8 +3162,8 @@ function renderCashBars(){
       lo=(cY-1)*10000+101; hi=(cY-1)*10000+cm*100+Math.min(dD, dim(cY-1,cm)); lyKey=cY-1; }
     const endAt=new Date(Math.floor(hi/10000), Math.floor(hi/100)%100-1, hi%100+1).getTime();
     if(TX && txSnapAt>=endAt){
-      lyPart=cfDayData(TX, lo, hi);
-      const ly=cashFlowByYear(lyPart.data, lastMi, deselected, ()=>lyKey)[0];
+      lyPart=cfDayData(TX, lo, hi); lyPart=cfApplyOff(lyPart.data, lyPart.detail);
+      const ly=cashFlowByYear(lyPart.data, lastMi, DS, ()=>lyKey)[0];
       if(ly) rows=rows.concat([Object.assign(ly,{ly:true, lo, hi})]); else lyPart=null;
     }
   }
@@ -3120,13 +3181,11 @@ function renderCashBars(){
   if(!n){ svgEl.innerHTML=''; return; }
   /* single-series mode: one bar per year (or month) for the picked entry, no savings % lines */
   const info=cfSel ? CF_OPTS.get(cfSel) : null;
-  const SDT=OL ? mixDetail(DETAIL, OL.detail, nowMi).concat(OL.detail.filter(r=>r[0]>nowMi))
-    : pvOn() && PLAN && PLAN.rows ? mixDetail(DETAIL, planToData(PLAN.rows, fcGet(), amznPrice(), nowMi, nowMi).detail, nowMi) : DETAIL;
   /* the month panel reads the very same data as the bars (past = actual, this month =
      bigger of actual or plan, later months = plan), so a planned month opens its plan */
   cfMdSrc={SD, SDT, lastMi, plFrom, nowMi};
-  const ser=info ? cfSeriesByYear(cfSel, OL || pvOn() ? SD : DATA, SDT, lastMi, deselected, drill ? mBucket(cfDrill) : null) : null;
-  const serLY=info && lyB ? cfSeriesByYear(cfSel, lyPart.data, lyPart.detail, lastMi, deselected, lyB) : {};
+  const ser=info ? cfSeriesByYear(cfSel, SD, SDT, lastMi, DS, drill ? mBucket(cfDrill) : null) : null;
+  const serLY=info && lyB ? cfSeriesByYear(cfSel, lyPart.data, lyPart.detail, lastMi, DS, lyB) : {};
   const serOf=r=> ((r.ly ? serLY : ser)[r.year]||0);
   const sv=ser ? rows.map(r=>serOf(r)/dv(r)) : null;
   /* stacked bars with the details (2 Nov 2026), same layers as R12M: a total / group
@@ -3135,8 +3194,8 @@ function renderCashBars(){
   if(info){
     const bkOf=drill ? (mi=>mi) : (mi=>Math.floor(mi/12));
     const sumBy=(m,bk)=>{ const o={}; for(const mi in m){ const k=bk(+mi); if(k!=null) o[k]=(o[k]||0)+m[mi]; } return o; };
-    const L=cfRollLayers(cfSel, OL || pvOn() ? SD : DATA, SDT, lastMi, deselected);
-    const LL=lyB ? cfRollLayers(cfSel, lyPart.data, lyPart.detail, lastMi, deselected) : [];
+    const L=cfRollLayers(cfSel, SD, SDT, lastMi, DS);
+    const LL=lyB ? cfRollLayers(cfSel, lyPart.data, lyPart.detail, lastMi, DS) : [];
     if(!(L.length===1 && L[0].single)){
       L.forEach(l=>{ l.b=sumBy(l.m, bkOf); const x=LL.find(y=>y.key===l.key); l.bly=x ? sumBy(x.m, ()=>'ly') : {}; });
       const lv=(l,r)=> (r.ly ? l.bly.ly : l.b[r.year])||0;
@@ -3346,7 +3405,7 @@ function renderMd(){
   const mi=mdMi, d=new Date(), nowMi=d.getFullYear()*12+d.getMonth();
   const src=cfMdSrc || {SD:DATA, SDT:DETAIL, plFrom:null};
   const isPlan=src.plFrom!=null && mi>=src.plFrom && mi>nowMi;
-  const R=comparePeriods(src.SD, src.SDT, [mi,mi], [mi,mi], deselected);
+  const R=comparePeriods(src.SD, src.SDT, [mi,mi], [mi,mi], cfDs());
   const esc=s=> String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   const zero=v=> /^-?0K?$/.test(fmt(Math.abs(v)));
   const inc=R.tot.a.inc, exp=R.tot.a.exp, safe=R.tot.a.safe;
@@ -6739,6 +6798,15 @@ function initControlsOnce(){
   document.getElementById('cfRoll').addEventListener('change',e=>{ cfRoll=e.target.checked; if(cfRoll) cfDrill=null; syncCfDrill(); hideTip(); renderCashBars(); });
   /* month drill-down: back to the years (pill or Esc; Esc closes an open panel first) */
   document.getElementById('cfBack').addEventListener('click',e=>{ e.stopPropagation(); cfDrillTo(null); });
+  /* Exclude list (8 Nov 2026): the button opens / closes it; a tick change redraws the chart */
+  document.getElementById('cfOffBtn').addEventListener('click',e=>{ e.stopPropagation(); cfOffOpen=!cfOffOpen; renderCfOff(); });
+  { const bx=document.getElementById('cfOffBox');
+    bx.addEventListener('change',e=>{ const t=e.target; if(!t || !t.dataset || t.dataset.k==null) return;
+      if(t.checked) cfOff.delete(t.dataset.k); else cfOff.add(t.dataset.k); cfOffSave(); renderCfOff(); renderCashBars(); });
+    bx.addEventListener('click',e=>{ const b=e.target.closest && e.target.closest('button'); if(!b) return; e.preventDefault(); e.stopPropagation();
+      if(b.dataset.cfl!=null){ const l=b.dataset.cfl; if(cfOffOpenL.has(l)) cfOffOpenL.delete(l); else cfOffOpenL.add(l); renderCfOff(); }
+      else if(b.dataset.cfoff==='reset'){ cfOff.clear(); cfOffSave(); renderCfOff(); renderCashBars(); } }); }
+  renderCfOff();
   document.addEventListener('keydown',e=>{ if(e.key==='Escape' && cfDrill!=null && !panel && mdMi==null) cfDrillTo(null); },true);   // capture: sees the panels before they close
   /* period comparison: changing A's type resets both sides (B = same type, one year
      earlier; Month: the month before); changing B's type re-defaults B against A */
