@@ -20,6 +20,45 @@ status: `Personal Finance\finance-v2-plan\PLAN.md`.
 | 6 Live prices without the sheet (below) | done 25 Oct 2026 |
 | 8 FIRE page, Monte Carlo (below) | done 25 Oct 2026 |
 
+### Versions and changes 1-9 Nov 2026 (v2.20 - v2.65)
+Every push bumps `APP_VER` in `index.html` by 0.01; the version shows under the account icon.
+Update this README in the same commit as each change. `git log` has the one-line history.
+- **Self-update (v2.36):** reloads when a newer version is live (on open and on return).
+- **Data (v2.51):** full Firestore read when the offline copy has fewer months than before.
+- **Plan page:**
+  - OK / NOT OK box for this year, flags for other years, settings under the table (v2.21, v2.34).
+  - Total target per year = FIRE minimum save unless overridden (override tag + undo); spare / cut
+    worked out against it (v2.22-v2.26). Buffer in € next to safe and total rates (v2.45).
+  - This year's column = actual so far + plan, same data as Trends per label (v2.37-v2.39).
+  - Highlight changes = next 12M plan vs last 12M, up or down, income too (v2.32-v2.33).
+  - Phone: Month / Year switch, one value column (Act/Plan or Year), 12M avg last, tap a plan
+    number to edit in a keypad sheet, extra tools behind ... (v2.28-v2.31, v2.54-v2.55).
+  - **This-month tick (v2.65):** the white tick = where each label should be by today, from how
+    its money was spread over the month in the last 12 months (needs are front-loaded). Fewer than
+    3 months with money -> falls back to day / days in month. Group and total rows weight each
+    label's % by its plan. Green / yellow / red are judged against the tick. Hover shows € and %.
+  - Savings targets: "so far" counts this month as the bigger of actual or plan (v2.52).
+  - SALARY RISE counts as safe income everywhere (v2.57).
+- **Trends page:**
+  - Bars stack by labels / details like R12M when an entry is picked (v2.47); a tapped month
+    opens its own detail, plan for planned months (v2.48).
+  - Exclude checklist for labels, categories and details (v2.58).
+  - **Range (v2.59-v2.64):** tapping a year shows only that year, Jan-Dec (or to the last month
+    with data). **From / To** = year + month drop-downs, shared by month bars and R12M and kept
+    when R12M is switched on or off. Max 144 months: if wider, To stays and From moves up.
+    ‹ › move the range by one month. In R12M each point still sums its full 12 months.
+    Month names on the x-axis, thinned on wide ranges (year under Jan); savings % labels thin
+    out the same way, last month always labelled (v2.61). The old 12M..144M width box is gone.
+- **Compare:** opens as T12M a year ago -> T12M now, Expenses waterfall, Avg/m on (v2.42-v2.43);
+  delta and % go from the first period to the second (v2.41, v2.44); ⇆ swap button (v2.56);
+  this month counted with mixMonth() when the Plan pill is on (v2.40).
+- **Query:** Download Excel (.xlsx) of the current view (v2.28); bulk Set value for ticked rows
+  with undo, and a Depreciations editor per object (v2.46).
+- **Net Worth:** Next vests chip = future AMZN vests x live price x stock kept after tax (v2.49-v2.50).
+  Years of Life Paid shows the current value next to the title (v2.53).
+- **Auto rows:** month-end rows in whole euros; depreciation stops at 0; TFRTaxes takes the date of
+  the newest TFR entry (1 Nov, v2.35).
+
 ### Edit a transaction, phone layout, account menu (27 Oct 2026)
 - **Query → Transactions: tap a row to edit it.** A box shows date, value, account, label,
   detail, type, group and category 2 (each with suggestions from the data). **Save** writes only
