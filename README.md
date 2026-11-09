@@ -37,6 +37,17 @@ Update this README in the same commit as each change. `git log` has the one-line
     its money was spread over the month in the last 12 months (needs are front-loaded). Fewer than
     3 months with money -> falls back to day / days in month. Group and total rows weight each
     label's % by its plan. Green / yellow / red are judged against the tick. Hover shows € and %.
+  - **Δ since the 1st (v2.66):** on the first open of a month (after the cloud plan settles) the
+    plan is copied into `PLAN.base` = {mi, at, m:{"k|g|l|d":{mi:value}}}, months from that month on;
+    it is saved with the plan in Firestore. Each plan cell shows a small ▲/▼ change vs that copy
+    (green = better savings: income up or expenses down; red = worse). Rows deleted or renamed
+    count in their label / group / total sums. A chip shows this year's savings change. The
+    **Δ since <day>** pill turns it on / off (localStorage `fs2-plan-delta-v1`).
+    **Δ start from archive…** (behind ⋯) reads an Archive file made earlier this month
+    (`window.FS2_SNAP.plan`) and makes it the baseline; a plan from another month is refused.
+  - Look (v2.66): one rounded table card sized to the table, row lines only, no category colour
+    bars, soft year tint instead of violet, pill buttons, + and row tools show on hover (laptop).
+    Laptop tools: Δ, Undo and ⋯; Fold/Expand/Collapse/actual/Highlight/archive sit behind ⋯.
   - Savings targets: "so far" counts this month as the bigger of actual or plan (v2.52).
   - SALARY RISE counts as safe income everywhere (v2.57).
 - **Trends page:**
