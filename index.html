@@ -1420,7 +1420,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v2.60';
+const APP_VER='v2.61';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 /* self-update (1 Nov 2026): GitHub Pages lets phones keep the page up to 10 min, and a home-
    screen app resumed from the background keeps running its old code for hours. That old code
@@ -3182,13 +3182,15 @@ function renderCashBars(){
   const dkDay=dk=> dk%100, dkMon=dk=> MSH[Math.floor(dk/100)%100-1];
   /* wide window (>12 months): only January gets a label, the year ('25 when space is tight) */
   const keyLab=r=> !drill ? String(r.year)
-    : WN>12 && !r.ly ? (r.year%12===0 ? ((W-8)/WN*12>=40 ? String(Math.floor(r.year/12)) : "'"+String(Math.floor(r.year/12)).slice(2)) : '')
+    : WN>12 && !r.ly ? (axOn(r.year) ? MSH[r.year%12] : '')
     : MSH[r.year%12]+(r.year%12===0 || r.year===S ? ' '+String(Math.floor(r.year/12)).slice(2) : '');
   /* plan view: a year / month that is all plan is drawn faded and tagged "Plan"; the
      current year, real so far plus its planned months, is tagged "+Plan" */
   const pvAll=r=> !r.ly && (drill ? isPl(r.year) || pvOn() && r.year===nowMi : isPl(r.year*12));
   const pvPart=r=> !r.ly && !drill && !pvAll(r) && isPl(r.year*12+11);
-  const subLab=r=> pvAll(r) ? 'Plan' : pvPart(r) ? '+Plan' : r.ly ? (drill ? dkDay(r.lo)+'\u2013'+dkDay(r.hi) : 'YTD')
+  /* wide window: the year goes under January (and under the first labelled month) */
+  const subLab=r=> drill && WN>12 && !r.ly ? (axOn(r.year) && (r.year%12===0 || r.year===axFirst()) ? "'"+String(Math.floor(r.year/12)).slice(2) : '') : subLab0(r);
+  const subLab0=r=> pvAll(r) ? 'Plan' : pvPart(r) ? '+Plan' : r.ly ? (drill ? dkDay(r.lo)+'\u2013'+dkDay(r.hi) : 'YTD')
                  : drill ? (r.year===nowMi ? 'MTD' : '')
                          : (r.months<12 ? (r.year===cY ? 'YTD' : r.months+'m') : '');
   const narrow=W<560, n=rows.length;
@@ -3226,6 +3228,10 @@ function renderCashBars(){
   const nSlots=drill ? Math.max(WN, lyB ? lyAt+1 : WN) : (lyB ? lyAt+1 : n);
   const padL=4, padR=4, slot=(W-padL-padR)/nSlots, barW=Math.min(58, slot*0.62);
   const cx=i=> padL+slot*pos(i)+slot/2;
+  /* wide window (>12 months): month names every 1/2/3/6/12 months, as many as fit (~26px each) */
+  const axStep=!drill || WN<=12 ? 1 : ([1,2,3,6,12].find(k=>slot*k>=26) || 12);
+  const axOn=mi=> (mi%12)%axStep===0;
+  const axFirst=()=>{ let m=S; while(!axOn(m)) m++; return m; };
   const vals=stk ? sv.map((v,i)=>({inc:Math.max(0,v,stk.L.reduce((a,l)=>a+Math.max(0,stk.v(l,i)),0)), exp:Math.max(0,-v)}))
     : ser ? sv.map(v=>({inc:Math.max(0,v), exp:Math.max(0,-v)}))
                  : rows.map(r=>({inc:r.income/dv(r), exp:r.expenses/dv(r)}));
@@ -3307,11 +3313,15 @@ function renderCashBars(){
       const p=el('path',{d:dd,fill:'none',stroke:color,'stroke-width':above?2:1.6,'stroke-linejoin':'round'});
       if(dash) p.setAttribute('stroke-dasharray','5 3');
       svgEl.appendChild(p);
+      /* % labels: only every rStep-th point when they would clash (dots stay); the last point and LY always */
+      const rStep=[1,2,3,4,6,12,24].find(k=>slot*k>=4*fsP*0.62+4) || 24;
+      let lastI=-1; rows.forEach((r,i)=>{ if(!r.ly && rateOf(r,key)!=null) lastI=i; });
       rows.forEach((r,i)=>{ const v=rateOf(r,key); if(v==null) return;
+        const showL=r.ly || i===lastI || (drill ? (rStep>=12 ? r.year%12===0 : (r.year-S)%rStep===0) : i%rStep===0);
         /* LY: hollow dot, dimmed label */
         svgEl.appendChild(el('circle',r.ly ? {cx:cx(i),cy:ry(v),r:2.6,fill:'none',stroke:color,'stroke-width':1.3}
                                            : {cx:cx(i),cy:ry(v),r:2.6,fill:color}));
-        svgEl.appendChild(el('text',{x:cx(i),y:above?ry(v)-6:ry(v)+fsP+3,'text-anchor':'middle',fill:color,'fill-opacity':lyTx(r),
+        if(showL) svgEl.appendChild(el('text',{x:cx(i),y:above?ry(v)-6:ry(v)+fsP+3,'text-anchor':'middle',fill:color,'fill-opacity':lyTx(r),
           'font-size':fsP,'font-weight':above?700:500},Math.round(v)+'%')); });
     };
     line('rateSafe',CF_LINE_SAFE,true,false);
