@@ -190,6 +190,8 @@
   .tip i.ln.dash{border-top-style:dashed;}
   .cfbhead{display:flex; align-items:center; justify-content:space-between; gap:6px 10px; flex-wrap:wrap;}
   .cfbtools{display:flex; align-items:center; gap:6px; min-width:0; flex:0 1 auto;}
+ .cfrange{display:flex; align-items:center; gap:6px; flex:1 1 100%; font-size:12px; color:#9aa6bd; margin-top:4px;}
+ .cfrange input{background:transparent; color:#e7ecf5; border:1px solid var(--grid); border-radius:6px; font:inherit; font-size:16px; padding:2px 6px; color-scheme:dark; touch-action:manipulation;}
   /* drill-down path under the title: Overview › macro category › label › detail.
      One short select per level; the next level only appears once its parent is picked,
      and the detail level stays a dashed "+ Detail" until a detail is asked for. */
@@ -1215,7 +1217,7 @@
   <h2>Trends: cash flow vs savings</h2>
   <div class="cfbtools">
     <!-- month drill-down: shown while one year's months are on screen, goes back to the years -->
-    <span class="pills" id="cfBackWrap" style="display:none"><button type="button" class="pill on" id="cfBack" title="Back to all years (Esc)">&lsaquo; Year</button><button type="button" class="pill" id="cfPrevM" title="One month back" aria-label="One month back">&lsaquo;</button><button type="button" class="pill" id="cfNextM" title="One month on" aria-label="One month on">&rsaquo;</button><label class="pill" title="How many months to show"><select id="cfWin" aria-label="Months shown" style="background:transparent;color:inherit;border:0;font:inherit;font-size:16px;padding:0;cursor:pointer"><option value="12">12M</option><option value="24">24M</option><option value="36">36M</option><option value="48">48M</option><option value="60">60M</option><option value="72">72M</option><option value="84">84M</option><option value="96">96M</option><option value="108">108M</option><option value="120">120M</option><option value="132">132M</option><option value="144">144M</option></select></label></span>
+    <span class="pills" id="cfBackWrap" style="display:none"><button type="button" class="pill on" id="cfBack" title="Back to all years (Esc)">&lsaquo; Year</button><button type="button" class="pill" id="cfPrevM" title="One month back" aria-label="One month back">&lsaquo;</button><button type="button" class="pill" id="cfNextM" title="One month on" aria-label="One month on">&rsaquo;</button></span>
     <span class="tgslot"></span>
     <!-- R12M: rolling 12-month stacked areas instead of the yearly bars -->
     <span class="pills"><button type="button" class="pill" id="cfOffBtn" aria-expanded="false" aria-controls="cfOffBox" title="Leave labels, categories or details out of this chart">Exclude<span id="cfOffCnt"></span></button></span>
@@ -1230,6 +1232,11 @@
     <span class="cfsep" id="cfSep3" aria-hidden="true" hidden>&rsaquo;</span>
     <select id="cfSel3" aria-label="Detail" title="Drill into one detail of this label" hidden></select>
   </nav>
+  <!-- From / To (9 Nov 2026): the months shown in the month view (max 144) and in R12M -->
+  <div class="cfrange" id="cfRange" style="display:none">
+    <span>From</span><input type="month" id="cfFrom" aria-label="From month">
+    <span>To</span><input type="month" id="cfTo" aria-label="To month">
+  </div>
 </div>
 <div class="cfbwrap framed" id="cfbwrap" style="display:none">
   <svg id="cfbars" viewBox="0 0 900 360"></svg>
@@ -1420,7 +1427,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v2.61';
+const APP_VER='v2.62';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 /* self-update (1 Nov 2026): GitHub Pages lets phones keep the page up to 10 min, and a home-
    screen app resumed from the background keeps running its old code for hours. That old code
@@ -2953,7 +2960,13 @@ function cfStyleLayers(layers){
 const niceStep=x=>{ if(!(x>0)) return 1; const p=Math.pow(10,Math.floor(Math.log10(x))), f=x/p;
   return (f<=1?1:f<=2?2:f<=2.5?2.5:f<=5?5:10)*p; };
 function renderRolling(svgEl, W, narrow, perMonth){
-  const m0=META.minMi, m1=pvOn() ? META.maxMi : lastCompleteMi(), N=m1-m0+1;   // plan view: to Dec of the plan's last year
+  const mEnd=pvOn() ? META.maxMi : lastCompleteMi();   // plan view: to Dec of the plan's last year
+  /* picked From / To (9 Nov 2026): null = the whole history; the sums still read the 11 months before From */
+  let m0=cfR0!=null ? Math.max(META.minMi, Math.min(mEnd-1, cfR0)) : META.minMi;
+  let m1=cfR1!=null ? Math.min(mEnd, Math.max(m0+1, cfR1)) : mEnd;
+  if(m1-m0<1){ m0=META.minMi; m1=mEnd; }
+  const N=m1-m0+1;
+  cfSyncRange(m0, m1, META.minMi, mEnd);
   const el=(tag,attrs,txt)=>{ const e=document.createElementNS(NS,tag);
     for(const k in attrs) e.setAttribute(k,attrs[k]); if(txt!=null) e.textContent=txt; return e; };
   svgEl.innerHTML='';
@@ -3014,7 +3027,14 @@ function renderRolling(svgEl, W, narrow, perMonth){
     svgEl.appendChild(el('text',{x:padL-5,y:y+3.5,'text-anchor':'end',fill:'#9aa6bd','font-size':fs},fmt(t)));
   }
   /* x labels: one per January (every other year when columns get tight) */
-  const yrs=[]; for(let i=0;i<N;i++) if((m0+i)%12===0 || i===0) yrs.push(i);
+  /* short picked range (<= 36 months): month names every 1/2/3/6 months instead, year on Jan */
+  const MSR=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"], colW=innerW/Math.max(1,N-1);
+  const mk=N<=36 ? [1,2,3,6].find(k=>colW*k>=30) : null;
+  if(mk) for(let i=0;i<N;i++){ const mi=m0+i; if((mi%12)%mk) continue;
+    svgEl.appendChild(el('line',{x1:xOf(i),x2:xOf(i),y1:plotBot,y2:plotBot+4,stroke:'#3a4d78'}));
+    svgEl.appendChild(el('text',{x:xOf(i),y:plotBot+15,'text-anchor':i===0?'start':i===N-1?'end':'middle',fill:'#e7ecf5','font-size':fs},
+      MSR[mi%12]+(mi%12===0 ? ' '+String(Math.floor(mi/12)).slice(2) : ''))); }
+  const yrs=[]; if(!mk) for(let i=0;i<N;i++) if((m0+i)%12===0 || i===0) yrs.push(i);
   const every=(innerW/Math.max(1,yrs.length))<30 ? 2 : 1;
   yrs.forEach((i,j)=>{ if(j%every) return;
     svgEl.appendChild(el('line',{x1:xOf(i),x2:xOf(i),y1:plotBot,y2:plotBot+4,stroke:'#3a4d78'}));
@@ -3094,11 +3114,22 @@ let cfRoll=false;
 /* month view (8 Nov 2026): always 12 months, from cfDrillS; < > move it one month at a time */
 let cfDrill=null, cfDrillS=null, cfPT='mouse', cfTipKey=null;
 /* window width (9 Nov 2026): 12 by default, up to 144 months (picked in #cfWin, kept on this device) */
-let cfWinN=(()=>{ const v=parseInt(localStorage.getItem('cfWin'),10); return v>=12 && v<=144 ? v : 12; })();
+/* now set by the From / To pickers (width = To - From + 1, 1..144); tapping a year keeps the last width */
+let cfWinN=(()=>{ const v=parseInt(localStorage.getItem('cfWin'),10); return v>=1 && v<=144 ? v : 12; })();
+/* R12M From / To (null = whole history); cfLastMi = last month the bars can show */
+let cfR0=null, cfR1=null, cfLastMi=null;
+const miToYm=mi=> Math.floor(mi/12)+'-'+String(mi%12+1).padStart(2,'0');
+const ymToMi=s=>{ const m=/^(\d{4})-(\d{1,2})$/.exec(String(s||'').trim()); return m ? (+m[1])*12+(+m[2])-1 : null; };
+function cfSyncRange(a, b, lo, hi){
+  const f=document.getElementById('cfFrom'), t=document.getElementById('cfTo'); if(!f || !t) return;
+  f.value=miToYm(a); t.value=miToYm(b);
+  [f,t].forEach(x=>{ x.min=miToYm(lo); x.max=miToYm(hi); });
+}
 function syncCfDrill(){
   const w=document.getElementById('cfBackWrap'), b=document.getElementById('cfBack');
   if(!w || !b) return;
   w.style.display = cfDrill!=null && !cfRoll ? '' : 'none';
+  const rg=document.getElementById('cfRange'); if(rg) rg.style.display = cfRoll || cfDrill!=null ? '' : 'none';
   if(cfDrill!=null) b.textContent='\u2039 Years';
 }
 function cfDrillTo(y){ cfDrill=y; cfDrillS=y==null ? null : y*12+12-cfWinN; cfTipKey=null; hideTip(); syncCfDrill(); renderCashBars(); }
@@ -3117,7 +3148,7 @@ function renderCashBars(){
      cached copy now, a background check that redraws when it lands (txVer / txSnapAt) */
   const d=new Date(), todayDk=d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate();
   if(!cfRoll) ensureTx();
-  const sig=[W,perMonth,showK,cfSel,cfRoll,cfDrill,cfDrillS,cfWinN,[...deselected].sort().join(','),[...cfOff].sort().join(','),todayDk,txVer,txSnapAt,PLAN?PLAN.at:0,JSON.stringify(fcGet())].join('#');
+  const sig=[W,perMonth,showK,cfSel,cfRoll,cfDrill,cfDrillS,cfWinN,cfR0,cfR1,[...deselected].sort().join(','),[...cfOff].sort().join(','),todayDk,txVer,txSnapAt,PLAN?PLAN.at:0,JSON.stringify(fcGet())].join('#');
   if(sig===cfSig && DATA===cfData) return;
   cfSig=sig; cfData=DATA; cfLastW=W;
   if(cfRoll){ renderRolling(svgEl, W, W<560, perMonth); return; }
@@ -3137,10 +3168,12 @@ function renderCashBars(){
   const plFrom=pvOn() ? META.planFromMi : OL ? nowMi+1 : null, isPl=mi=> plFrom!=null && mi>=plFrom;
   /* month view: one row per month of the drilled year (row.year holds the mi) */
   /* the 12-month window: never before the data, never past the last month shown */
-  const WN=cfWinN;
+  cfLastMi=lastMi;
+  const WN=cfWinN=Math.max(1, Math.min(cfWinN, lastMi-META.minMi+1));
   if(cfDrill!=null){ if(cfDrillS==null) cfDrillS=cfDrill*12+12-WN;
     cfDrillS=Math.max(META.minMi, Math.min(lastMi-WN+1, cfDrillS)); }
   const S=cfDrillS;
+  if(cfDrill!=null) cfSyncRange(S, S+WN-1, META.minMi, lastMi);
   { const pv=document.getElementById('cfPrevM'), nx=document.getElementById('cfNextM');
     if(pv) pv.disabled=S==null || S<=META.minMi; if(nx) nx.disabled=S==null || S+WN-1>=lastMi; }
   const mBucket=()=> mi=> mi>=S && mi<=S+WN-1 ? mi : null;
@@ -6828,12 +6861,22 @@ function initControlsOnce(){
   document.getElementById('cfBack').addEventListener('click',e=>{ e.stopPropagation(); cfDrillTo(null); });
   document.getElementById('cfPrevM').addEventListener('click',e=>{ e.stopPropagation(); cfShift(-1); });
   document.getElementById('cfNextM').addEventListener('click',e=>{ e.stopPropagation(); cfShift(1); });
-  { const ws=document.getElementById('cfWin'); ws.value=String(cfWinN);
-    ws.addEventListener('click',e=>e.stopPropagation());
-    ws.addEventListener('change',()=>{ const n=parseInt(ws.value,10)||12, end=cfDrillS==null ? null : cfDrillS+cfWinN-1;
-      cfWinN=n; try{ localStorage.setItem('cfWin',String(n)); }catch(e){}
-      if(end!=null) cfDrillS=end-n+1;   // keep the last month on screen, grow to the left
-      cfTipKey=null; hideTip(); renderCashBars(); }); }
+  /* From / To pickers: month view = those months (max 144, the To side wins); R12M = that span */
+  ['cfFrom','cfTo'].forEach(id=>{ const x=document.getElementById(id);
+    x.addEventListener('click',e=>e.stopPropagation());
+    x.addEventListener('change',()=>{
+      let a=ymToMi(document.getElementById('cfFrom').value), b=ymToMi(document.getElementById('cfTo').value);
+      if(a==null || b==null) return;
+      if(b<a){ const t=a; a=b; b=t; }
+      if(cfRoll){ cfR0=a; cfR1=b; }
+      else {
+        const hi=cfLastMi!=null ? cfLastMi : META.maxMi;
+        b=Math.min(b, hi); a=Math.max(META.minMi, Math.min(a, b));
+        if(b-a+1>144) a=b-143;
+        cfWinN=b-a+1; cfDrillS=a; try{ localStorage.setItem('cfWin',String(cfWinN)); }catch(e){}
+        if(cfDrill==null){ cfDrill=Math.floor(b/12); syncCfDrill(); }
+      }
+      cfTipKey=null; hideTip(); renderCashBars(); }); });
   /* Exclude list (8 Nov 2026): the button opens / closes it; a tick change redraws the chart */
   document.getElementById('cfOffBtn').addEventListener('click',e=>{ e.stopPropagation(); cfOffOpen=!cfOffOpen; renderCfOff(); });
   { const bx=document.getElementById('cfOffBox');
