@@ -191,7 +191,9 @@
   .cfbhead{display:flex; align-items:center; justify-content:space-between; gap:6px 10px; flex-wrap:wrap;}
   .cfbtools{display:flex; align-items:center; gap:6px; min-width:0; flex:0 1 auto;}
  .cfrange{display:flex; align-items:center; gap:6px; flex:1 1 100%; font-size:12px; color:#9aa6bd; margin-top:4px;}
- .cfrange input{background:transparent; color:#e7ecf5; border:1px solid var(--grid); border-radius:6px; font:inherit; font-size:16px; padding:2px 6px; color-scheme:dark; touch-action:manipulation;}
+ .cfrange select{background:transparent; color:#e7ecf5; border:1px solid var(--grid); border-radius:6px; font:inherit; font-size:16px; padding:2px 4px; color-scheme:dark; touch-action:manipulation; cursor:pointer;}
+ .cfrange select option{background:#141b2d; color:#e7ecf5;}
+ .cfrange span + select{margin-left:2px;} .cfrange select + span{margin-left:8px;}
   /* drill-down path under the title: Overview › macro category › label › detail.
      One short select per level; the next level only appears once its parent is picked,
      and the detail level stays a dashed "+ Detail" until a detail is asked for. */
@@ -1234,8 +1236,8 @@
   </nav>
   <!-- From / To (9 Nov 2026): the months shown in the month view (max 144) and in R12M -->
   <div class="cfrange" id="cfRange" style="display:none">
-    <span>From</span><input type="month" id="cfFrom" aria-label="From month">
-    <span>To</span><input type="month" id="cfTo" aria-label="To month">
+    <span>From</span><select id="cfFromY" aria-label="From year"></select><select id="cfFromM" aria-label="From month"></select>
+    <span>To</span><select id="cfToY" aria-label="To year"></select><select id="cfToM" aria-label="To month"></select>
   </div>
 </div>
 <div class="cfbwrap framed" id="cfbwrap" style="display:none">
@@ -1427,7 +1429,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v2.62';
+const APP_VER='v2.63';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 /* self-update (1 Nov 2026): GitHub Pages lets phones keep the page up to 10 min, and a home-
    screen app resumed from the background keeps running its old code for hours. That old code
@@ -3120,10 +3122,19 @@ let cfWinN=(()=>{ const v=parseInt(localStorage.getItem('cfWin'),10); return v>=
 let cfR0=null, cfR1=null, cfLastMi=null;
 const miToYm=mi=> Math.floor(mi/12)+'-'+String(mi%12+1).padStart(2,'0');
 const ymToMi=s=>{ const m=/^(\d{4})-(\d{1,2})$/.exec(String(s||'').trim()); return m ? (+m[1])*12+(+m[2])-1 : null; };
+/* four drop-downs (9 Nov 2026): From year, From month, To year, To month */
+const CF_MN=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+let cfRangeYrs='';
 function cfSyncRange(a, b, lo, hi){
-  const f=document.getElementById('cfFrom'), t=document.getElementById('cfTo'); if(!f || !t) return;
-  f.value=miToYm(a); t.value=miToYm(b);
-  [f,t].forEach(x=>{ x.min=miToYm(lo); x.max=miToYm(hi); });
+  const g=id=>document.getElementById(id), fy=g('cfFromY'), fm=g('cfFromM'), ty=g('cfToY'), tm=g('cfToM');
+  if(!fy || !fm || !ty || !tm) return;
+  const y0=Math.floor(lo/12), y1=Math.floor(hi/12), key=y0+'-'+y1;
+  if(cfRangeYrs!==key){ cfRangeYrs=key;
+    const yo=[]; for(let y=y1;y>=y0;y--) yo.push(`<option value="${y}">${y}</option>`);
+    fy.innerHTML=ty.innerHTML=yo.join('');
+    fm.innerHTML=tm.innerHTML=CF_MN.map((m,i)=>`<option value="${i}">${m}</option>`).join(''); }
+  fy.value=String(Math.floor(a/12)); fm.value=String(a%12);
+  ty.value=String(Math.floor(b/12)); tm.value=String(b%12);
 }
 function syncCfDrill(){
   const w=document.getElementById('cfBackWrap'), b=document.getElementById('cfBack');
@@ -3133,6 +3144,14 @@ function syncCfDrill(){
   if(cfDrill!=null) b.textContent='\u2039 Years';
 }
 function cfDrillTo(y){ cfDrill=y; cfDrillS=y==null ? null : y*12+12-cfWinN; cfTipKey=null; hideTip(); syncCfDrill(); renderCashBars(); }
+/* month view on [a, b]: clamped to the data, max 144 months (the To side wins) */
+function cfSetMonthRange(a, b){
+  const hi=cfLastMi!=null ? cfLastMi : META.maxMi;
+  b=Math.min(b, hi); a=Math.max(META.minMi, Math.min(a, b));
+  if(b-a+1>144) a=b-143;
+  cfWinN=b-a+1; cfDrillS=a; try{ localStorage.setItem('cfWin',String(cfWinN)); }catch(e){}
+  cfDrill=Math.floor(b/12); cfTipKey=null; syncCfDrill();
+}
 function cfShift(d){ if(cfDrill==null || cfDrillS==null) return; cfDrillS+=d; cfTipKey=null; hideTip(); renderCashBars(); }
 let cfLastW=0, cfSig=null, cfData=null;
 /* called from every build(); redraws only when an input changed (data, exclusions,
@@ -6856,26 +6875,27 @@ function initControlsOnce(){
   /* chart picker, drilled one level at a time: Overview › category › label › detail */
   document.getElementById('cfpath').addEventListener('change',e=>{
     if(e.target && e.target.tagName==='SELECT') cfPick(e.target.value); });
-  document.getElementById('cfRoll').addEventListener('change',e=>{ cfRoll=e.target.checked; if(cfRoll) cfDrill=null; syncCfDrill(); hideTip(); renderCashBars(); });
+  /* R12M on/off keeps the From / To range: month view -> R12M takes the months on screen;
+     R12M -> bars opens the month view on the same range (max 144 months, To side wins) */
+  document.getElementById('cfRoll').addEventListener('change',e=>{ cfRoll=e.target.checked;
+    if(cfRoll){ if(cfDrill!=null && cfDrillS!=null){ cfR0=cfDrillS; cfR1=cfDrillS+cfWinN-1; } cfDrill=null; }
+    else if(cfR0!=null && cfR1!=null) cfSetMonthRange(cfR0, cfR1);
+    syncCfDrill(); hideTip(); renderCashBars(); });
   /* month drill-down: back to the years (pill or Esc; Esc closes an open panel first) */
   document.getElementById('cfBack').addEventListener('click',e=>{ e.stopPropagation(); cfDrillTo(null); });
   document.getElementById('cfPrevM').addEventListener('click',e=>{ e.stopPropagation(); cfShift(-1); });
   document.getElementById('cfNextM').addEventListener('click',e=>{ e.stopPropagation(); cfShift(1); });
   /* From / To pickers: month view = those months (max 144, the To side wins); R12M = that span */
-  ['cfFrom','cfTo'].forEach(id=>{ const x=document.getElementById(id);
+  ['cfFromY','cfFromM','cfToY','cfToM'].forEach(id=>{ const x=document.getElementById(id);
     x.addEventListener('click',e=>e.stopPropagation());
     x.addEventListener('change',()=>{
-      let a=ymToMi(document.getElementById('cfFrom').value), b=ymToMi(document.getElementById('cfTo').value);
-      if(a==null || b==null) return;
+      const v=id2=>parseInt(document.getElementById(id2).value,10);
+      let a=v('cfFromY')*12+v('cfFromM'), b=v('cfToY')*12+v('cfToM');
+      if(!isFinite(a) || !isFinite(b)) return;
+      if(cfRoll){ const mEnd=pvOn() ? META.maxMi : lastCompleteMi(); a=Math.max(META.minMi,a); b=Math.min(mEnd,b); }
       if(b<a){ const t=a; a=b; b=t; }
-      if(cfRoll){ cfR0=a; cfR1=b; }
-      else {
-        const hi=cfLastMi!=null ? cfLastMi : META.maxMi;
-        b=Math.min(b, hi); a=Math.max(META.minMi, Math.min(a, b));
-        if(b-a+1>144) a=b-143;
-        cfWinN=b-a+1; cfDrillS=a; try{ localStorage.setItem('cfWin',String(cfWinN)); }catch(e){}
-        if(cfDrill==null){ cfDrill=Math.floor(b/12); syncCfDrill(); }
-      }
+      cfR0=a; cfR1=b;   // one range for both views: kept when R12M is switched on or off
+      if(!cfRoll) cfSetMonthRange(a, b);
       cfTipKey=null; hideTip(); renderCashBars(); }); });
   /* Exclude list (8 Nov 2026): the button opens / closes it; a tick change redraws the chart */
   document.getElementById('cfOffBtn').addEventListener('click',e=>{ e.stopPropagation(); cfOffOpen=!cfOffOpen; renderCfOff(); });
