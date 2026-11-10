@@ -74,6 +74,11 @@ Update this README in the same commit as each change. `git log` has the one-line
   no archive needed (the archive button stays for a one-off fix). 2026 has no Jan copy: its year
   start is the November one. Mode `planDlM` ('m' / 'y' / '' off, localStorage `fs2-plan-dmode-v1`);
   laptop pills **Δ month** / **Δ year** (tap the active one = off), phone: two rows in Options.
+- **v2.70 Δ on the stock vests (RSU):** the RSU line is computed, so each start copy also keeps
+  `px` (AMZN EUR close before the 1st, `amznMonthBase`) and `rsu` {l: vests, n: part kept}.
+  `planBaseRsu()` rebuilds the start RSU per month and the line, Work income and Savings show
+  its ▲/▼. Copies made before v2.70 get `px` = close before 1 Nov and the vests as they are now
+  (so the Δ is the price move); "Δ start from archive..." also takes the vests from the archive.
 - **Compare:** opens as T12M a year ago -> T12M now, Expenses waterfall, Avg/m on (v2.42-v2.43);
   delta and % go from the first period to the second (v2.41, v2.44); ⇆ swap button (v2.56);
   this month counted with mixMonth() when the Plan pill is on (v2.40).
