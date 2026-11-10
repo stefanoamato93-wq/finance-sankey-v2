@@ -68,6 +68,12 @@ Update this README in the same commit as each change. `git log` has the one-line
   the savings change), Δ start from archive, Highlight changes, <month> actual, Expand all,
   Collapse all, Undo; under them the Savings targets and Forecast settings boxes. On the phone
   those two boxes no longer sit under the table. The laptop layout is unchanged.
+- **v2.69 Δ month / Δ year:** besides `PLAN.base` (month start) the plan keeps `PLAN.baseY` =
+  {y, at, m}, made on the first open of a year from that month's copy (so = plan of 1 Jan). The
+  plan only changes inside the app, so the first open of a month / year IS the plan of the 1st:
+  no archive needed (the archive button stays for a one-off fix). 2026 has no Jan copy: its year
+  start is the November one. Mode `planDlM` ('m' / 'y' / '' off, localStorage `fs2-plan-dmode-v1`);
+  laptop pills **Δ month** / **Δ year** (tap the active one = off), phone: two rows in Options.
 - **Compare:** opens as T12M a year ago -> T12M now, Expenses waterfall, Avg/m on (v2.42-v2.43);
   delta and % go from the first period to the second (v2.41, v2.44); ⇆ swap button (v2.56);
   this month counted with mixMonth() when the Plan pill is on (v2.40).

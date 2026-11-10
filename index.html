@@ -941,7 +941,7 @@
   .popts .posec .fcbox{margin:0 0 10px; border-radius:12px; padding:10px 12px;}
   .popts .posec .fcbox summary{font-size:14px; line-height:1.4;}
   .plan.pfit td small.dl{font-size:10.5px;}
-  .plantools button[data-pa="delta"][aria-pressed="true"]{background:#1f4a35; border-color:#2f6b4f; color:#fff;}
+  .plantools button[data-pa^="dm-"][aria-pressed="true"]{background:#1f4a35; border-color:#2f6b4f; color:#fff;}
   /* phone edit sheet (8 Nov 2026) */
 #planSheet{position:fixed; inset:0; z-index:60;}
 #planSheet .shbg{position:absolute; inset:0; background:rgba(0,0,0,.5);}
@@ -1476,7 +1476,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v2.68';
+const APP_VER='v2.69';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 /* self-update (1 Nov 2026): GitHub Pages lets phones keep the page up to 10 min, and a home-
    screen app resumed from the background keeps running its old code for hours. That old code
@@ -5611,12 +5611,19 @@ async function planCloud(){
    with the plan to Firestore. Made only once the cloud copy has settled, so a stale local plan
    never becomes the baseline. */
 const planBK=r=> (r.k==='I'?'I':'E')+'|'+r.g+'|'+r.l+'|'+r.d;
-let planDlOn=true; try{ planDlOn=localStorage.getItem('fs2-plan-delta-v1')!=='0'; }catch(e){}
+/* 10 Nov 2026: also PLAN.baseY = {y, at, m} made on the first open of a year (the same copy as
+   that month's PLAN.base, so it is the plan of 1 Jan). The plan can only change inside the app,
+   so the first open of a month / year is the plan as it stood on the 1st. In 2026 (feature start)
+   baseY is the November copy. Δ mode planDlM: 'm' = since month start, 'y' = since year start, '' = off. */
+let planDlM='m'; try{ const s=localStorage.getItem('fs2-plan-dmode-v1');
+  if(s!=null) planDlM=s; else if(localStorage.getItem('fs2-plan-delta-v1')==='0') planDlM=''; }catch(e){}
+const planDlSet=v=>{ planDlM=v; try{ localStorage.setItem('fs2-plan-dmode-v1', v); }catch(e){} };
 function planBaseEnsure(){
   if(!PLAN || PLAN.seed || (FS2.data && !planCloudReady)) return;
-  const cm=planStart(); if(PLAN.base && PLAN.base.mi===cm) return;
-  PLAN.base={mi:cm, at:Date.now(), m:planBaseOf(PLAN.rows, cm)};
-  planSave();
+  const cm=planStart(), y=Math.floor(cm/12); let ch=false;
+  if(!(PLAN.base && PLAN.base.mi===cm)){ PLAN.base={mi:cm, at:Date.now(), m:planBaseOf(PLAN.rows, cm)}; ch=true; }
+  if(!(PLAN.baseY && PLAN.baseY.y===y)){ PLAN.baseY={y, at:PLAN.base.at, m:JSON.parse(JSON.stringify(PLAN.base.m))}; ch=true; }
+  if(ch) planSave();
 }
 function planBaseOf(rows, cm){ const m={};
   rows.forEach(r=>{ const k=planBK(r), o=m[k]||(m[k]={});
@@ -5635,6 +5642,8 @@ function planBaseFromArchive(text){
   const at=+p.at || +snap.at, d=new Date(at), mi=d.getFullYear()*12+d.getMonth(), cm=planStart();
   if(mi!==cm) throw new Error('That plan is from '+d.toLocaleDateString()+', not from this month.');
   PLAN.base={mi:cm, at, m:planBaseOf(planMigrate(JSON.parse(JSON.stringify(p))).rows, cm), src:'archive'};
+  const y=Math.floor(cm/12);   // an older copy of this year is a better year start too
+  if(!PLAN.baseY || PLAN.baseY.y!==y || +PLAN.baseY.at>at) PLAN.baseY={y, at, m:JSON.parse(JSON.stringify(PLAN.base.m)), src:'archive'};
   planSave();
   planNote='\u0394 now counts from your plan of '+d.toLocaleDateString()+' '+d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})+'.';
 }
@@ -6095,8 +6104,10 @@ function renderPlanCore(force){
     return amTd(L.reduce((s,it)=>s+actOf(it),0), L.reduce((s,it)=>s+plOf(it),0), k, paceL(L), mob ? dlH(dSum(L,{mi:cm}), k) : ''); };   // phone: this month's plan change sits in the Act / Plan cell
   /* plan change since PLAN.base (the copy made on the 1st open of this month): typed rows only;
      rows deleted or renamed since then count in their label / group / total sums */
-  const B=PLAN.base, dlOn=!!(planDlOn && B && B.mi===cm0 && B.m);
-  const bd=B && B.at ? new Date(B.at) : null, baseDay=bd ? bd.getDate()+' '+MON[bd.getMonth()] : '';
+  const BM=PLAN.base, BY=PLAN.baseY, okM=!!(BM && BM.mi===cm0 && BM.m), okY=!!(BY && BY.y===y0 && BY.m);
+  const B=planDlM==='y' ? (okY ? BY : null) : planDlM==='m' ? (okM ? BM : null) : null, dlOn=!!B;
+  const dayOf=x=>{ const d=x && x.at ? new Date(x.at) : null; return d ? d.getDate()+' '+MON[d.getMonth()] : ''; };
+  const baseDay=dayOf(B), dayM=dayOf(BM), dayY=dayOf(BY);
   const inCol=(mi,c)=> c.mi!=null ? mi===c.mi : Math.floor(mi/12)===c.y;
   const dOf=(it,c)=>{ if(!dlOn || it.ri==null) return 0; const bm=B.m[planBK(it.r)]||{};
     let s=0; ms.forEach(mi=>{ if(inCol(mi,c)) s+=(+it.r.m[mi]||0)-(+bm[mi]||0); }); return s/ydiv(c); };
@@ -6207,7 +6218,8 @@ function renderPlanCore(force){
   /* change since the 1st: this year's savings, as a chip next to the toggle */
   const dSav=dlOn ? dSum(inc,{y:y0})-dSum(exp,{y:y0}) : 0, dSavT=fmt(Math.abs(dSav));
   const dlChip=dlOn && Math.round(dSav) && !/^0([,.]0+)?K?$/.test(dSavT) ? `<span class="dlsum">Savings ${y0}${perM?' /m':''} <b class="${dSav>0?'gd':'bd'}">${dSav>0?'\u25b2':'\u25bc'} ${dSavT}</b></span>` : '';
-  const dlBtn=B && B.mi===cm0 ? `<button type="button" data-pa="delta" aria-pressed="${planDlOn}" title="Show how the plan changed since ${planEsc(baseDay)}">\u0394 since ${planEsc(baseDay)}</button>` : '';
+  const dlBtn=(okM ? `<button type="button" data-pa="dm-m" aria-pressed="${planDlM==='m'}" title="Plan change since the month started (${planEsc(dayM)})">\u0394 month</button>` : '')+
+    (okY ? `<button type="button" data-pa="dm-y" aria-pressed="${planDlM==='y'}" title="Plan change since the year started (${planEsc(dayY)})">\u0394 year</button>` : '');
   const sc=wrap.querySelector('.planscroll'), sl=sc?sc.scrollLeft:0, st=sc?sc.scrollTop:0;
   const YT=ytBoxHtml(fc, px); fireNeedRefresh();
   wrap.innerHTML=YT.status+`<div class="plantools${mob && !planMore ? ' pless' : ''}${!mob && !planMore ? ' dless' : ''}"><span class="pmv" role="group" aria-label="View">`+
@@ -6235,7 +6247,8 @@ function renderPlanCore(force){
       `<div class="pop" role="dialog" aria-label="Plan options"><div class="poh"><span>Options</span><button type="button" data-pa="opts" aria-label="Close">\u2715</button></div>`+
       (planNote || fcErr ? `<div class="pomsg">${msg}</div>` : '')+
       `<div class="pog">`+
-      (B && B.mi===cm0 ? row('delta', '\u0394 since '+planEsc(baseDay), dSub, planDlOn) : '')+
+      (okM ? row('dm-m', '\u0394 since month start', planDlM==='m' ? dSub : `<small>${planEsc(dayM)} \u00b7 Off</small>`, planDlM==='m') : '')+
+      (okY ? row('dm-y', '\u0394 since year start', planDlM==='y' ? dSub : `<small>${planEsc(dayY)} \u00b7 Off</small>`, planDlM==='y') : '')+
       row('dbase', '\u0394 start from archive\u2026', '<small>pick a file</small>')+
       row('dev', 'Highlight changes', `<small>${planDev!=null ? '\u00b1'+Math.round(planDev*100)+'% \u00b7 tap to turn off' : 'Off'}</small>`, planDev!=null)+
       row('actual', MONL+' actual', st(planAmOn), planAmOn)+
@@ -6446,11 +6459,11 @@ function planInit(){
     if(ds.pa==='opts'){ planOpts=!planOpts; planOptsNew=planOpts; planOptsTop=0; renderPlan(true); return; }
     if(ds.pa==='dbase'){ const fi=document.createElement('input'); fi.type='file'; fi.accept='.html,text/html';
       fi.onchange=()=>{ const f=fi.files && fi.files[0]; if(!f) return;
-        f.text().then(t=>{ planBaseFromArchive(t); planDlOn=true; try{ localStorage.setItem('fs2-plan-delta-v1','1'); }catch(x){} })
+        f.text().then(t=>{ planBaseFromArchive(t); if(!planDlM) planDlSet('m'); })
           .catch(err=>{ planNote='\u0394 start not changed: '+(err && err.message || err); })
           .finally(()=>renderPlan(true)); };
       fi.click(); return; }
-    if(ds.pa==='delta'){ planDlOn=!planDlOn; try{ localStorage.setItem('fs2-plan-delta-v1', planDlOn?'1':'0'); }catch(x){} renderPlan(true); return; }
+    if(ds.pa==='dm-m' || ds.pa==='dm-y'){ const v=ds.pa.slice(3); planDlSet(planDlM===v ? '' : v); renderPlan(true); return; }
     if(ds.pa==='mv-m' || ds.pa==='mv-y'){ planMobV=ds.pa.slice(3); try{ localStorage.setItem('fs2-plan-mobv-v1', planMobV); }catch(x){} renderPlan(true); return; }
     if(ds.py!=null){ const y=+ds.py; planOpenY.has(y)?planOpenY.delete(y):planOpenY.add(y); renderPlan(true); }
     else if(ds.pg!=null){ planShutG.has(ds.pg)?planShutG.delete(ds.pg):planShutG.add(ds.pg); renderPlan(true); }
