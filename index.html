@@ -917,7 +917,29 @@
   .plan small.dl.gd{color:#5fc28a;} .plan small.dl.bd{color:#e58a8a;}
   .plantools .dlsum{font-size:11.5px; padding:4px 10px; border-radius:999px; background:#1a2234; color:var(--muted);}
   .plantools .dlsum b.gd{color:#5fc28a;} .plantools .dlsum b.bd{color:#e58a8a;}
-  .plantools.pless > button[data-pa="delta"][type]{display:inline-block;}   /* phone: Δ pill stays out of the ⋯ menu */
+  /* phone Options sheet (10 Nov 2026) */
+  .plantools.pless > button.pobtn[type]{display:inline-block;}
+  .plantools.pless > .dlsum{display:none;}
+  .plantools .pobtn{font-size:14px; padding:7px 14px; background:#1d2638; border-color:#3a4d78;}
+  .popts{position:fixed; inset:0; z-index:55;}
+  .popts .pobg{position:absolute; inset:0; width:100%; height:100%; padding:0; border:0; background:rgba(0,0,0,.5);}
+  .popts .pop{position:absolute; left:0; right:0; bottom:0; max-height:86vh; overflow-y:auto; -webkit-overflow-scrolling:touch;
+    background:#151c2c; color:var(--ink); border-top:1px solid #3a4d78; border-radius:18px 18px 0 0; padding:10px 12px calc(16px + env(safe-area-inset-bottom));}
+  .popts .pop.anim{animation:shup .18s ease-out;}
+  @media (prefers-reduced-motion:reduce){ .popts .pop.anim{animation:none;} }
+  .popts .poh{display:flex; align-items:center; justify-content:space-between; font-size:16px; font-weight:700; margin:2px 2px 10px;}
+  .popts .poh button{background:none; border:0; color:var(--muted); font-size:22px; padding:4px 10px;}
+  .popts .pomsg{font-size:12.5px; color:#e7c14a; margin:0 2px 10px;}
+  .popts .pog{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px;}
+  .popts .por{display:flex; flex-direction:column; align-items:flex-start; justify-content:center; gap:3px; min-height:58px; padding:10px 12px;
+    border-radius:12px; background:#1d2638; border:1px solid #2a3550; color:var(--ink); font:inherit; font-size:14.5px; font-weight:600; text-align:left; touch-action:manipulation;}
+  .popts .por small{font-size:12px; font-weight:400; color:var(--muted);}
+  .popts .por[aria-pressed="true"]{background:#1f4a35; border-color:#2f6b4f;} .popts .por[aria-pressed="true"] small{color:#cfe9da;}
+  .popts .por:disabled{opacity:.4;}
+  .popts .por.wide{grid-column:1 / -1;}
+  .popts .dlsum.sm{padding:0; background:none; font-size:12px; color:var(--muted);}
+  .popts .posec .fcbox{margin:0 0 10px; border-radius:12px; padding:10px 12px;}
+  .popts .posec .fcbox summary{font-size:14px; line-height:1.4;}
   .plan.pfit td small.dl{font-size:10.5px;}
   .plantools button[data-pa="delta"][aria-pressed="true"]{background:#1f4a35; border-color:#2f6b4f; color:#fff;}
   /* phone edit sheet (8 Nov 2026) */
@@ -1454,7 +1476,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v2.67';
+const APP_VER='v2.68';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 /* self-update (1 Nov 2026): GitHub Pages lets phones keep the page up to 10 min, and a home-
    screen app resumed from the background keeps running its old code for hours. That old code
@@ -6176,7 +6198,7 @@ function renderPlanCore(force){
   const pnav=!mob ? '' : `<span class="pnav">`+(planMobV==='y'
       ? `<button type="button" data-pm="-12"${pyy<=y0?' disabled':''} aria-label="Year before">\u2039</button><b>${pyy}</b><button type="button" data-pm="12"${pyy>=fc.endYear?' disabled':''} aria-label="Next year">\u203a</button>`
       : `<button type="button" data-pm="-1"${planMobMi<=ms[0]?' disabled':''} aria-label="Month before">\u2039</button><b>${MON[planMobMi%12]} ${String(pyy).slice(2)}</b><button type="button" data-pm="1"${planMobMi>=ms[ms.length-1]?' disabled':''} aria-label="Next month">\u203a</button>`)+
-    `</span><button type="button" data-pa="more" aria-pressed="${planMore}" aria-label="More tools">\u22ef</button>`;
+    `</span><button type="button" class="pobtn" data-pa="opts" aria-expanded="${planOpts}" aria-label="Options">\u2699 Options</button>`;
   const anyOpen=planOpenY.size>0, at=PLAN.at ? new Date(PLAN.at) : null;
   const detAll=!planShutG.size && planDetKeys.length>0 && planDetKeys.every(k=>planOpenL.has(k)),
         detNone=!planDetKeys.some(k=>planOpenL.has(k)) && planGrpKeys.every(g=>planShutG.has(g));
@@ -6199,9 +6221,30 @@ function renderPlanCore(force){
     `<button type="button" data-pa="dbase" title="Pick an Archive file made earlier this month: its plan becomes the start for \u0394">\u0394 start from archive\u2026</button>`+
     (mob ? '' : `<button type="button" data-pa="more" aria-pressed="${planMore}" aria-label="More tools" title="More tools">\u22ef</button>`)+`</div>`+
     `<div class="planscroll"><table class="plan${mob ? ' pfit' : ''}"><thead>${mob ? headM : head}</thead><tbody>${body}</tbody></table></div>`+
-    `<div class="plansettings">${YT.box}${fcBoxHtml(fc, px, ms)}</div>`;   // settings under the table (1 Nov 2026)
+    (mob ? '' : `<div class="plansettings">${YT.box}${fcBoxHtml(fc, px, ms)}</div>`)+   // settings under the table (1 Nov 2026)
+    (mob && planOpts ? planOptsHtml() : '');
   const sc2=wrap.querySelector('.planscroll'); sc2.scrollLeft=sl; sc2.scrollTop=st;
+  const pp=wrap.querySelector('.popts .pop'); if(pp){ pp.scrollTop=planOptsTop; if(planOptsNew) pp.classList.add('anim'); planOptsNew=false;
+    pp.addEventListener('scroll', ()=>{ planOptsTop=pp.scrollTop; }, {passive:true}); }
+  /* phone (10 Nov 2026): every tool and setting in one big Options sheet, big rows you can tap */
+  function planOptsHtml(){
+    const st=on=> `<small>${on?'On':'Off'}</small>`;
+    const row=(pa,lab,sub,pressed,dis,wide)=> `<button type="button" class="por${wide?' wide':''}" data-pa="${pa}"${pressed!=null?` aria-pressed="${pressed}"`:''}${dis?' disabled':''}><span>${lab}</span>${sub}</button>`;
+    const dSub=dlOn ? (dlChip ? dlChip.replace('class="dlsum"','class="dlsum sm"') : '<small>On \u00b7 no change yet</small>') : st(false);
+    return `<div class="popts"><button type="button" class="pobg" data-pa="opts" aria-label="Close options"></button>`+
+      `<div class="pop" role="dialog" aria-label="Plan options"><div class="poh"><span>Options</span><button type="button" data-pa="opts" aria-label="Close">\u2715</button></div>`+
+      (planNote || fcErr ? `<div class="pomsg">${msg}</div>` : '')+
+      `<div class="pog">`+
+      (B && B.mi===cm0 ? row('delta', '\u0394 since '+planEsc(baseDay), dSub, planDlOn) : '')+
+      row('dbase', '\u0394 start from archive\u2026', '<small>pick a file</small>')+
+      row('dev', 'Highlight changes', `<small>${planDev!=null ? '\u00b1'+Math.round(planDev*100)+'% \u00b7 tap to turn off' : 'Off'}</small>`, planDev!=null)+
+      row('actual', MONL+' actual', st(planAmOn), planAmOn)+
+      row('detopen', 'Expand all', '<small>groups + details</small>', null, detAll)+
+      row('detclose', 'Collapse all', '<small>groups + details</small>', null, detNone)+
+      row('undo', 'Undo', `<small>${planUndo.length ? planUndo.length+' step'+(planUndo.length===1?'':'s') : 'nothing to undo'}</small>`, null, !planUndo.length, true)+
+      `</div><div class="posec">${YT.box}${fcBoxHtml(fc, px, ms)}</div></div></div>`; }
 }
+let planOpts=false, planOptsNew=false, planOptsTop=0;
 /* the "Forecast settings" box on top of the Plan page */
 function fcBoxHtml(fc, px, ms){
   const pc=x=> String(Math.round(x*1000)/10).replace('.',',');
@@ -6400,6 +6443,7 @@ function planInit(){
     if(ds.fca!=null){ fcAct(ds.fca, ds.i!=null ? +ds.i : null); return; }
     if(ds.pm!=null){ planMobMi=(planMobMi||planStart())+(+ds.pm); renderPlan(true); return; }
     if(ds.pa==='more'){ planMore=!planMore; renderPlan(true); return; }
+    if(ds.pa==='opts'){ planOpts=!planOpts; planOptsNew=planOpts; planOptsTop=0; renderPlan(true); return; }
     if(ds.pa==='dbase'){ const fi=document.createElement('input'); fi.type='file'; fi.accept='.html,text/html';
       fi.onchange=()=>{ const f=fi.files && fi.files[0]; if(!f) return;
         f.text().then(t=>{ planBaseFromArchive(t); planDlOn=true; try{ localStorage.setItem('fs2-plan-delta-v1','1'); }catch(x){} })

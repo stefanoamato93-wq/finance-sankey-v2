@@ -63,6 +63,11 @@ Update this README in the same commit as each change. `git log` has the one-line
 - **v2.67 (phone Plan):** this month's Δ shows inside the Act / Plan cell (the phone month view of
   this month has no separate plan column); the Δ pill stays visible outside ⋯; the edit sheet
   slides up only when it opens (it re-ran its slide-up on every key and looked like it blinked).
+- **v2.68 (phone Plan):** the tool chips are gone from the phone toolbar. One **⚙ Options** button
+  opens a bottom sheet (`planOptsHtml()`, state `planOpts`) with big tap rows: Δ since <day> (with
+  the savings change), Δ start from archive, Highlight changes, <month> actual, Expand all,
+  Collapse all, Undo; under them the Savings targets and Forecast settings boxes. On the phone
+  those two boxes no longer sit under the table. The laptop layout is unchanged.
 - **Compare:** opens as T12M a year ago -> T12M now, Expenses waterfall, Avg/m on (v2.42-v2.43);
   delta and % go from the first period to the second (v2.41, v2.44); ⇆ swap button (v2.56);
   this month counted with mixMonth() when the Plan pill is on (v2.40).
