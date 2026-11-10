@@ -60,6 +60,9 @@ Update this README in the same commit as each change. `git log` has the one-line
     ‹ › move the range by one month. In R12M each point still sums its full 12 months.
     Month names on the x-axis, thinned on wide ranges (year under Jan); savings % labels thin
     out the same way, last month always labelled (v2.61). The old 12M..144M width box is gone.
+- **v2.67 (phone Plan):** this month's Δ shows inside the Act / Plan cell (the phone month view of
+  this month has no separate plan column); the Δ pill stays visible outside ⋯; the edit sheet
+  slides up only when it opens (it re-ran its slide-up on every key and looked like it blinked).
 - **Compare:** opens as T12M a year ago -> T12M now, Expenses waterfall, Avg/m on (v2.42-v2.43);
   delta and % go from the first period to the second (v2.41, v2.44); ⇆ swap button (v2.56);
   this month counted with mixMonth() when the Plan pill is on (v2.40).

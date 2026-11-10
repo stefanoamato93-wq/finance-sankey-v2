@@ -917,6 +917,8 @@
   .plan small.dl.gd{color:#5fc28a;} .plan small.dl.bd{color:#e58a8a;}
   .plantools .dlsum{font-size:11.5px; padding:4px 10px; border-radius:999px; background:#1a2234; color:var(--muted);}
   .plantools .dlsum b.gd{color:#5fc28a;} .plantools .dlsum b.bd{color:#e58a8a;}
+  .plantools.pless > button[data-pa="delta"][type]{display:inline-block;}   /* phone: Δ pill stays out of the ⋯ menu */
+  .plan.pfit td small.dl{font-size:10.5px;}
   .plantools button[data-pa="delta"][aria-pressed="true"]{background:#1f4a35; border-color:#2f6b4f; color:#fff;}
   /* phone edit sheet (8 Nov 2026) */
 #planSheet{position:fixed; inset:0; z-index:60;}
@@ -1452,7 +1454,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v2.66';
+const APP_VER='v2.67';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 /* self-update (1 Nov 2026): GitHub Pages lets phones keep the page up to 10 min, and a home-
    screen app resumed from the background keeps running its old code for hours. That old code
@@ -6057,7 +6059,7 @@ function renderPlanCore(force){
   const PM=planPaceMap(cm, lin);
   const paceOf=it=>{ const k=(it.r.k==='I'?'I:':'E:')+norm(it.r.l), v=PM && PM.get(k); return v!=null ? v : lin; };
   const paceL=L=>{ let w=0, s=0; L.forEach(it=>{ const p=Math.abs(plOf(it)); w+=p; s+=p*paceOf(it); }); return w>0 ? s/w : lin; };
-  const amTd=(a,p,kind,pace=lin)=>{
+  const amTd=(a,p,kind,pace=lin,dd='')=>{
     if(!amShow) return '';
     const none=!Math.round(a) && !Math.round(p);
     const cls=none ? 'none' : kind==='I' ? 'inc' : kind==='S' ? (a<0 ? 'over' : 'inc')
@@ -6065,10 +6067,10 @@ function renderPlanCore(force){
     const w=p>0 ? Math.max(0,Math.min(100, a/p*100)) : (a>0 ? 100 : 0);
     const pct=p>0 ? Math.round(a/p*100)+'% of plan' : 'no plan';
     const tip=`${MONL} so far: ${fmt(a)} \u00b7 plan ${fmt(p)} \u00b7 ${pct}`+(kind!=='S' && p>0 ? ` \u00b7 where you should be now: ${fmt(p*pace)} (${Math.round(pace*100)}%, last 12M habit)` : '');
-    return `<td class="am ${cls}" title="${planEsc(tip)}"><span class="av">${fv(a)} <span class="ap">/ ${fv(p)}</span></span>`+
+    return `<td class="am ${cls}" title="${planEsc(tip)}"><span class="av">${fv(a)} <span class="ap">/ ${fv(p)}</span></span>${dd}`+
       (none || (mob && kind==='S') ? '' : `<span class="bar"><i style="width:${w.toFixed(1)}%"></i>${kind!=='S' && p>0 ? `<b style="left:${(pace*100).toFixed(1)}%"></b>` : ''}</span>`)+`</td>`; };
   const amL=L=>{ const k=L.length && L.every(it=>it.r.k==='I') ? 'I' : 'E';
-    return amTd(L.reduce((s,it)=>s+actOf(it),0), L.reduce((s,it)=>s+plOf(it),0), k, paceL(L)); };
+    return amTd(L.reduce((s,it)=>s+actOf(it),0), L.reduce((s,it)=>s+plOf(it),0), k, paceL(L), mob ? dlH(dSum(L,{mi:cm}), k) : ''); };   // phone: this month's plan change sits in the Act / Plan cell
   /* plan change since PLAN.base (the copy made on the 1st open of this month): typed rows only;
      rows deleted or renamed since then count in their label / group / total sums */
   const B=PLAN.base, dlOn=!!(planDlOn && B && B.mi===cm0 && B.m);
@@ -6149,7 +6151,7 @@ function renderPlanCore(force){
     }
     return body; };
   const sav=`<tr class="tot sav"><td class="n">Savings</td>`+rc(refTd(refSum(inc)-refSum(exp), null, inc, exp), ''+
-    amTd(inc.reduce((s,it)=>s+actOf(it),0)-exp.reduce((s,it)=>s+actOf(it),0), inc.reduce((s,it)=>s+plOf(it),0)-exp.reduce((s,it)=>s+plOf(it),0), 'S')+
+    amTd(inc.reduce((s,it)=>s+actOf(it),0)-exp.reduce((s,it)=>s+actOf(it),0), inc.reduce((s,it)=>s+plOf(it),0)-exp.reduce((s,it)=>s+plOf(it),0), 'S', lin, mob ? dlH(dSum(inc,{mi:cm})-dSum(exp,{mi:cm}), 'I') : '')+
     cols.map(c=>tdv(sumOf(inc,c)-sumOf(exp,c), c.y!=null, dSum(inc,c)-dSum(exp,c), 'I')).join(''))+`</tr>`;
   planDetKeys=[]; planGrpKeys=[];
   const body=sav+
@@ -6347,7 +6349,7 @@ function planSheetOpen(ri, mi){ const r=PLAN && PLAN.rows[ri]; if(!r) return;
   planSh={ri, mi, s:cur?String(cur):'', scope:'m', rf, ly:Math.round(Math.abs(ly)), cur, fresh:true};
   planSheetDraw(); }
 function planSheetDraw(){ const el=document.getElementById('planSheet'); if(!el) return;
-  if(!planSh || !PLAN || !PLAN.rows[planSh.ri]){ planSh=null; el.hidden=true; el.innerHTML=''; return; }
+  if(!planSh || !PLAN || !PLAN.rows[planSh.ri]){ planSh=null; planShWasOpen=false; el.hidden=true; el.innerHTML=''; return; }
   const S=planSh, r=PLAN.rows[S.ri], end=fcGet().endYear, yE=Math.floor(S.mi/12);
   const name=planNice(r.l)+(norm(r.d)!==norm(r.l) ? ' \u00b7 '+planNice(r.d) : '');
   const chip=(v,lab)=> `<button type="button" data-shv="${v}">${lab} <b>${grp(v)}</b></button>`;
@@ -6359,7 +6361,10 @@ function planSheetDraw(){ const el=document.getElementById('planSheet'); if(!el)
     `<div class="shc">${chip(S.rf,'12M avg')}${chip(S.ly,miLabel(S.mi-12))}${chip(S.cur,'Plan now')}</div>`+
     `<div class="shk">${keys.map(k=> `<button type="button" data-shk="${k}"${k==='ok'?' class="ok"':''}>${k==='del'?'\u232b':k==='ok'?'\u2713':k}</button>`).join('')}</div>`+
     `<div class="shl">Apply to</div><div class="shs">${sc('m','This month')}${S.mi%12!==11 ? sc('y','Until Dec '+yE) : ''}${yE<end || S.mi%12!==11 ? sc('a','Until Dec '+end) : ''}</div></div>`;
-  el.hidden=false; }
+  /* slide up only when the sheet opens, not on every key (it used to blink on each digit) */
+  if(planShWasOpen){ const p=el.querySelector('.shp'); if(p) p.style.animation='none'; }
+  el.hidden=false; planShWasOpen=true; }
+let planShWasOpen=false;
 function planSheetKey(b){ const S=planSh; if(!S) return; const d=b.dataset;
   if(d.shx){ planSh=null; planSheetDraw(); return; }
   if(d.shv!=null){ S.s=+d.shv ? String(+d.shv) : ''; S.fresh=false; }
