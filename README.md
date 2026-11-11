@@ -455,6 +455,8 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   end, dashed. Each future month adds the forecast's `save` (planned income + salary rise +
   RSU − planned expenses − inflation) and leaves out its `growth`, so the gap to the green
   dashed line is the expected appreciation. The scrubber shows `put in` there too.
+- **Bigger laptop chart (v2.74, 11 Nov 2026):** above 680px wide the sparkline is 96px tall
+  (was 58px) and up to 720px wide (was 520px). The phone size is unchanged (46px).
 
 ### Query (past transactions, filters, ranked views, drill-down)
 The **Query** page, added 10 Oct 2026, modelled on the sheet's `QUERY` tab (its criteria
