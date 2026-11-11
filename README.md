@@ -457,6 +457,8 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   dashed line is the expected appreciation. The scrubber shows `put in` there too.
 - **Bigger laptop chart (v2.74, 11 Nov 2026):** above 680px wide the sparkline is 96px tall
   (was 58px) and up to 720px wide (was 520px). The phone size is unchanged (46px).
+- **Chart dates icon (v2.75, 11 Nov 2026):** the ⚙ emoji is replaced by a small 11px
+  line calendar icon (inline SVG, muted, gold when a custom range is set).
 
 ### Query (past transactions, filters, ranked views, drill-down)
 The **Query** page, added 10 Oct 2026, modelled on the sheet's `QUERY` tab (its criteria
