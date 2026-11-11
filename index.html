@@ -1497,7 +1497,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v2.75';
+const APP_VER='v2.76';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 /* self-update (1 Nov 2026): GitHub Pages lets phones keep the page up to 10 min, and a home-
    screen app resumed from the background keeps running its old code for hours. That old code
@@ -6933,7 +6933,15 @@ function fsPanelRender(busy){
   const S=FS_SETTINGS||{}, rep=S.lastImport, rows=FS_CSV ? Math.max(0,(FS_CSV.match(/\n/g)||[]).length-1) : 0;
   const when=t=>t ? new Date(t).toLocaleString() : 'never';
   let h=`<div><b>Source:</b> Firebase · ${FS_MONTHS.size} months · ${rows.toLocaleString()} rows · ${FS_READS} reads this visit</div>`;
-  if(S.cutover===true) h+=`<div>Cutover done: the sheet is no longer imported.</div>`;
+  if(S.cutover===true){
+    h+=`<div>Cutover done: the sheet is no longer imported.</div>`;
+    const u=cgUndoGet();
+    h+=`<div style="margin-top:6px"><b>Capgain by month:</b> ${u ? 'spread on '+when(u.at)+' ('+u.n+' months)' : 'one row in Jan 2018'}
+      <div class="sub">Spread writes one Capgain row per month (26% of the gains at that month end). An Archive file is downloaded first.</div>
+      <button type="button" id="cgSpreadBtn"${cgBusy?' disabled':''}>${u ? 'Spread again (up to today)' : 'Spread Capgain by month'}</button>
+      ${u ? `<button type="button" id="cgUndoBtn"${cgBusy?' disabled':''}>Undo: back to one row</button>` : ''}
+      <span id="cgMsg" class="sub" role="status"></span></div>`;
+  }
   else{
     h+=`<div><b>Last import from the sheet:</b> ${when(S.lastImportAt)} (auto every 12 h)</div>`;
     if(rep) h+=`<div class="sub">${rep.rows.toLocaleString()} rows, ${rep.months} months, ${rep.written} written, biggest ${rep.biggestMonth} (${Math.round(rep.biggestBytes/1024)} KB)</div>`;
@@ -6947,6 +6955,107 @@ function fsPanelRender(busy){
   if(b) b.onclick=async()=>{ const rep=await fsImport(); if(rep && rep.written){ dbAt=0; refreshDB(); } };
   const c=document.getElementById('fsCutBtn');
   if(c) c.onclick=()=>fsCutover();
+  const cs=document.getElementById('cgSpreadBtn'); if(cs) cs.onclick=()=>cgSpread();
+  const cu=document.getElementById('cgUndoBtn'); if(cu) cu.onclick=()=>cgUndo();
+}
+/* ---- Capgain by month (11 Nov 2026) --------------------------------------------------
+   The tax on gains (CAPGAIN / ApprecTaxes) used to be ONE row in Jan 2018 (~-33K), so the
+   early net worth looked negative. "Spread Capgain by month" writes one row per month
+   instead: -(tax at this month end - tax at last month end), where tax = TAX_RATE x the
+   positive gains (balance - money put in) of every VARIABLE holding, as nwGains does.
+   This month uses the live tax, so today's total is the same as before. Steps, safest
+   first: (1) Archive file downloaded, (2) the old rows + the new ids saved in
+   settings.capgainUndoj (and localStorage), (3) new rows written (ids 'cg'+month, so a
+   re-run rewrites them), (4) old rows deleted. "Undo: back to one row" deletes the 'cg'
+   rows and writes the old rows back exactly as they were. */
+const CG_UNDO_KEY='fs2-capgain-undo-v1';
+let cgBusy=false;
+const cgIsRow=t=> norm(t.a)==='CAPGAIN' && norm(t.dt)==='APPRECTAXES';
+function cgUndoGet(){
+  let u=null; try{ u=JSON.parse((FS_SETTINGS||{}).capgainUndoj||'null'); }catch(e){}
+  if(!u){ try{ u=JSON.parse(localStorage.getItem(CG_UNDO_KEY)||'null'); }catch(e){} }
+  return u && u.old ? u : null;
+}
+/* pure: tax at each month end, {mi: euros to the cent}; toMi = the live tax when given */
+function cgTargets(holds, rate, fromMi, toMi, liveTax){
+  const V=(holds||[]).filter(h=>h.vary==='VARIABLE'), out={};
+  for(let mi=fromMi; mi<=toMi; mi++){
+    let tax=0;
+    V.forEach(h=>{ let b=0, i=0;
+      for(const k in h.flows) if(+k<=mi) b+=h.flows[k];
+      for(const k in (h.inflow||{})) if(+k<=mi) i+=h.inflow[k];
+      if(b-i>0) tax+=(b-i)*rate; });
+    out[mi]=Math.round(tax*100)/100;
+  }
+  if(liveTax!=null && isFinite(liveTax)) out[toMi]=Math.round(liveTax*100)/100;
+  return out;
+}
+const cgMsg=t=>{ const e=document.getElementById('cgMsg'); if(e) e.textContent=t; };
+async function cgSpread(){
+  const D=FS2.data; if(!aprOn() || !D || cgBusy) return;
+  if(!LIVE){ alert('Wait for the live prices (LIVE on Net Worth), then try again.'); return; }
+  if(!confirm('Spread Capgain by month?\n\nAn Archive file is downloaded first. "Undo: back to one row" puts it back as it is now.')) return;
+  cgBusy=true; fsPanelRender();
+  try{
+    await fsFetch();
+    const prev=cgUndoGet();
+    // the original rows: from the undo copy on a re-run, else every CAPGAIN/ApprecTaxes row now
+    const old=prev ? prev.old : {}; let tpl=null;
+    if(!prev) for(const m of FS_MONTHS.values()) for(const id in (m.tx||{})){ const t=m.tx[id];
+      if(cgIsRow(t)){ (old[m.month]=old[m.month]||{})[id]=t; } }
+    for(const ym in old) for(const id in old[ym]){ tpl=tpl||old[ym][id]; }
+    if(!tpl) throw new Error('no Capgain row found');
+    const a0=(FS_SETTINGS||{}).archiveAt; cgMsg('Downloading the Archive\u2026');
+    await archDownload();
+    if(((FS_SETTINGS||{}).archiveAt||0)===(a0||0)) throw new Error('the Archive file was not made, nothing changed');
+    const now=new Date(), nowMi=now.getFullYear()*12+now.getMonth();
+    const ymOf=mi=>Math.floor(mi/12)+'-'+pad2(mi%12+1);
+    const fromMi=Math.min(...Object.keys(old).map(ym=>{ const [y,m]=ym.split('-'); return +y*12+(+m-1); }));
+    const liveTax=nwGains(NWHOLD, LIVE.hold, nowMi, TAX_RATE).tax;
+    const T=cgTargets(NWHOLD, TAX_RATE, fromMi, nowMi, liveTax);
+    // plan every row first
+    const put={}, zero={}; let n=0, sum=0;
+    for(let mi=fromMi; mi<=nowMi; mi++){
+      const ym=ymOf(mi), id='cg'+ym.replace('-',''), v=-Math.round((T[mi]-(mi>fromMi ? T[mi-1] : 0))*100)/100;
+      const m=FS_MONTHS.get(ym), tx=(m && m.tx)||{};
+      if(!v){ if(tx[id]) zero[ym]=[id]; continue; }
+      let maxO=0; for(const k in tx) maxO=Math.max(maxO, +tx[k].o||0);
+      const y=Math.floor(mi/12), mo=mi%12+1;
+      const d=mi===nowMi ? y+'-'+pad2(mo)+'-'+pad2(now.getDate()) : y+'-'+pad2(mo)+'-'+pad2(new Date(y, mo, 0).getDate());
+      const t=Object.assign({}, tpl, {d, v, o: tx[id] ? tx[id].o : maxO+1}); delete t.live;
+      put[ym]={[id]:t}; n++; sum+=v;
+    }
+    // (2) the undo copy goes in before any write
+    const u={at:Date.now(), n, old}, j=JSON.stringify(u);
+    try{ localStorage.setItem(CG_UNDO_KEY, j); }catch(e){}
+    await D.setSettings({capgainUndoj:j}); FS_SETTINGS=Object.assign({}, FS_SETTINGS, {capgainUndoj:j});
+    // (3) new rows, (4) the old rows only after every new row is in
+    cgMsg('Writing\u2026');
+    for(const ym in put) await D.putTx(ym, put[ym]);
+    for(const ym in zero) await D.delTx(ym, zero[ym]);
+    for(const ym in old){ const m=FS_MONTHS.get(ym), tx=(m && m.tx)||{};
+      const gone=Object.keys(old[ym]).filter(id=>tx[id] && !/^cg\d{6}$/.test(id));
+      if(gone.length) await D.delTx(ym, gone); }
+    dbAt=0; refreshDB();
+    alert(`Done: ${n} monthly Capgain rows, total ${fmtE(sum)} (live tax today ${fmtE(-liveTax)}).`);
+  }catch(e){ alert('Capgain spread stopped: '+((e && (e.code||e.message))||e)+'\nIf some rows were written, "Undo: back to one row" puts everything back.'); dbAt=0; refreshDB(); }
+  finally{ cgBusy=false; fsPanelRender(); }
+}
+async function cgUndo(){
+  const D=FS2.data, u=cgUndoGet(); if(!aprOn() || !D || !u || cgBusy) return;
+  if(!confirm('Undo: delete the monthly Capgain rows and put back the original row(s)?')) return;
+  cgBusy=true; fsPanelRender();
+  try{
+    await fsFetch();
+    // every 'cg' row in the data, also ones the undo copy may have missed
+    const del={}; for(const m of FS_MONTHS.values()) for(const id in (m.tx||{})) if(/^cg\d{6}$/.test(id)) (del[m.month]=del[m.month]||[]).push(id);
+    for(const ym in del) await D.delTx(ym, del[ym]);
+    for(const ym in u.old) await D.putTx(ym, u.old[ym]);
+    try{ localStorage.removeItem(CG_UNDO_KEY); }catch(e){}
+    await D.setSettings({capgainUndoj:''}); FS_SETTINGS=Object.assign({}, FS_SETTINGS, {capgainUndoj:''});
+    dbAt=0; refreshDB(); alert('Back to the original Capgain row(s).');
+  }catch(e){ alert('Undo stopped: '+((e && (e.code||e.message))||e)+'\nTry again: it can run more than once.'); dbAt=0; refreshDB(); }
+  finally{ cgBusy=false; fsPanelRender(); }
 }
 /* Cutover (phase 5): one last import from the sheet, then meta/settings.cutover=true.
    After this the sheet is never imported again (an import overwrites whole month docs,

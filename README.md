@@ -459,6 +459,15 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   (was 58px) and up to 720px wide (was 520px). The phone size is unchanged (46px).
 - **Chart dates icon (v2.75, 11 Nov 2026):** the ⚙ emoji is replaced by a small 11px
   line calendar icon (inline SVG, muted, gold when a custom range is set).
+- **Capgain by month (v2.76, 11 Nov 2026):** the tax on gains (CAPGAIN / ApprecTaxes) was
+  one row in Jan 2018 (~-33K), so the early net worth looked negative. Data → "Spread
+  Capgain by month" writes one row per month (ids `cg`+YYYYMM): minus the change in
+  26% × the positive gains (balance − money put in) of every VARIABLE holding at that
+  month end. This month uses the live tax, so today's total stays the same. Order: Archive
+  file downloaded → old rows + date saved in `settings.capgainUndoj` (and localStorage
+  `fs2-capgain-undo-v1`) → new rows written → old rows deleted. "Spread again" re-runs up
+  to today (same ids). "Undo: back to one row" deletes every `cg` row and writes the
+  original row(s) back unchanged. The live Capgain overlay on Net Worth is unchanged.
 
 ### Query (past transactions, filters, ranked views, drill-down)
 The **Query** page, added 10 Oct 2026, modelled on the sheet's `QUERY` tab (its criteria
