@@ -451,6 +451,10 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   (month + year dropdowns) and Reset. The window can sit in the past, span today, or be
   forecast only. Saved on the device (localStorage `fs2-nwrange-v1`, month indexes; null =
   start of history / end of forecast). The ⚙ turns gold while a custom range is set.
+- **Money put in, forecast (v2.73, 11 Nov 2026):** the gold line now runs to the forecast
+  end, dashed. Each future month adds the forecast's `save` (planned income + salary rise +
+  RSU − planned expenses − inflation) and leaves out its `growth`, so the gap to the green
+  dashed line is the expected appreciation. The scrubber shows `put in` there too.
 
 ### Query (past transactions, filters, ranked views, drill-down)
 The **Query** page, added 10 Oct 2026, modelled on the sheet's `QUERY` tab (its criteria
