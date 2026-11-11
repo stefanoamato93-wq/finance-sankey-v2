@@ -443,6 +443,10 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
 - **Net Worth sparkline:** the line continues to Dec of the end year as a **dashed, faded**
   forecast after a dotted "now" line; the scrubber reads `Forecast · Mon YYYY · value` there;
   the right label reads `Oct 2026 → Dec 2030 forecast`. The hero number stays the live value.
+- **Money put in line (v2.71, 11 Nov 2026):** a soft gold line (`#f2c46d`) under the green
+  net worth line, past months only. It is the same running sum without the `APPRECIATION`
+  rows (`h.inflow`) and without live price gains, so the gap between the two lines is the
+  appreciation. A small legend sits top-left; the scrubber adds `put in €X` and a gold dot.
 
 ### Query (past transactions, filters, ranked views, drill-down)
 The **Query** page, added 10 Oct 2026, modelled on the sheet's `QUERY` tab (its criteria

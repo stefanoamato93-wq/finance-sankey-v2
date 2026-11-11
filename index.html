@@ -436,6 +436,14 @@
   .scrubval{color:var(--muted); opacity:.6; white-space:nowrap;}
   .scrubval.on{color:var(--ink); opacity:1; font-size:11px;}
   .scrubval b{color:#7fd0a3;}
+  /* 11 Nov 2026: "money put in" line (net worth without appreciation), soft gold */
+  .scrubval b.pin,.splg .pin{color:#f2c46d;}
+  .scrubdot.pin{background:#f2c46d;}
+  .splg{position:absolute; top:2px; left:4px; font-size:9.5px; color:var(--muted); pointer-events:none;
+        display:flex; gap:9px; opacity:.85;}
+  .splg i{display:inline-block; width:10px; height:2px; border-radius:1px; vertical-align:2px; margin-right:3px;
+          background:#7fd0a3; font-style:normal;}
+  .splg .pin i{background:#f2c46d;}
   /* investment gains strip: full-width second row of the hero card */
   .nwinv{flex:1 1 100%; border-top:1px solid rgba(58,77,120,.6); padding-top:10px; margin-top:2px;}
   .invhead{font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; margin-bottom:6px;}
@@ -1476,7 +1484,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v2.70';
+const APP_VER='v2.71';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 /* self-update (1 Nov 2026): GitHub Pages lets phones keep the page up to 10 min, and a home-
    screen app resumed from the background keeps running its old code for hours. That old code
@@ -2555,6 +2563,13 @@ function buildNetWorth(){
   for(const k in byMi){ if(+k<s0) run+=byMi[k]; }
   for(let mi=s0; mi<=cur; mi++){ run+=byMi[mi]||0; series.push(run); }
   if(LIVE && series.length) series[series.length-1]=gTot;   // latest point = live net worth
+  /* 11 Nov 2026: money put in = the same running sum WITHOUT the APPRECIATION rows (h.inflow),
+     and without the live price gains: the gap to the net worth line is the appreciation */
+  const inByMi={}; holds.forEach(h=>{ for(const k in (h.inflow||{})) inByMi[k]=(inByMi[k]||0)+h.inflow[k]; });
+  const putIn=[]; let pin=0;
+  for(const k in inByMi){ if(+k<s0) pin+=inByMi[k]; }
+  for(let mi=s0; mi<=cur; mi++){ pin+=inByMi[mi]||0; putIn.push(pin); }
+  const hasPin=holds.some(h=>h.inflow) && putIn.length===series.length;
   /* forecast tail (25 Oct 2026): from the month after `cur` to Dec of the plan's end year,
      the month-end net worth of the forecast engine (dashed, faded); months before the
      forecast starts (no booking yet this month) hold today's value */
@@ -2566,7 +2581,8 @@ function buildNetWorth(){
   const hhmm=t=>{ const d=new Date(t); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); };
   const liveNote = LIVE ? `<b class="live">LIVE</b> ${hhmm(LIVE.at)}` : mLab(cur);
   let spark='';
-  const SW=300,SH=60,SP=3, smn=Math.min(0,...all), smx=Math.max(...all), srg=(smx-smn)||1;
+  const rng=hasPin ? all.concat(putIn) : all;
+  const SW=300,SH=60,SP=3, smn=Math.min(0,...rng), smx=Math.max(...rng), srg=(smx-smn)||1;
   const yOf=v=> SP+(SH-2*SP)*(1-(v-smn)/srg);              // viewBox y of a value
   if(all.length>1){
     const xOf=i=> (i/(all.length-1)*SW).toFixed(1);
@@ -2575,6 +2591,7 @@ function buildNetWorth(){
     const fpts=fut.length ? [[xOf(P-1),yOf(series[P-1]).toFixed(1)]].concat(fut.map((v,j)=>[xOf(P+j),yOf(v).toFixed(1)])) : [];
     const fline=fpts.map(p=>p.join(',')).join(' ');
     const fx0=fut.length ? xOf(P-1) : SW;
+    const pline=hasPin ? putIn.map((v,i)=>xOf(i)+','+yOf(v).toFixed(1)).join(' ') : '';
     // .sparkbox carries the scrubber: hover / drag shows the net worth of that month
     spark=`<div class="sparkbox" id="sparkbox" title="Drag to see past net worth and the forecast">`+
       `<svg class="spark" viewBox="0 0 ${SW} ${SH}" preserveAspectRatio="none" aria-hidden="true">`+
@@ -2585,7 +2602,11 @@ function buildNetWorth(){
       (fut.length ? `<polygon class="fcarea" points="${fx0},${SH} ${fline} ${SW},${SH}" fill="url(#nwg)" opacity=".35"/>`+
         `<line x1="${fx0}" y1="0" x2="${fx0}" y2="${SH}" stroke="#9aa6bd" stroke-opacity=".45" stroke-width="1" stroke-dasharray="2 2" vector-effect="non-scaling-stroke"/>`+
         `<polyline class="fcline" points="${fline}" fill="none" stroke="#7fd0a3" stroke-opacity=".7" stroke-width="2" stroke-dasharray="5 4" vector-effect="non-scaling-stroke"/>` : '')+
-      `</svg><div class="scrubline" id="scrubline"></div><div class="scrubdot" id="scrubdot"></div></div>`+
+      (hasPin ? `<polyline class="pinline" points="${pline}" fill="none" stroke="#f2c46d" stroke-opacity=".9" stroke-width="1.6" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>` : '')+
+      `</svg>`+
+      (hasPin ? `<div class="splg"><span><i></i>Net worth</span><span class="pin"><i></i>Money put in</span></div>` : '')+
+      `<div class="scrubline" id="scrubline"></div><div class="scrubdot" id="scrubdot"></div>`+
+      (hasPin ? `<div class="scrubdot pin" id="scrubdot2"></div>` : '')+`</div>`+
       `<div class="sparklab"><span>${mLab(s0)}</span><span class="scrubval" id="scrubval">drag the line</span>`+
       `<span>${fut.length ? mLab(cur)+' \u2192 <i>'+mLab(fEnd)+' forecast</i>' : mLab(cur)}</span></div>`;
   }
@@ -2624,7 +2645,10 @@ function buildNetWorth(){
       const px=i/(all.length-1)*100, py=yOf(v)/SH*100;
       ln.style.left=px+'%'; dot.style.left=px+'%'; dot.style.top=py+'%';
       box.classList.add('on'); val.classList.add('on');
-      val.innerHTML=(i>=P ? '<i>Forecast</i> \u00B7 ' : '')+`${mLab(s0+i)} \u00B7 <b>${money(v)}</b>`; };
+      const d2=document.getElementById('scrubdot2'), pv=hasPin && i<P ? putIn[i] : null;
+      if(d2){ d2.style.display= pv==null ? 'none' : ''; if(pv!=null){ d2.style.left=px+'%'; d2.style.top=(yOf(pv)/SH*100)+'%'; } }
+      val.innerHTML=(i>=P ? '<i>Forecast</i> \u00B7 ' : '')+`${mLab(s0+i)} \u00B7 <b>${money(v)}</b>`+
+        (pv!=null ? ` \u00B7 put in <b class="pin">${money(pv)}</b>` : ''); };
     const hide=()=>{ box.classList.remove('on'); val.classList.remove('on'); val.textContent='drag the line'; };
     box.addEventListener('pointerdown',e=>{ show(e.clientX); });
     box.addEventListener('pointermove',e=>{ if(e.pointerType==='mouse' || e.buttons) show(e.clientX); });
