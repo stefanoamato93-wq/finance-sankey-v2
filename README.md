@@ -447,6 +447,10 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   net worth line, past months only. It is the same running sum without the `APPRECIATION`
   rows (`h.inflow`) and without live price gains, so the gap between the two lines is the
   appreciation. A small legend sits top-left; the scrubber adds `put in €X` and a gold dot.
+- **Chart dates ⚙ (v2.72, 11 Nov 2026):** a small ⚙ after the right label opens From / To
+  (month + year dropdowns) and Reset. The window can sit in the past, span today, or be
+  forecast only. Saved on the device (localStorage `fs2-nwrange-v1`, month indexes; null =
+  start of history / end of forecast). The ⚙ turns gold while a custom range is set.
 
 ### Query (past transactions, filters, ranked views, drill-down)
 The **Query** page, added 10 Oct 2026, modelled on the sheet's `QUERY` tab (its criteria
