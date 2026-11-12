@@ -1508,7 +1508,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v2.79';
+const APP_VER='v2.80';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 /* self-update (1 Nov 2026): GitHub Pages lets phones keep the page up to 10 min, and a home-
    screen app resumed from the background keeps running its old code for hours. That old code
@@ -5464,6 +5464,8 @@ let planMobMi=null;   // phone: the one month shown
 let planDev=null, planDevLast=0.1;   // "Highlight over plan": share above plan that lights up (null = off)
 try{ const o=JSON.parse(localStorage.getItem('fs2-plan-dev-v1')||'null'); if(o && isFinite(o.v)){ planDevLast=o.v; if(o.on) planDev=o.v; } }catch(e){}
 let planMore=false;   // phone: the extra tools behind the "..." button
+/* 12 Nov 2026: laptop, savings targets + forecast settings (vests) behind "Settings", as the phone's Options; closed by default */
+let planSetOn=(()=>{ try{ return localStorage.getItem('fs2-plan-set-v1')==='1'; }catch(e){ return false; } })();
 let planMobV='m'; try{ planMobV=localStorage.getItem('fs2-plan-mobv-v1')==='y' ? 'y' : 'm'; }catch(e){}   // phone: Month / Year view
 /* display names (1 Nov 2026): the sheet's ALL-CAPS names read as "Holidays", "Salary rise";
    names already in mixed case ("TFRTaxes", "Work income") stay as they are */
@@ -6329,9 +6331,10 @@ function renderPlanCore(force){
     `<button type="button" data-pa="undo"${planUndo.length?'':' disabled'}>Undo</button>`+
     `<button type="button" data-pa="dev" aria-pressed="${planDev!=null}" title="Highlight rows whose next 12 months of plan differ from the last 12 months by more than a %, up or down">${planDev!=null ? 'Off \u00b1'+Math.round(planDev*100)+'% \u2715' : 'Highlight changes'}</button>`+
     `<button type="button" data-pa="dbase" title="Pick an Archive file made earlier this month: its plan becomes the start for \u0394">\u0394 start from archive\u2026</button>`+
+    (mob ? '' : `<button type="button" data-pa="pset" aria-pressed="${planSetOn}" aria-expanded="${planSetOn}" title="Savings targets and forecast settings (stock vests)">\u2699 Settings</button>`)+
     (mob ? '' : `<button type="button" data-pa="more" aria-pressed="${planMore}" aria-label="More tools" title="More tools">\u22ef</button>`)+`</div>`+
     `<div class="planscroll"><table class="plan${mob ? ' pfit' : ''}"><thead>${mob ? headM : head}</thead><tbody>${body}</tbody></table></div>`+
-    (mob ? '' : `<div class="plansettings">${YT.box}${fcBoxHtml(fc, px, ms)}</div>`)+   // settings under the table (1 Nov 2026)
+    (mob || !planSetOn ? '' : `<div class="plansettings">${YT.box}${fcBoxHtml(fc, px, ms)}</div>`)+   // settings under the table (1 Nov 2026)
     (mob && planOpts ? planOptsHtml() : '');
   const sc2=wrap.querySelector('.planscroll'); sc2.scrollLeft=sl; sc2.scrollTop=st;
   const pp=wrap.querySelector('.popts .pop'); if(pp){ pp.scrollTop=planOptsTop; if(planOptsNew) pp.classList.add('anim'); planOptsNew=false;
@@ -6554,6 +6557,7 @@ function planInit(){
     if(ds.fca!=null){ fcAct(ds.fca, ds.i!=null ? +ds.i : null); return; }
     if(ds.pm!=null){ planMobMi=(planMobMi||planStart())+(+ds.pm); renderPlan(true); return; }
     if(ds.pa==='more'){ planMore=!planMore; renderPlan(true); return; }
+    if(ds.pa==='pset'){ planSetOn=!planSetOn; try{ localStorage.setItem('fs2-plan-set-v1', planSetOn?'1':'0'); }catch(e){} renderPlan(true); return; }
     if(ds.pa==='opts'){ planOpts=!planOpts; planOptsNew=planOpts; planOptsTop=0; renderPlan(true); return; }
     if(ds.pa==='dbase'){ const fi=document.createElement('input'); fi.type='file'; fi.accept='.html,text/html';
       fi.onchange=()=>{ const f=fi.files && fi.files[0]; if(!f) return;

@@ -459,6 +459,10 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   (was 58px) and up to 720px wide (was 520px). The phone size is unchanged (46px).
 - **Chart dates icon (v2.75, 11 Nov 2026):** the ⚙ emoji is replaced by a small 11px
   line calendar icon (inline SVG, muted, gold when a custom range is set).
+- **Plan settings button (v2.80, 12 Nov 2026):** on the laptop the Savings targets and Forecast
+  settings (stock vests) boxes no longer sit under the Plan table all the time. A '⚙ Settings'
+  button in the tools row shows or hides them (closed by default, saved per device in
+  localStorage fs2-plan-set-v1), like the phone's Options sheet.
 - **No drag hint (v2.78-v2.79, 12 Nov 2026):** the idle 'drag the line' hint is gone. v2.78 added
   small white year labels on the chart; v2.79 removed them again at Stefano's request.
 - **Taller chart, no legend (v2.77, 12 Nov 2026):** the net worth chart takes the whole hero
