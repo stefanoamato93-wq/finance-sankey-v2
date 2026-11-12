@@ -459,6 +459,11 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   (was 58px) and up to 720px wide (was 520px). The phone size is unchanged (46px).
 - **Chart dates icon (v2.75, 11 Nov 2026):** the ⚙ emoji is replaced by a small 11px
   line calendar icon (inline SVG, muted, gold when a custom range is set).
+- **Taller chart, no legend (v2.77, 12 Nov 2026):** the net worth chart takes the whole hero
+  card width (190px tall on the laptop, 130px on the phone). The net worth number and the
+  LIVE time sit on top of the chart, top left, with no background (clicks pass through to
+  the scrubber). The Net worth / Money put in legend is gone. Plan on the phone: every body
+  row is the same height (46px) and long names stop at 2 lines.
 - **Capgain by month (v2.76, 11 Nov 2026):** the tax on gains (CAPGAIN / ApprecTaxes) was
   one row in Jan 2018 (~-33K), so the early net worth looked negative. Data → "Spread
   Capgain by month" writes one row per month (ids `cg`+YYYYMM): minus the change in
