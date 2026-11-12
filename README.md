@@ -459,6 +459,9 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   (was 58px) and up to 720px wide (was 520px). The phone size is unchanged (46px).
 - **Chart dates icon (v2.75, 11 Nov 2026):** the ⚙ emoji is replaced by a small 11px
   line calendar icon (inline SVG, muted, gold when a custom range is set).
+- **Chart default dates (v2.81, 12 Nov 2026):** the net worth chart now opens on Jan 2018 to
+  Dec of the current year (forecast months up to December included). The dates panel still
+  sets any other range, and Reset goes back to this default.
 - **Plan settings button (v2.80, 12 Nov 2026):** on the laptop the Savings targets and Forecast
   settings (stock vests) boxes no longer sit under the Plan table all the time. A '⚙ Settings'
   button in the tools row shows or hides them (closed by default, saved per device in
