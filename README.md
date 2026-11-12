@@ -459,9 +459,8 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   (was 58px) and up to 720px wide (was 520px). The phone size is unchanged (46px).
 - **Chart dates icon (v2.75, 11 Nov 2026):** the ⚙ emoji is replaced by a small 11px
   line calendar icon (inline SVG, muted, gold when a custom range is set).
-- **Chart labels (v2.78, 12 Nov 2026):** small white year labels along the bottom of the net
-  worth chart (one per January, '19 style when more than 8 years show; month names every 1-3
-  months when under 2 years show). The idle 'drag the line' hint is gone.
+- **No drag hint (v2.78-v2.79, 12 Nov 2026):** the idle 'drag the line' hint is gone. v2.78 added
+  small white year labels on the chart; v2.79 removed them again at Stefano's request.
 - **Taller chart, no legend (v2.77, 12 Nov 2026):** the net worth chart takes the whole hero
   card width (190px tall on the laptop, 130px on the phone). The net worth number and the
   LIVE time sit on top of the chart, top left, with no background (clicks pass through to

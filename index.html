@@ -479,9 +479,7 @@
   /* LIVE tag: hero sub-line and live rows in the assets table */
   b.live{display:inline-block; font-size:8.5px; font-weight:800; letter-spacing:.6px; color:#0f1420;
          background:#7fd0a3; border-radius:3px; padding:0 4px; line-height:13px; vertical-align:1px;}
-  .spticks{position:absolute; left:0; right:0; bottom:2px; height:12px; pointer-events:none;}
-.spticks span{position:absolute; transform:translateX(-50%); font-size:9px; line-height:12px; color:#e7ecf5; opacity:.75; white-space:nowrap;}
-.sparklab{display:flex; justify-content:space-between; font-size:10px; color:var(--muted); margin-top:3px;}
+  .sparklab{display:flex; justify-content:space-between; font-size:10px; color:var(--muted); margin-top:3px;}
   /* section titles (Assets & Liabilities, Cash Flow) */
   .nwhead{max-width:940px;}
   .nwhead h2{font-size:15px; letter-spacing:.2px;}
@@ -1510,7 +1508,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v2.78';
+const APP_VER='v2.79';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 /* self-update (1 Nov 2026): GitHub Pages lets phones keep the page up to 10 min, and a home-
    screen app resumed from the background keeps running its old code for hours. That old code
@@ -2542,19 +2540,6 @@ function applyPreset(){ const [f,t]=presetRange(); setSlider(f-META.minMi, t-MET
    toggling "values in K"). */
 let nwOpen=new Set();
 let nwDetOpen=new Set();   // CREDITS / DEBTS account rows whose DETAIL lines are open
-/* 12 Nov 2026: small white year (or month) labels along the bottom of the net worth chart.
-   n points from month a: 2+ years shown = one label per January ('19 style past 8 years),
-   shorter = month names every 1-3 months. Labels too close to an edge are left out. */
-function spTicks(a, n){
-  if(n<2) return '';
-  const span=n-1, out=[], pos=mi=>(mi-a)/span*100;
-  const add=(mi,txt)=>{ const x=pos(mi); if(x<4 || x>96) return; out.push(`<span style="left:${x.toFixed(2)}%">${txt}</span>`); };
-  if(span>=24){ const short=span/12>8;
-    for(let mi=a+1; mi<=a+span; mi++) if(mi%12===0){ const y=mi/12; add(mi, short ? '\u2019'+String(y).slice(2) : String(y)); } }
-  else{ const st=span<=6?1:span<=12?2:3;
-    for(let mi=a+1; mi<a+span; mi++) if((mi-a)%st===0) add(mi, MONTHS[mi%12]); }
-  return out.join('');
-}
 function buildNetWorth(){
   const holds=NWHOLD; const wrap=document.getElementById('nwwrap'); const cardsEl=document.getElementById('nwcards');
   if(!holds.length){ if(cardsEl) cardsEl.innerHTML=''; wrap.innerHTML=''; return; }
@@ -2662,7 +2647,6 @@ function buildNetWorth(){
       (hasPin && P>1 ? `<polyline class="pinline" points="${pline}" fill="none" stroke="#f2c46d" stroke-opacity=".9" stroke-width="1.6" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>` : '')+
       (pfline ? `<polyline class="pinfc" points="${pfline}" fill="none" stroke="#f2c46d" stroke-opacity=".6" stroke-width="1.6" stroke-dasharray="5 4" vector-effect="non-scaling-stroke"/>` : '')+
       `</svg>`+
-      `<div class="spticks" aria-hidden="true">${spTicks(wA, all.length)}</div>`+
      `<div class="scrubline" id="scrubline"></div><div class="scrubdot" id="scrubdot"></div>`+
       (hasPin ? `<div class="scrubdot pin" id="scrubdot2"></div>` : '')+`</div>`+
       `<div class="sparklab"><span>${mLab(wA)}</span><span class="scrubval" id="scrubval"></span>`+
