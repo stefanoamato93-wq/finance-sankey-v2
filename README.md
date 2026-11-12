@@ -459,6 +459,9 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   (was 58px) and up to 720px wide (was 520px). The phone size is unchanged (46px).
 - **Chart dates icon (v2.75, 11 Nov 2026):** the ⚙ emoji is replaced by a small 11px
   line calendar icon (inline SVG, muted, gold when a custom range is set).
+- **Chart dates reset (v2.83, 12 Nov 2026):** the saved chart range moved to localStorage
+  fs2-nwrange-v2, so dates picked before (e.g. on the phone) are dropped once and every device
+  opens on the new default.
 - **Chart default dates (v2.81-v2.82, 12 Nov 2026):** the net worth chart now opens on Jan 2018
   to Dec of NEXT year (forecast months included; v2.81 stopped at Dec of this year). The dates panel still
   sets any other range, and Reset goes back to this default.

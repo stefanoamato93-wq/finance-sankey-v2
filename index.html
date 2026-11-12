@@ -1508,7 +1508,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v2.82';
+const APP_VER='v2.83';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 /* self-update (1 Nov 2026): GitHub Pages lets phones keep the page up to 10 min, and a home-
    screen app resumed from the background keeps running its old code for hours. That old code
@@ -7222,8 +7222,8 @@ function holdingsBox(esc, px){   // esc / px: buildNetWorth's own formatters
 let holdOpen=false;
 /* 11 Nov 2026: Net Worth sparkline range (month index; null = start of history / end of forecast) */
 let nwrOpen=false;
-function nwRangeGet(){ try{ const o=JSON.parse(localStorage.getItem('fs2-nwrange-v1')||'{}'); return {a:o.a??null, b:o.b??null}; }catch(e){ return {a:null,b:null}; } }
-function nwRangeSet(o){ try{ localStorage.setItem('fs2-nwrange-v1', JSON.stringify(o)); }catch(e){} }
+function nwRangeGet(){ try{ const o=JSON.parse(localStorage.getItem('fs2-nwrange-v2')||'{}'); return {a:o.a??null, b:o.b??null}; }catch(e){ return {a:null,b:null}; } }
+function nwRangeSet(o){ try{ localStorage.setItem('fs2-nwrange-v2', JSON.stringify(o)); }catch(e){} }
 function holdingsWire(root){
   const box=root.querySelector('#holdbox'); if(!box) return;
   box.addEventListener('toggle',()=>{ holdOpen=box.open; });
