@@ -1508,7 +1508,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v2.81';
+const APP_VER='v2.82';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 /* self-update (1 Nov 2026): GitHub Pages lets phones keep the page up to 10 min, and a home-
    screen app resumed from the background keeps running its old code for hours. That old code
@@ -2604,8 +2604,8 @@ function buildNetWorth(){
      Index i of the full line = month s0+i; the window keeps months wA..wB. */
   const fullAll=series.concat(fut), lastMi=s0+fullAll.length-1;
   const NWR=nwRangeGet();
-  /* 12 Nov 2026: default window = Jan 2018 to Dec of this year (the dates panel still changes it) */
-  const dA=Math.max(s0, 2018*12), dB=new Date().getFullYear()*12+11;
+  /* 12 Nov 2026: default window = Jan 2018 to Dec of NEXT year (the dates panel still changes it) */
+  const dA=Math.max(s0, 2018*12), dB=(new Date().getFullYear()+1)*12+11;
   let wA=Math.max(s0, Math.min(NWR.a!=null ? NWR.a : dA, lastMi));
   let wB=Math.max(s0, Math.min(NWR.b!=null ? NWR.b : dB, lastMi));
   if(wB-wA<1){ wA=s0; wB=lastMi; }
