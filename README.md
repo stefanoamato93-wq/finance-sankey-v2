@@ -464,6 +464,8 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   savings % to keep), labelled "FIRE xx,x%" on the left (`fireLine()`). The % scale always
   includes it. If the FIRE page was never opened, `fireNeedRefresh()` works it out and redraws
   Trends. No line when FIRE has no answer.
+- **FIRE pill (v2.89, 13 Nov 2026):** the line is now a **FIRE** on/off pill next to R12M on
+  Trends (`#cfFire`, `cfFire`), off by default, kept on the device (localStorage fs2-cf-fire-v1).
 - **Laptop Plan tools behind ⚙ (v2.87, 13 Nov 2026):** the laptop Plan toolbar now shows only the
   Saved note, the Δ savings chip (when on) and the small ⚙. Every tool (Δ month / Δ year, Δ start
   from archive, Highlight changes, actual, Expand / Collapse all, Show all months, Undo) and the

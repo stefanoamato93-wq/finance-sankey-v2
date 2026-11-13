@@ -1316,7 +1316,7 @@
     <span class="tgslot"></span>
     <!-- R12M: rolling 12-month stacked areas instead of the yearly bars -->
     <span class="pills"><button type="button" class="pill" id="cfOffBtn" aria-expanded="false" aria-controls="cfOffBox" title="Leave labels, categories or details out of this chart">Exclude<span id="cfOffCnt"></span></button></span>
-    <span class="pills"><label class="pill" title="Rolling 12 months, one point per month"><input type="checkbox" id="cfRoll">R12M</label></span>
+    <span class="pills"><label class="pill" title="Rolling 12 months, one point per month"><input type="checkbox" id="cfRoll">R12M</label><label class="pill" title="Dotted line at the FIRE minimum save (total savings % to keep)"><input type="checkbox" id="cfFire">FIRE</label></span>
   </div>
   <!-- what to plot, drilled one level at a time: Overview (stacks + savings %) ›
        macro category › label › detail (only when asked for) -->
@@ -1522,7 +1522,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v2.88';
+const APP_VER='v2.89';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 /* self-update (1 Nov 2026): GitHub Pages lets phones keep the page up to 10 min, and a home-
    screen app resumed from the background keeps running its old code for hours. That old code
@@ -3214,7 +3214,7 @@ function renderRolling(svgEl, W, narrow, perMonth){
   if(ov){
     const all=[...rTot,...rSafe].filter(v=>v!=null);
     if(all.length){
-      const fireP=typeof FIRE_NEED==='number' ? FIRE_NEED*100 : null; if(fireP!=null) all.push(fireP);
+      const fireP=cfFire && typeof FIRE_NEED==='number' ? FIRE_NEED*100 : null; if(fireP!=null) all.push(fireP);
       let rMax=Math.max(...all), rMin=Math.min(...all); if(rMax-rMin<1){ rMax+=1; rMin-=1; }
       const ry=v=> lineTop+(rMax-v)/(rMax-rMin)*lineH;
       if(fireP!=null) fireLine(svgEl, padL, W-padR, ry(fireP), fireP, fs);
@@ -3267,6 +3267,7 @@ function renderRolling(svgEl, W, narrow, perMonth){
   svgEl.appendChild(hit);
 }
 let cfRoll=false;
+let cfFire=false; try{ cfFire=localStorage.getItem('fs2-cf-fire-v1')==='1'; }catch(e){}
 /* month drill-down: null = one bar per year; a year = that year's months (click a
    year bar; touch: tap shows the tooltip, a second tap on the same year drills).
    The "‹ YYYY" pill in the header (or Esc) goes back. Turning R12M on clears it. */
@@ -3328,8 +3329,8 @@ function renderCashBars(){
      cached copy now, a background check that redraws when it lands (txVer / txSnapAt) */
   const d=new Date(), todayDk=d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate();
   if(!cfRoll) ensureTx();
-  if(typeof FIRE_NEED!=='number') fireNeedRefresh();   // FIRE target line (13 Nov 2026): work it out if the FIRE page was not opened
-  const sig=[W,perMonth,showK,cfSel,cfRoll,cfDrill,cfDrillS,cfWinN,cfR0,cfR1,[...deselected].sort().join(','),[...cfOff].sort().join(','),todayDk,txVer,txSnapAt,PLAN?PLAN.at:0,JSON.stringify(fcGet()),FIRE_NEED].join('#');
+  if(cfFire && typeof FIRE_NEED!=='number') fireNeedRefresh();   // FIRE target line (13 Nov 2026): work it out if the FIRE page was not opened
+  const sig=[W,perMonth,showK,cfSel,cfRoll,cfDrill,cfDrillS,cfWinN,cfR0,cfR1,[...deselected].sort().join(','),[...cfOff].sort().join(','),todayDk,txVer,txSnapAt,PLAN?PLAN.at:0,JSON.stringify(fcGet()),cfFire?FIRE_NEED:'off'].join('#');
   if(sig===cfSig && DATA===cfData) return;
   cfSig=sig; cfData=DATA; cfLastW=W;
   if(cfRoll){ renderRolling(svgEl, W, W<560, perMonth); return; }
@@ -3517,7 +3518,7 @@ function renderCashBars(){
   if(rates.length){
     /* a single month can lose far more than it earns (-900%): the scale stops at -100%
        so one outlier does not flatten the band; its label still shows the real rate */
-    const fireP=typeof FIRE_NEED==='number' ? FIRE_NEED*100 : null;
+    const fireP=cfFire && typeof FIRE_NEED==='number' ? FIRE_NEED*100 : null;
     let rMax=Math.max(...rates, fireP ?? -Infinity), rMin=Math.max(-100,Math.min(...rates, fireP ?? Infinity)); if(rMax-rMin<1){ rMax+=1; rMin-=1; }
     const ry=v=> lineTop+(rMax-Math.max(rMin,v))/(rMax-rMin)*lineH;
     if(fireP!=null) fireLine(svgEl, padL, W-padR, ry(fireP), fireP, fsP);
@@ -7310,6 +7311,8 @@ function initControlsOnce(){
     if(cfRoll){ if(cfDrill!=null && cfDrillS!=null){ cfR0=cfDrillS; cfR1=cfDrillS+cfWinN-1; } cfDrill=null; }
     else if(cfR0!=null && cfR1!=null) cfSetMonthRange(cfR0, cfR1);
     syncCfDrill(); hideTip(); renderCashBars(); });
+{ const fb=document.getElementById('cfFire'); fb.checked=cfFire;   // FIRE line on/off (13 Nov 2026), kept on this device
+  fb.addEventListener('change',e=>{ cfFire=e.target.checked; try{ localStorage.setItem('fs2-cf-fire-v1', cfFire?'1':'0'); }catch(x){} renderCashBars(); }); }
   /* month drill-down: back to the years (pill or Esc; Esc closes an open panel first) */
   document.getElementById('cfBack').addEventListener('click',e=>{ e.stopPropagation(); cfDrillTo(null); });
   document.getElementById('cfPrevM').addEventListener('click',e=>{ e.stopPropagation(); cfShift(-1); });
