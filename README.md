@@ -464,6 +464,11 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   savings % to keep), labelled "FIRE xx,x%" on the left (`fireLine()`). The % scale always
   includes it. If the FIRE page was never opened, `fireNeedRefresh()` works it out and redraws
   Trends. No line when FIRE has no answer.
+- **FIRE cards + Bands (v2.91, 13 Nov 2026):** the last two "When does the money run out?" cards
+  now show broke % like the others ("Broke if I stop today" = 1 - res.today, "... in 1 year" =
+  1 - res.in1; they showed the success rate before). A **Bands** pill on the FIRE chart
+  (`FIRE_V.ci`, saved with the view) swaps the scenario lines for 50 / 75 / 95 % confidence
+  bands (P25-P75, P12.5-P87.5, P2.5-P97.5) with the median and average lines on top.
 - **Query Year pick (v2.90, 13 Nov 2026):** a **Year** dropdown after "Last Y" in the Query date
   presets (`#qYear`) sets 1 Jan - 31 Dec of the picked year. It lists every year from the first
   transaction (TX_MIN) to this year, newest first, and shows the year when such a range is set.
