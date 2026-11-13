@@ -464,6 +464,11 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   savings % to keep), labelled "FIRE xx,x%" on the left (`fireLine()`). The % scale always
   includes it. If the FIRE page was never opened, `fireNeedRefresh()` works it out and redraws
   Trends. No line when FIRE has no answer.
+- **FIRE 5000 scenarios (v2.92, 13 Nov 2026):** FIRE now runs 5000 scenarios (FIRE_DEF.n), so
+  the minimum save and success rates stop jumping with each new dice (100 left the 90 % target
+  to ~10 scenarios). Bands is the default view. The picker, the scenario table and the
+  lines view use 100 samples spread evenly worst -> best (`res.order`; the full order is
+  `res.orderAll`); Worst / Median / Best pick from those.
 - **FIRE cards + Bands (v2.91, 13 Nov 2026):** the last two "When does the money run out?" cards
   now show broke % like the others ("Broke if I stop today" = 1 - res.today, "... in 1 year" =
   1 - res.in1; they showed the success rate before). A **Bands** pill on the FIRE chart
