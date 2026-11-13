@@ -464,6 +464,8 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   savings % to keep), labelled "FIRE xx,x%" on the left (`fireLine()`). The % scale always
   includes it. If the FIRE page was never opened, `fireNeedRefresh()` works it out and redraws
   Trends. No line when FIRE has no answer.
+- **No dotted line (v2.95, 13 Nov 2026):** the dotted average-return line is gone from the FIRE
+  chart (and from its scale). The hero's "Average path" number stays.
 - **FIRE bands only (v2.94, 13 Nov 2026):** the FIRE chart always shows the 50 / 75 / 95 % bands;
   the per-scenario lines and the Bands pill are gone (faster). `fireStats` now also returns
   q025 / q125 / q875 / q975, used by the chart and by the hover label, which reads
