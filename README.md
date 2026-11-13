@@ -464,6 +464,9 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   savings % to keep), labelled "FIRE xx,x%" on the left (`fireLine()`). The % scale always
   includes it. If the FIRE page was never opened, `fireNeedRefresh()` works it out and redraws
   Trends. No line when FIRE has no answer.
+- **Pension hint in steps (v3.03, 13 Nov 2026):** the pension hint now reads in nominal €, step
+  by step: total pay in the plan's last year (a year and a month; `B.salNom`, `B.salY` from
+  fireBase) -> pension % of it that year -> grown with inflation to the pension year.
 - **Nominal € (v3.02, 13 Nov 2026):** FIRE always shows nominal € (`FIRE_V.real` forced false),
   not today's €. The hero "Pension from 72" shows the nominal monthly amount at that age.
   Inputs (total pay, passion income) are still typed in today's €.
