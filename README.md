@@ -464,6 +464,9 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   savings % to keep), labelled "FIRE xx,x%" on the left (`fireLine()`). The % scale always
   includes it. If the FIRE page was never opened, `fireNeedRefresh()` works it out and redraws
   Trends. No line when FIRE has no answer.
+- **Nominal € (v3.02, 13 Nov 2026):** FIRE always shows nominal € (`FIRE_V.real` forced false),
+  not today's €. The hero "Pension from 72" shows the nominal monthly amount at that age.
+  Inputs (total pay, passion income) are still typed in today's €.
 - **FIRE clean-up (v3.01, 13 Nov 2026):** the "Today's €" pill is gone; FIRE always shows
   today's € (`FIRE_V.real` forced true). Parameter hints no longer quote fixed numbers that can
   differ from the boxes (spread, worst / best year, pension %, tax, target); the tax texts use
