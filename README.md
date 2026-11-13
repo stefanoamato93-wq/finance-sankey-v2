@@ -464,6 +464,8 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   savings % to keep), labelled "FIRE xx,x%" on the left (`fireLine()`). The % scale always
   includes it. If the FIRE page was never opened, `fireNeedRefresh()` works it out and redraws
   Trends. No line when FIRE has no answer.
+- **FIRE 1000 scenarios (v2.93, 13 Nov 2026):** 5000 was too slow; FIRE_DEF.n is now 1000.
+  Everything else from v2.92 stays (Bands default, 100 samples for picker / table / lines).
 - **FIRE 5000 scenarios (v2.92, 13 Nov 2026):** FIRE now runs 5000 scenarios (FIRE_DEF.n), so
   the minimum save and success rates stop jumping with each new dice (100 left the 90 % target
   to ~10 scenarios). Bands is the default view. The picker, the scenario table and the
