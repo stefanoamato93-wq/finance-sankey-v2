@@ -459,6 +459,12 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   (was 58px) and up to 720px wide (was 520px). The phone size is unchanged (46px).
 - **Chart dates icon (v2.75, 11 Nov 2026):** the ⚙ emoji is replaced by a small 11px
   line calendar icon (inline SVG, muted, gold when a custom range is set).
+- **Laptop Plan tools behind ⚙ (v2.87, 13 Nov 2026):** the laptop Plan toolbar now shows only the
+  Saved note, the Δ savings chip (when on) and the small ⚙. Every tool (Δ month / Δ year, Δ start
+  from archive, Highlight changes, actual, Expand / Collapse all, Show all months, Undo) and the
+  settings (savings targets, forecast / vests) are in the same Options panel as the phone
+  (`planOptsHtml`), opened as a box at the top right (`.popts.dsk`). The old pills, "⚙ Settings"
+  and "⋯" buttons and the settings block under the table are gone.
 - **Plan row fills (v2.86, 13 Nov 2026):** groups, labels and details have three clearly
   different neutral fills (group #24324f, label #141c2e, detail #070b13; year columns a bit lighter).
   Still no per-category colours.
