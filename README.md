@@ -459,6 +459,9 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   (was 58px) and up to 720px wide (was 520px). The phone size is unchanged (46px).
 - **Chart dates icon (v2.75, 11 Nov 2026):** the ⚙ emoji is replaced by a small 11px
   line calendar icon (inline SVG, muted, gold when a custom range is set).
+- **Plan taps (v2.84, 13 Nov 2026):** a tap anywhere on a group or label name cell (not only the
+  small arrow) opens / closes it; + and other buttons in the cell keep their own action. The phone
+  Options button is now a small icon-only ⚙ (12px, aria-label "Options").
 - **Chart dates reset (v2.83, 12 Nov 2026):** the saved chart range moved to localStorage
   fs2-nwrange-v2, so dates picked before (e.g. on the phone) are dropped once and every device
   opens on the new default.

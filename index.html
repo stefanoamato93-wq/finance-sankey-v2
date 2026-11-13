@@ -949,7 +949,8 @@
   /* phone Options sheet (10 Nov 2026) */
   .plantools.pless > button.pobtn[type]{display:inline-block;}
   .plantools.pless > .dlsum{display:none;}
-  .plantools .pobtn{font-size:14px; padding:7px 14px; background:#1d2638; border-color:#3a4d78;}
+  .plantools .pobtn{font-size:12px; line-height:1; padding:3px 6px; min-width:0; background:#1d2638; border-color:#3a4d78;}
+  .plan tr.g td.n, .plan tr.l td.n{cursor:pointer;}
   .popts{position:fixed; inset:0; z-index:55;}
   .popts .pobg{position:absolute; inset:0; width:100%; height:100%; padding:0; border:0; background:rgba(0,0,0,.5);}
   .popts .pop{position:absolute; left:0; right:0; bottom:0; max-height:86vh; overflow-y:auto; -webkit-overflow-scrolling:touch;
@@ -1508,7 +1509,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v2.83';
+const APP_VER='v2.84';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 /* self-update (1 Nov 2026): GitHub Pages lets phones keep the page up to 10 min, and a home-
    screen app resumed from the background keeps running its old code for hours. That old code
@@ -6311,7 +6312,7 @@ function renderPlanCore(force){
   const pnav=!mob ? '' : `<span class="pnav">`+(planMobV==='y'
       ? `<button type="button" data-pm="-12"${pyy<=y0?' disabled':''} aria-label="Year before">\u2039</button><b>${pyy}</b><button type="button" data-pm="12"${pyy>=fc.endYear?' disabled':''} aria-label="Next year">\u203a</button>`
       : `<button type="button" data-pm="-1"${planMobMi<=ms[0]?' disabled':''} aria-label="Month before">\u2039</button><b>${MON[planMobMi%12]} ${String(pyy).slice(2)}</b><button type="button" data-pm="1"${planMobMi>=ms[ms.length-1]?' disabled':''} aria-label="Next month">\u203a</button>`)+
-    `</span><button type="button" class="pobtn" data-pa="opts" aria-expanded="${planOpts}" aria-label="Options">\u2699 Options</button>`;
+    `</span><button type="button" class="pobtn" data-pa="opts" aria-expanded="${planOpts}" aria-label="Options" title="Options">\u2699</button>`;
   const anyOpen=planOpenY.size>0, at=PLAN.at ? new Date(PLAN.at) : null;
   const detAll=!planShutG.size && planDetKeys.length>0 && planDetKeys.every(k=>planOpenL.has(k)),
         detNone=!planDetKeys.some(k=>planOpenL.has(k)) && planGrpKeys.every(g=>planShutG.has(g));
@@ -6554,7 +6555,11 @@ function planInit(){
     e.preventDefault(); planDetAt=Date.now(); planDet(t.dataset.pa); });
   wrap.addEventListener('click',e=>{
     const pe=e.target.closest && e.target.closest('td[data-sr]'); if(pe && wrap.contains(pe)){ planSheetOpen(+pe.dataset.sr, +pe.dataset.smi); return; }
-    const t=e.target.closest ? e.target.closest('button') : null; if(!t || !wrap.contains(t)) return;
+    let t=e.target.closest ? e.target.closest('button') : null;
+    /* 13 Nov 2026: a tap anywhere on a group or label name cell opens / closes it, not only on the small arrow */
+    if(!t){ const nc=e.target.closest && e.target.closest('tr.g td.n, tr.l td.n');
+      if(nc && wrap.contains(nc)) t=nc.querySelector('button[data-pg], button[data-pl]'); }
+    if(!t || !wrap.contains(t)) return;
     const ds=t.dataset;
     if(ds.fca!=null){ fcAct(ds.fca, ds.i!=null ? +ds.i : null); return; }
     if(ds.pm!=null){ planMobMi=(planMobMi||planStart())+(+ds.pm); renderPlan(true); return; }
