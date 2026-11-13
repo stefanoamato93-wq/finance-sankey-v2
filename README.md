@@ -459,6 +459,9 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   (was 58px) and up to 720px wide (was 520px). The phone size is unchanged (46px).
 - **Chart dates icon (v2.75, 11 Nov 2026):** the ⚙ emoji is replaced by a small 11px
   line calendar icon (inline SVG, muted, gold when a custom range is set).
+- **Plan row fills (v2.86, 13 Nov 2026):** groups, labels and details have three clearly
+  different neutral fills (group #24324f, label #141c2e, detail #070b13; year columns a bit lighter).
+  Still no per-category colours.
 - **Phone 12M avg (v2.85, 13 Nov 2026):** the 12M avg column on the phone Plan page is centred
   with 8px right padding, and the Plan table's scroll bar is hidden, so it no longer covers the numbers.
 - **Plan taps (v2.84, 13 Nov 2026):** a tap anywhere on a group or label name cell (not only the
