@@ -464,6 +464,12 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   savings % to keep), labelled "FIRE xx,x%" on the left (`fireLine()`). The % scale always
   includes it. If the FIRE page was never opened, `fireNeedRefresh()` works it out and redraws
   Trends. No line when FIRE has no answer.
+- **FIRE bands only (v2.94, 13 Nov 2026):** the FIRE chart always shows the 50 / 75 / 95 % bands;
+  the per-scenario lines and the Bands pill are gone (faster). `fireStats` now also returns
+  q025 / q125 / q875 / q975, used by the chart and by the hover label, which reads
+  "P50 x · 50% a–b · 75% c–d · 95% e–f". A picked scenario still draws as one gold line.
+  The dotted white line = one run at the average return every year (not P50; it sits higher
+  because ups and downs lower the median growth).
 - **FIRE 1000 scenarios (v2.93, 13 Nov 2026):** 5000 was too slow; FIRE_DEF.n is now 1000.
   Everything else from v2.92 stays (Bands default, 100 samples for picker / table / lines).
 - **FIRE 5000 scenarios (v2.92, 13 Nov 2026):** FIRE now runs 5000 scenarios (FIRE_DEF.n), so

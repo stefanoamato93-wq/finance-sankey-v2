@@ -1526,7 +1526,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v2.93';
+const APP_VER='v2.94';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 /* self-update (1 Nov 2026): GitHub Pages lets phones keep the page up to 10 min, and a home-
    screen app resumed from the background keeps running its old code for hours. That old code
@@ -7509,7 +7509,8 @@ function fireRun(inp, R, nScen){
 }
 /* pure: percentile bands per month, success rate, broke-age counts, median at FIRE */
 function fireStats(run, inp){
-  const {n, nScen, nw, broke}=run, Q=[0.1,0.25,0.5,0.75,0.9], P=Q.map(()=>new Float32Array(n)), col=new Float32Array(nScen);
+  /* 13 Nov 2026: + 2.5 / 12.5 / 87.5 / 97.5 % for the 95 / 75 % bands (chart + hover) */
+  const {n, nScen, nw, broke}=run, Q=[0.1,0.25,0.5,0.75,0.9,0.025,0.125,0.875,0.975], P=Q.map(()=>new Float32Array(n)), col=new Float32Array(nScen);
   for(let i=0;i<n;i++){
     for(let s=0;s<nScen;s++) col[s]=nw[s*n+i];
     col.sort();
@@ -7520,7 +7521,7 @@ function fireStats(run, inp){
   const ages=[...new Set([60,70,80,90,100,inp.endAge])].filter(a=>a<=inp.endAge && a>a0).sort((a,b)=>a-b);
   const hist=ages.map(a=>{ let c=0; for(let s=0;s<nScen;s++) if(broke[s]>=0 && ageAt(broke[s])<a) c++; return {age:a, n:c}; });
   const fi=Math.min(n-1, Math.max(0, inp.fireIdx-1));
-  return {p10:P[0], p25:P[1], p50:P[2], p75:P[3], p90:P[4], success:ok/nScen, ok, hist, fireAt:fi, medFire:P[2][fi], medFinal:P[2][n-1]};
+  return {p10:P[0], p25:P[1], p50:P[2], p75:P[3], p90:P[4], q025:P[5], q125:P[6], q875:P[7], q975:P[8], success:ok/nScen, ok, hist, fireAt:fi, medFire:P[2][fi], medFinal:P[2][n-1]};
 }
 /* pure: P (fireNorm) + B (fireBase: m0 = first month, plan = [{inc, exp}] per month from m0 to the
    plan end, infl, gross = net worth before the tax on gains, share = gain share) -> monthly inputs.
@@ -7635,7 +7636,7 @@ function fireChartSvg(res, o, hist){
   hist=hist||[]; const i0=-hist.length, span=Math.max(1, n-1-i0);
   const d=i=> fireDef(inp, o.real, i);
   const step=Math.max(1, Math.round(n/160)), idx=[]; for(let i=0;i<n;i+=step) idx.push(i); if(idx[idx.length-1]!==n-1) idx.push(n-1);
-  let top=1e5; idx.forEach(i=>{ for(let s=0;s<run.nScen;s++) top=Math.max(top, run.nw[s*n+i]/d(i)); top=Math.max(top, avg.nw[i]/d(i)); });
+  let top=1e5; idx.forEach(i=>{ top=Math.max(top, st.q975[i]/d(i), avg.nw[i]/d(i)); });
   hist.forEach((v,j)=>{ top=Math.max(top, v/d(j+i0)); });
   const lo=4, hi=Math.min(12, Math.ceil(Math.log10(top)));
   const X=i=> (G.L+(i-i0)/span*w).toFixed(1);
@@ -7649,19 +7650,15 @@ function fireChartSvg(res, o, hist){
     g+=`<line x1="${X(i)}" x2="${X(i)}" y1="${G.T}" y2="${G.T+h}" stroke="#1b2438"/><text x="${X(i)}" y="${G.H-8}" text-anchor="middle">${y} (${y-Math.floor(inp.birthMi/12)})</text>`; }
   let lines='';
   /* 13 Nov 2026: "Bands" view = 50 / 75 / 95 % confidence bands of all scenarios instead of one line each */
-  if(o.ci){ const N=run.nScen, col=new Float64Array(N), Q={};
-    const qs=[0.025,0.125,0.25,0.75,0.875,0.975]; qs.forEach(p=>Q[p]=[]);
-    idx.forEach(i=>{ for(let s=0;s<N;s++) col[s]=run.nw[s*n+i]; col.sort();
-      qs.forEach(p=>Q[p].push(col[Math.min(N-1, Math.max(0, Math.round(p*(N-1))))]/d(i))); });
+  /* bands only (13 Nov 2026): the per-scenario lines are gone, the quantiles come from fireStats */
+  { const Q={0.025:st.q025, 0.125:st.q125, 0.25:st.p25, 0.75:st.p75, 0.875:st.q875, 0.975:st.q975};
+    Object.keys(Q).forEach(p=>{ const a=Q[p]; Q[p]=idx.map(i=>a[i]/d(i)); });
     const band=(a,b,op)=> `<path d="${idx.map((i,j)=>(j?'L':'M')+X(i)+' '+Y(Q[b][j])).join('')}`+
       `${idx.slice().reverse().map((i,j)=>'L'+X(i)+' '+Y(Q[a][idx.length-1-j])).join('')}Z" fill="#2fa865" fill-opacity="${op}" stroke="none"/>`;
     lines=band(0.025,0.975,.16)+band(0.125,0.875,.2)+band(0.25,0.75,.3);
     const lab=(p,t)=>{ const j=idx.length-1; return `<text x="${(+X(idx[j])-4).toFixed(1)}" y="${(+Y(Q[p][j])-3).toFixed(1)}" text-anchor="end" style="fill:#7fd0a3">${t}</text>`; };
     lines+=lab(0.975,'95%')+lab(0.875,'75%')+lab(0.75,'50%');
   }
-  else for(const s of (o.only || Array.from({length:Math.min(100, run.nScen)}, (_,j)=>j))){ const off=s*n; let pts=idx;
-    if(run.broke[s]>=0){ const b=run.broke[s]; pts=idx.filter(i=>i<b).concat([b]); }
-    lines+=`<path d="${path(i=>run.nw[off+i], pts)}" fill="none" stroke="${fireCol(s)}" stroke-opacity=".5" stroke-width="1"/>`; }
   const past=hist.length ? `<path d="${hist.map((v,j)=>(j?'L':'M')+X(j+i0)+' '+Y(v/d(j+i0))).join('')}L${X(0)} ${Y(run.nw[0]/d(0))}" fill="none" stroke="#e7ecf5" stroke-width="2.4"/>` : '';
   const hl=o.hl!=null && o.hl<run.nScen ? `<path d="${path(i=>run.nw[o.hl*n+i], run.broke[o.hl]>=0 ? idx.filter(i=>i<run.broke[o.hl]).concat([run.broke[o.hl]]) : idx)}" fill="none" stroke="#e7c14a" stroke-width="3"/>` : '';
   const mark=(i,lab,col)=> i<0 || i>n-1 ? '' : `<line x1="${X(i)}" x2="${X(i)}" y1="${G.T}" y2="${G.T+h}" stroke="${col}" stroke-dasharray="3 3"/>`+
@@ -7908,7 +7905,7 @@ function fireDrawResults(){
   const res=FIRE_RES, B=FIRE_EXTRA; if(!res || !B) return;
   const q=id=>document.getElementById(id);
   if(q('fiHero')) q('fiHero').innerHTML=fireHeroHtml(res, B);
-  if(q('fiChart')) q('fiChart').innerHTML=fireChartSvg(res, {real:FIRE_V.real, hl:FIRE_V.ci ? null : FIRE_HL, ci:!!FIRE_V.ci, only:res.order}, B.hist);
+  if(q('fiChart')) q('fiChart').innerHTML=fireChartSvg(res, {real:FIRE_V.real, hl:FIRE_HL}, B.hist);
   if(q('fiCards')) q('fiCards').innerHTML=fireCardsHtml(res);
   if(q('fiTab')) q('fiTab').innerHTML=fireTableHtml(res.order.map(s=>res.rows[s]), FIRE_SORT, FIRE_HL);
   if(q('fiPick')) q('fiPick').innerHTML=firePickHtml(res);
@@ -7926,7 +7923,8 @@ function fireWireChart(res, B){
     const xs=(G.L+(i-i0)/span*(G.W-G.L-G.R)).toFixed(1); cur.setAttribute('x1',xs); cur.setAttribute('x2',xs); cur.setAttribute('visibility','visible');
     const head=`${miLabel(mi)} \u00b7 age ${Math.floor((mi-inp.birthMi)/12)}`;
     out.textContent= i<0 ? `${head} \u00b7 actual ${fireMoney(B.hist[i-i0]/d)}`
-      : `${head} \u00b7 P10 ${fireMoney(res.st.p10[i]/d)} \u00b7 median ${fireMoney(res.st.p50[i]/d)} \u00b7 P90 ${fireMoney(res.st.p90[i]/d)}`+
+      : `${head} \u00b7 P50 ${fireMoney(res.st.p50[i]/d)} \u00b7 50% ${fireMoney(res.st.p25[i]/d)}\u2013${fireMoney(res.st.p75[i]/d)}`+
+        ` \u00b7 75% ${fireMoney(res.st.q125[i]/d)}\u2013${fireMoney(res.st.q875[i]/d)} \u00b7 95% ${fireMoney(res.st.q025[i]/d)}\u2013${fireMoney(res.st.q975[i]/d)}`+
         (FIRE_HL!=null ? ` \u00b7 #${FIRE_HL+1} ${fireMoney(res.run.nw[FIRE_HL*n+i]/d)}` : ''); };
   svg.addEventListener('pointermove', at); svg.addEventListener('pointerdown', at);
   svg.addEventListener('pointerleave', ()=>{ cur.setAttribute('visibility','hidden'); out.textContent=''; });
@@ -7950,7 +7948,6 @@ function renderFire(force){
   if(!document.getElementById('fiParams')){
     wrap.innerHTML=`<div class="fibox fihero" id="fiHero"></div>`+
       `<div class="fibox"><div class="fitools"><label class="pill"><input type="checkbox" id="fiReal"${FIRE_V.real?' checked':''}>Today's \u20ac</label>`+
-      `<label class="pill" title="50 / 75 / 95 % confidence bands instead of every scenario line"><input type="checkbox" id="fiCi"${FIRE_V.ci?' checked':''}>Bands</label>`+
       `<span class="scrub" id="fiScrub" aria-live="polite"></span></div>`+
       `<div class="fichart" id="fiChart"></div><div class="fimsg" id="fiNote"></div></div>`+
       `<div class="fibox"><h3>Follow one scenario, year by year</h3><div class="fitools"><select id="fiPick" aria-label="Scenario"></select>`+
@@ -7983,7 +7980,6 @@ function fireWire(wrap){
     clearTimeout(fireTimer); fireApply(P, true);
   });
   wrap.querySelector('#fiReal').addEventListener('change', e=>{ FIRE_V.real=e.target.checked; fireViewSave(); fireDrawResults(); });
-  wrap.querySelector('#fiCi').addEventListener('change', e=>{ FIRE_V.ci=e.target.checked; fireViewSave(); fireDrawResults(); });
   wrap.querySelector('#fiPick').addEventListener('change', e=>{ FIRE_HL= e.target.value==='' ? null : +e.target.value; fireDrawResults(); });
   wrap.querySelectorAll('[data-pick]').forEach(b=>b.addEventListener('click', ()=>{
     FIRE_HL= b.dataset.pick==='' || !FIRE_RES ? null : FIRE_RES.order[+b.dataset.pick]; fireDrawResults(); }));
