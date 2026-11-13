@@ -464,6 +464,11 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   savings % to keep), labelled "FIRE xx,x%" on the left (`fireLine()`). The % scale always
   includes it. If the FIRE page was never opened, `fireNeedRefresh()` works it out and redraws
   Trends. No line when FIRE has no answer.
+- **Mirror dice (v2.96, 13 Nov 2026):** `fireReturns` pairs scenarios: each odd scenario uses
+  the previous one's yearly draws flipped (z -> -z), antithetic sampling. Same 1000 runs and
+  speed, but the minimum save and success rates move less with new dice. With "Bad first 5
+  years" on, those 5 years are drawn fresh for both. A given dice number now gives different
+  numbers than before v2.96.
 - **No dotted line (v2.95, 13 Nov 2026):** the dotted average-return line is gone from the FIRE
   chart (and from its scale). The hero's "Average path" number stays.
 - **FIRE bands only (v2.94, 13 Nov 2026):** the FIRE chart always shows the 50 / 75 / 95 % bands;
