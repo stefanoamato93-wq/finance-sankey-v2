@@ -464,6 +464,12 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   savings % to keep), labelled "FIRE xx,x%" on the left (`fireLine()`). The % scale always
   includes it. If the FIRE page was never opened, `fireNeedRefresh()` works it out and redraws
   Trends. No line when FIRE has no answer.
+- **FIRE clean-up (v3.01, 13 Nov 2026):** the "Today's €" pill is gone; FIRE always shows
+  today's € (`FIRE_V.real` forced true). Parameter hints no longer quote fixed numbers that can
+  differ from the boxes (spread, worst / best year, pension %, tax, target); the tax texts use
+  the real rates (P.tax, TAX_RATE). Phone: smaller hero numbers (21px), only net worth /
+  earliest stop age / pension in the facts, the 7 run-out cards in a tight 4-column grid,
+  smaller New dice, hover label and year table.
 - **Log / normal axis (v3.00, 13 Nov 2026):** a **Log** pill next to "Today's €" on the FIRE
   chart (`FIRE_V.lin`, saved with the view; on = log as before). Off = normal axis from 0, the
   top fitted to the 75 % band and the real history (the 95 % band runs off the top, clipped).
