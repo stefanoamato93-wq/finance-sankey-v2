@@ -1522,7 +1522,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v2.87';
+const APP_VER='v2.88';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 /* self-update (1 Nov 2026): GitHub Pages lets phones keep the page up to 10 min, and a home-
    screen app resumed from the background keeps running its old code for hours. That old code
@@ -3075,6 +3075,14 @@ function cfRollLayers(sel, data, detail, lastMi, excluded){
 }
 /* pure: rolling 12-month sums over [m0, m1] -> array (months before m0 count as 0
    only when they hold no data; the window reads whatever exists) */
+/* Trends (13 Nov 2026): dotted straight line at the FIRE minimum save (the total savings % to keep), in the savings % band */
+function fireLine(svgEl, x1, x2, y, pct, fs){
+  const el=(tag,attrs,txt)=>{ const e=document.createElementNS('http://www.w3.org/2000/svg',tag);
+    for(const k in attrs) e.setAttribute(k, attrs[k]); if(txt!=null) e.textContent=txt; return e; };
+  svgEl.appendChild(el('line',{x1, x2, y1:y, y2:y, stroke:'#e7c14a', 'stroke-opacity':.8, 'stroke-width':1.2, 'stroke-dasharray':'2 3', 'stroke-linecap':'round'}));
+  const t=el('text',{x:x1+2, y:y-3, fill:'#e7c14a', 'fill-opacity':.85, 'font-size':Math.max(8.5,fs-1)}, 'FIRE '+String(Math.round(pct*10)/10).replace('.',',')+'%');
+  const tt=el('title',{}); tt.textContent='FIRE minimum save: total savings % to keep'; t.appendChild(tt); svgEl.appendChild(t);
+}
 function rolling12(m, m0, m1){
   const out=[]; let s=0;
   for(let mi=m0-11; mi<m0; mi++) s+=m[mi]||0;
@@ -3206,8 +3214,10 @@ function renderRolling(svgEl, W, narrow, perMonth){
   if(ov){
     const all=[...rTot,...rSafe].filter(v=>v!=null);
     if(all.length){
+      const fireP=typeof FIRE_NEED==='number' ? FIRE_NEED*100 : null; if(fireP!=null) all.push(fireP);
       let rMax=Math.max(...all), rMin=Math.min(...all); if(rMax-rMin<1){ rMax+=1; rMin-=1; }
       const ry=v=> lineTop+(rMax-v)/(rMax-rMin)*lineH;
+      if(fireP!=null) fireLine(svgEl, padL, W-padR, ry(fireP), fireP, fs);
       [[rSafe,CF_LINE_SAFE,true],[rTot,CF_LINE_TOT,false]].forEach(([arr,c,dash])=>{
         let dd='', pen=false, last=null;
         arr.forEach((v,i)=>{ if(v==null){ pen=false; return; } dd+=(pen?'L':'M')+xOf(i).toFixed(1)+','+ry(v).toFixed(1); pen=true; last=i; });
@@ -3318,7 +3328,8 @@ function renderCashBars(){
      cached copy now, a background check that redraws when it lands (txVer / txSnapAt) */
   const d=new Date(), todayDk=d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate();
   if(!cfRoll) ensureTx();
-  const sig=[W,perMonth,showK,cfSel,cfRoll,cfDrill,cfDrillS,cfWinN,cfR0,cfR1,[...deselected].sort().join(','),[...cfOff].sort().join(','),todayDk,txVer,txSnapAt,PLAN?PLAN.at:0,JSON.stringify(fcGet())].join('#');
+  if(typeof FIRE_NEED!=='number') fireNeedRefresh();   // FIRE target line (13 Nov 2026): work it out if the FIRE page was not opened
+  const sig=[W,perMonth,showK,cfSel,cfRoll,cfDrill,cfDrillS,cfWinN,cfR0,cfR1,[...deselected].sort().join(','),[...cfOff].sort().join(','),todayDk,txVer,txSnapAt,PLAN?PLAN.at:0,JSON.stringify(fcGet()),FIRE_NEED].join('#');
   if(sig===cfSig && DATA===cfData) return;
   cfSig=sig; cfData=DATA; cfLastW=W;
   if(cfRoll){ renderRolling(svgEl, W, W<560, perMonth); return; }
@@ -3506,8 +3517,10 @@ function renderCashBars(){
   if(rates.length){
     /* a single month can lose far more than it earns (-900%): the scale stops at -100%
        so one outlier does not flatten the band; its label still shows the real rate */
-    let rMax=Math.max(...rates), rMin=Math.max(-100,Math.min(...rates)); if(rMax-rMin<1){ rMax+=1; rMin-=1; }
+    const fireP=typeof FIRE_NEED==='number' ? FIRE_NEED*100 : null;
+    let rMax=Math.max(...rates, fireP ?? -Infinity), rMin=Math.max(-100,Math.min(...rates, fireP ?? Infinity)); if(rMax-rMin<1){ rMax+=1; rMin-=1; }
     const ry=v=> lineTop+(rMax-Math.max(rMin,v))/(rMax-rMin)*lineH;
+    if(fireP!=null) fireLine(svgEl, padL, W-padR, ry(fireP), fireP, fsP);
     const line=(key,color,dash,above)=>{
       let dd='', pen=false;
       /* the LY point is not part of the timeline: left out of the path */
@@ -7826,6 +7839,7 @@ function fireNeedRefresh(){
     const before=FIRE_NEED, B=fireBase(); if(!B) return;
     fireCompute(fireGet(), B);                              // cached: free when nothing changed
     if(FIRE_NEED!==before && pageOn('plan')) renderPlan(true);
+    if(FIRE_NEED!==before && pageOn('savings')) renderCashBars();   // Trends FIRE line
   }catch(e){ console.warn('fireNeedRefresh', e); } }, 400);
 }
 function fireHeroHtml(res, B){

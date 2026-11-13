@@ -459,6 +459,11 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   (was 58px) and up to 720px wide (was 520px). The phone size is unchanged (46px).
 - **Chart dates icon (v2.75, 11 Nov 2026):** the ⚙ emoji is replaced by a small 11px
   line calendar icon (inline SVG, muted, gold when a custom range is set).
+- **Trends FIRE line (v2.88, 13 Nov 2026):** the Trends savings % band (bars view and Rolling
+  12M view) has a dotted gold straight line at the FIRE minimum save (`FIRE_NEED`, the total
+  savings % to keep), labelled "FIRE xx,x%" on the left (`fireLine()`). The % scale always
+  includes it. If the FIRE page was never opened, `fireNeedRefresh()` works it out and redraws
+  Trends. No line when FIRE has no answer.
 - **Laptop Plan tools behind ⚙ (v2.87, 13 Nov 2026):** the laptop Plan toolbar now shows only the
   Saved note, the Δ savings chip (when on) and the small ⚙. Every tool (Δ month / Δ year, Δ start
   from archive, Highlight changes, actual, Expand / Collapse all, Show all months, Undo) and the
