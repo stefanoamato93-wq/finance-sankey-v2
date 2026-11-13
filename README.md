@@ -459,6 +459,8 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   (was 58px) and up to 720px wide (was 520px). The phone size is unchanged (46px).
 - **Chart dates icon (v2.75, 11 Nov 2026):** the ⚙ emoji is replaced by a small 11px
   line calendar icon (inline SVG, muted, gold when a custom range is set).
+- **Phone 12M avg (v2.85, 13 Nov 2026):** the 12M avg column on the phone Plan page is centred
+  with 8px right padding, and the Plan table's scroll bar is hidden, so it no longer covers the numbers.
 - **Plan taps (v2.84, 13 Nov 2026):** a tap anywhere on a group or label name cell (not only the
   small arrow) opens / closes it; + and other buttons in the cell keep their own action. The phone
   Options button is now a small icon-only ⚙ (12px, aria-label "Options").
