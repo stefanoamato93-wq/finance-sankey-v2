@@ -464,6 +464,9 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   savings % to keep), labelled "FIRE xx,x%" on the left (`fireLine()`). The % scale always
   includes it. If the FIRE page was never opened, `fireNeedRefresh()` works it out and redraws
   Trends. No line when FIRE has no answer.
+- **Pension hint (v2.98, 13 Nov 2026):** the "Pension = % of today's salary" hint follows the
+  typed % and shows the salary used and the monthly pension in today's € and the start age
+  (it was a fixed "60 %" text). It warns when no salary is found (BASE missing this month).
 - **FIRE in the background, 10000 runs (v2.97, 13 Nov 2026):** the FIRE maths runs in a Web
   Worker built from the pure functions (`fireWorker()`: fireRng, fireZ, fireInvN, fireReturns,
   fireRun, fireBroke, fireStats, fireInputs, fireSim, fireOk, fireSolveAge, fireSaveNeed,
