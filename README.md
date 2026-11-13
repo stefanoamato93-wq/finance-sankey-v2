@@ -464,6 +464,9 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   savings % to keep), labelled "FIRE xx,x%" on the left (`fireLine()`). The % scale always
   includes it. If the FIRE page was never opened, `fireNeedRefresh()` works it out and redraws
   Trends. No line when FIRE has no answer.
+- **Query Year pick (v2.90, 13 Nov 2026):** a **Year** dropdown after "Last Y" in the Query date
+  presets (`#qYear`) sets 1 Jan - 31 Dec of the picked year. It lists every year from the first
+  transaction (TX_MIN) to this year, newest first, and shows the year when such a range is set.
 - **FIRE pill (v2.89, 13 Nov 2026):** the line is now a **FIRE** on/off pill next to R12M on
   Trends (`#cfFire`, `cfFire`), off by default, kept on the device (localStorage fs2-cf-fire-v1).
 - **Laptop Plan tools behind ⚙ (v2.87, 13 Nov 2026):** the laptop Plan toolbar now shows only the
