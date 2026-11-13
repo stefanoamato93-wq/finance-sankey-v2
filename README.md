@@ -464,6 +464,12 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   savings % to keep), labelled "FIRE xx,x%" on the left (`fireLine()`). The % scale always
   includes it. If the FIRE page was never opened, `fireNeedRefresh()` works it out and redraws
   Trends. No line when FIRE has no answer.
+- **Pension on total pay (v2.99, 13 Nov 2026):** the pension base (`B.salary` in `fireBase`) is
+  no longer BASE in the first plan month. It is total work pay over the plan's LAST 12 months
+  (Dec of the plan's end year back 12 months, so it moves when a year is added on the Plan
+  page): every Work income row except TFR and FOODTICKETS, + the salary rise on BASE, + RSU
+  vests, per month, brought back to today's € with inflation. The pension then grows with
+  inflation from today as before. "Salary today" is now "Total pay (monthly, today's €)".
 - **Pension hint (v2.98, 13 Nov 2026):** the "Pension = % of today's salary" hint follows the
   typed % and shows the salary used and the monthly pension in today's € and the start age
   (it was a fixed "60 %" text). It warns when no salary is found (BASE missing this month).
