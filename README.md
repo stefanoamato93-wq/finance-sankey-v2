@@ -464,6 +464,9 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   savings % to keep), labelled "FIRE xx,x%" on the left (`fireLine()`). The % scale always
   includes it. If the FIRE page was never opened, `fireNeedRefresh()` works it out and redraws
   Trends. No line when FIRE has no answer.
+- **Log / normal axis (v3.00, 13 Nov 2026):** a **Log** pill next to "Today's €" on the FIRE
+  chart (`FIRE_V.lin`, saved with the view; on = log as before). Off = normal axis from 0, the
+  top fitted to the 75 % band and the real history (the 95 % band runs off the top, clipped).
 - **Pension on total pay (v2.99, 13 Nov 2026):** the pension base (`B.salary` in `fireBase`) is
   no longer BASE in the first plan month. It is total work pay over the plan's LAST 12 months
   (Dec of the plan's end year back 12 months, so it moves when a year is added on the Plan
