@@ -464,6 +464,18 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   savings % to keep), labelled "FIRE xx,x%" on the left (`fireLine()`). The % scale always
   includes it. If the FIRE page was never opened, `fireNeedRefresh()` works it out and redraws
   Trends. No line when FIRE has no answer.
+- **FIRE in the background, 10000 runs (v2.97, 13 Nov 2026):** the FIRE maths runs in a Web
+  Worker built from the pure functions (`fireWorker()`: fireRng, fireZ, fireInvN, fireReturns,
+  fireRun, fireBroke, fireStats, fireInputs, fireSim, fireOk, fireSolveAge, fireSaveNeed,
+  fireRows, fireHeatOrder, fireCore + ymMi / FIRE_Q10 / FIRE_QUICK). The worker sends a quick
+  1000-run answer first (under 1 s), then the full 10000 (about 6 s on the laptop). The hero is
+  dimmed (`.busy`) until the full one lands; a newer ask kills the old job. No worker = 1000
+  runs on the page. `fireBroke` is a fast broke counter (no net worth kept, stops at the limit)
+  used by the solvers, the dice are rolled once and reused (fireOk / fireSolveAge take R), and
+  the minimum-save search stops at 0.02 %. Normal returns use Latin hypercube dice (each year
+  shares out the whole curve; stress years the worst 10 %); fat tails keep the mirror dice.
+  Test (synthetic plan): min save across 6 dice moved 21-30 % at 1000 runs, 24-26 % at 10000.
+  **New dice** sits at the top right of the page (`.fidice`), no longer in Returns.
 - **Mirror dice (v2.96, 13 Nov 2026):** `fireReturns` pairs scenarios: each odd scenario uses
   the previous one's yearly draws flipped (z -> -z), antithetic sampling. Same 1000 runs and
   speed, but the minimum save and success rates move less with new dice. With "Bad first 5
