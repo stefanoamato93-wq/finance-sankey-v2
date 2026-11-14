@@ -1561,7 +1561,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v3.17';
+const APP_VER='v3.18';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 /* self-update (1 Nov 2026): GitHub Pages lets phones keep the page up to 10 min, and a home-
    screen app resumed from the background keeps running its old code for hours. That old code
@@ -4965,12 +4965,16 @@ function qBulkCap(){ return Math.max(1, Math.min(BULK_MAX, Math.floor((TX ? TX.l
 function qBulkUndo(){ try{ return JSON.parse(localStorage.getItem(BULK_UNDO_KEY)||'null'); }catch(e){ return null; } }
 function qSelBar(){
   const u=qBulkUndo(), undo=u && u.n ? `<button type="button" class="qbtn" data-qsel="undo" title="Write back the ${u.n} rows deleted ${new Date(u.at).toLocaleString('en-GB')}">Undo last delete (${u.n})</button>` : '';
-  const ue=qBulkEditUndo(), undoE=ue && ue.n ? `<button type="button" class="qbtn" data-qsel="undoset" title="Put back the old values of the ${ue.n} rows edited ${new Date(ue.at).toLocaleString('en-GB')}">Undo last value edit (${ue.n})</button>` : '';
+  const ue=qBulkEditUndo(), undoE=ue && ue.n ? `<button type="button" class="qbtn" data-qsel="undoset" title="Put back the old values of the ${ue.n} rows edited ${new Date(ue.at).toLocaleString('en-GB')}">Undo last edit (${ue.n})</button>` : '';
   if(!qSelMode) return `<div class="qselbar"><span class="qsn"></span>${undo}${undoE}<button type="button" class="qbtn" data-qsel="dep">Depreciations</button><button type="button" class="qbtn" data-qsel="on">Select</button></div>`;
   const n=qSel.size, cap=qBulkCap();
   return `<div class="qselbar"><span class="qsn">${n} selected \u00b7 max ${cap}</span>`+
     `<button type="button" class="qbtn" data-qsel="shown">Tick shown</button><button type="button" class="qbtn" data-qsel="clear"${n?'':' disabled'}>Clear</button>`+
     `<button type="button" class="qbtn" data-qsel="set"${n && n<=cap ? '' : ' disabled'}>Set value</button>`+
+    /* 14 Nov 2026: rename label / detail, only when every ticked row has the same one */
+    (()=>{ const S=[...qSel], one=k=> n && n<=cap && S.every(r=>norm(r[k])===norm(S[0][k]));
+      return `<button type="button" class="qbtn" data-qsel="setl"${one('lab') ? '' : ' disabled title="Tick rows with the same label"'}>Set label</button>`+
+        `<button type="button" class="qbtn" data-qsel="setd"${one('det') ? '' : ' disabled title="Tick rows with the same detail"'}>Set detail</button>`; })()+
     `<button type="button" class="qbtn qdel" data-qsel="del"${n && n<=cap ? '' : ' disabled'}>Delete ${n}</button>`+
     `<button type="button" class="qbtn" data-qsel="off">Done</button></div>`;
 }
@@ -5036,6 +5040,41 @@ async function qBulkSetValue(){
     for(const ym in put) await FS2.data.putTx(ym, put[ym]);
     qSel.clear(); qSelMode=false; dbAt=0; refreshDB(); renderQuery(true);
   }catch(e){ alert('Edit stopped: '+((e && (e.code||e.message))||e)+'\nUse "Undo last value edit" to put the old values back.'); dbAt=0; refreshDB(); }
+}
+/* bulk label / detail rename (14 Nov 2026): f = 'l' (label) or 'dt' (detail). Allowed only
+   when every ticked row has the same one. Like the single-row edit, each row takes type,
+   group, category 2 and the Net Worth columns from the newest row with the new label/detail.
+   Same cap and the same undo as "Set value". */
+async function qBulkSetText(f){
+  if(!aprOn()){ alert(FS2.fake ? 'This is an archive: nothing can be edited.' : 'Editing works after Data \u2192 Switch to Firebase for good.'); return; }
+  const rows=[...qSel], n=rows.length, cap=qBulkCap(), rk=f==='l' ? 'lab' : 'det', what=f==='l' ? 'label' : 'detail';
+  if(!n) return;
+  if(n>cap){ alert(`At most ${cap} rows per edit. You ticked ${n}.`); return; }
+  if(!rows.every(r=>norm(r[rk])===norm(rows[0][rk]))){ alert(`The ticked rows have different ${what}s. Nothing was changed.`); return; }
+  const used=new Set(), hits=rows.map(r=>{ const h=qEditFind(r, used); if(h) used.add(h.ym+'|'+h.id); return h; });
+  if(hits.some(h=>!h)){ alert('Some rows were not found in the database. Reload and try again. Nothing was changed.'); return; }
+  const cur=String(hits[0].t[f]||''), got=prompt(`New ${what} for the ${n} ticked row${n===1?'':'s'} (now "${cur}"):`, cur);
+  if(got==null) return;
+  let s=got.trim(); if(f==='l' && !s){ alert('A label cannot be empty. Nothing was changed.'); return; }
+  if(norm(s)===norm(cur)){ alert('Same as now. Nothing was changed.'); return; }
+  /* reuse the spelling already in the data, if any */
+  for(const m of FS_MONTHS.values()){ let hit=false; for(const id in (m.tx||{})){ const v=m.tx[id][f]; if(v && norm(v)===norm(s)){ s=String(v); hit=true; break; } } if(hit) break; }
+  const old={}, put={}; let copied=0;
+  hits.forEach(h=>{ (old[h.ym]=old[h.ym]||{})[h.id]=h.t;
+    const nt=Object.assign({}, h.t); nt[f]=s; delete nt.live;
+    const A=norm(nt.a), L=norm(nt.l), D=norm(nt.dt);
+    const tpl=qEditTemplate(FS_MONTHS.values(), L, D, h.id, A) || qEditTemplate(FS_MONTHS.values(), L, D, h.id);
+    if(tpl){ copied++; ['ty','c1','c2'].forEach(k=>{ if(tpl[k]!=null) nt[k]=tpl[k]; }); }
+    const hold=qEditHoldOf(A, L, D, h.id); if(hold) TX_HOLD.forEach(k=>{ if(hold[k]!==undefined) nt[k]=hold[k]; });
+    (put[h.ym]=put[h.ym]||{})[h.id]=nt; });
+  if(!confirm(`Change the ${what} of ${n} row${n===1?'':'s'}?\n\n"${cur}" \u2192 "${s}"\n\n`+
+    (copied===n ? 'Type, group and category come from a matching row.' : copied ? `${n-copied} row(s) keep their own type, group and category (no matching row).` : 'New name: every row keeps its own type, group and category.'))) return;
+  try{ localStorage.setItem(BULK_EDIT_UNDO_KEY, JSON.stringify({at:Date.now(), n, rows:old})); }
+  catch(e){ if(!confirm('Could not keep an undo copy on this device. Edit anyway?')) return; }
+  try{
+    for(const ym in put) await FS2.data.putTx(ym, put[ym]);
+    qSel.clear(); qSelMode=false; dbAt=0; refreshDB(); renderQuery(true);
+  }catch(e){ alert('Edit stopped: '+((e && (e.code||e.message))||e)+'\nUse "Undo last edit" to put the old rows back.'); dbAt=0; refreshDB(); }
 }
 async function qBulkEditUndoRun(){
   const u=qBulkEditUndo(); if(!u || !u.rows) return;
@@ -5336,6 +5375,8 @@ function qInit(){
       else if(a==='del'){ qBulkDelete(); return; }
       else if(a==='undo'){ qBulkUndoRun(); return; }
     else if(a==='set'){ qBulkSetValue(); return; }
+  else if(a==='setl'){ qBulkSetText('l'); return; }
+  else if(a==='setd'){ qBulkSetText('dt'); return; }
     else if(a==='undoset'){ qBulkEditUndoRun(); return; }
     else if(a==='dep'){ depEditOpen(); return; }
       renderQuery(true); return; }

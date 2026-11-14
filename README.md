@@ -464,6 +464,10 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   savings % to keep), labelled "FIRE xx,x%" on the left (`fireLine()`). The % scale always
   includes it. If the FIRE page was never opened, `fireNeedRefresh()` works it out and redraws
   Trends. No line when FIRE has no answer.
+- **v3.18 (14 Nov 2026):** Query Select mode: "Set label" / "Set detail" (`qBulkSetText`), on
+  only when every ticked row has the same label / detail. Each row then takes type, group,
+  category 2 and Net Worth columns from the newest matching row, like the single edit. Same cap,
+  confirm and undo as Set value ("Undo last edit").
 - **v3.17 (14 Nov 2026):** Plan 12M avg counts all past spend, like Trends (`refX`): spend on
   details with no plan row goes to the label's "(not in plan)" line (created if needed, or the
   label's single row); labels with no plan row at all go to NOT IN PLAN.
