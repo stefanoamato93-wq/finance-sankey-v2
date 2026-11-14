@@ -1553,7 +1553,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v3.07';
+const APP_VER='v3.08';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 /* self-update (1 Nov 2026): GitHub Pages lets phones keep the page up to 10 min, and a home-
    screen app resumed from the background keeps running its old code for hours. That old code
@@ -2383,9 +2383,10 @@ function render(res){
        Needs / Wants / ... at the bottom). Tapping a top or bottom group lists its items
        under the chart; tapping a row opens that item. End-row labels each take the first
        free line, so names never sit on top of each other. */
-    const VW=Math.max(280, Math.round((svg.parentNode && svg.parentNode.clientWidth) || 360)), PADX=4, GP=3, NW=10, LG=84, LV=28, cw=6.8, MS=8;
-    let cols=byLayer.slice(1, maxLayer); if(cols.length<2) cols=byLayer.slice();
-    const last=cols.length-1, shown=new Set([].concat(...cols)), avail=VW-2*PADX;
+    const VW=Math.max(280, Math.round((svg.parentNode && svg.parentNode.clientWidth) || 360)), PADX=4, GP=3, NW=10, LG=84, LV=28, cw=6.8;
+    /* v3.08: item bars back at both ends (no names); the group rows next to them carry the labels */
+    const cols=byLayer.slice(), last=cols.length-1, full=last>=3, g0=full ? 1 : 0, g1=full ? last-1 : last, shown=new Set([].concat(...cols)), avail=VW-2*PADX;
+    const maxN=Math.max(...cols.map(c=>c.length)), MS=Math.max(3, Math.min(8, (avail-(maxN-1)*GP)/maxN*0.7));
     const ex=s=> String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     const fit=s=> Math.max(...cols.map(col=> col.reduce((a,n)=>a+Math.max(n.value*s,MS),0)+(col.length-1)*GP));
     let lo=0, hi=scale; if(fit(hi)<=avail) lo=hi; else for(let k=0;k<40;k++){ const m=(lo+hi)/2; if(fit(m)<=avail) lo=m; else hi=m; }
@@ -2395,8 +2396,11 @@ function render(res){
     const place=col=>{ const ends=[]; col.forEach(n=>{ const w=Math.max(String(n.name).length, (fmt(n.value)+pc(n)).length)*cw+8;
         n.lx=Math.min(VW-PADX-w/2, Math.max(PADX+w/2, n.mid)); let k=0; while(k<ends.length && ends[k]>n.lx-w/2) k++; ends[k]=n.lx+w/2; n.lv=k; });
       return ends.length; };
-    const nTop=place(cols[0]), nBot=place(cols[last]), TOPM=10+LV*nTop, H=TOPM+last*LG+NW+14+LV*nBot;
-    cols.forEach((col,ci)=> col.forEach(n=>{ n.my=TOPM+ci*LG; }));
+    const nTop=place(cols[g0]), nBot=place(cols[g1]);
+    const gapA=full ? Math.max(LG, 34+LV*nTop) : LG, gapB=full ? Math.max(LG, 34+LV*nBot) : LG, rowY=[full ? 8 : 10+LV*nTop];
+    for(let ci=1; ci<=last; ci++) rowY[ci]=rowY[ci-1]+(full && ci===1 ? gapA : full && ci===last ? gapB : LG);
+    const H=rowY[last]+NW+(full ? 8 : 14+LV*nBot);
+    cols.forEach((col,ci)=> col.forEach(n=>{ n.my=rowY[ci]; }));
     svg.setAttribute('viewBox',`0 0 ${VW} ${H}`);
     NL.forEach(n=>{ if(!shown.has(n)) return;
       const outs=n.outLinks.filter(l=>!l.ghost && shown.has(l.tgt)).sort((a,b)=>a.tgt.cx-b.tgt.cx);
@@ -2410,24 +2414,25 @@ function render(res){
     const T=(x,y,txt)=>{ const e=document.createElementNS(NS,'text'); e.setAttribute('x',x); e.setAttribute('y',y); e.setAttribute('text-anchor','middle');
       e.setAttribute('class','mid'); e.style.cursor='pointer'; e.textContent=txt; return e; };
     cols.forEach((col,ci)=> col.forEach(n=>{ const g=document.createElementNS(NS,'g'); g.setAttribute('class','node');
-      const key=entryKeyOf(n), end=ci===0 || ci===last, val=fmt(n.value)+pc(n);
+      const key=entryKeyOf(n), leaf=full && (ci===0 || ci===last), end=!leaf && (ci===g0 || ci===g1), val=fmt(n.value)+pc(n);
       const r=document.createElementNS(NS,'rect'); r.setAttribute('x',n.cx); r.setAttribute('y',n.my); r.setAttribute('width',n.w); r.setAttribute('height',NW);
       r.setAttribute('rx',2); r.setAttribute('fill',nodeColor(n)); r.style.cursor='pointer';
       if(end && n.name===cfVSel){ r.setAttribute('stroke','#fff'); r.setAttribute('stroke-width','2'); }
       g.appendChild(r);
-      if(end){ const top=ci===0, d=LV*n.lv, y1=top ? n.my-18-d : n.my+NW+13+d;
+      if(leaf && cfVSel && (ci===0 ? n.outLinks : n.inLinks).some(l=>(ci===0 ? l.tgt : l.src).name===cfVSel)){ r.setAttribute('stroke','#fff'); r.setAttribute('stroke-width','1.5'); }
+      if(end){ const top=ci===g0, d=LV*n.lv, y1=top ? n.my-18-d : n.my+NW+13+d;
         if(n.lv){ const ln=document.createElementNS(NS,'line'); ln.setAttribute('x1',n.mid); ln.setAttribute('x2',n.lx);
           ln.setAttribute('y1',top ? n.my : n.my+NW); ln.setAttribute('y2',top ? y1+15 : y1-10); ln.setAttribute('stroke','#7d8aa5'); ln.setAttribute('stroke-width','0.8'); g.appendChild(ln); }
         g.appendChild(T(n.lx, y1, n.name)); g.appendChild(T(n.lx, y1+12, val));
-      } else { const room=Math.max(60, n.slot+GP);
+      } else if(!leaf){ const room=Math.max(60, n.slot+GP);
         g.appendChild(T(n.mid, n.my-17, clipTxt(n.name, room, 6.2))); g.appendChild(T(n.mid, n.my-5, val)); }
-      const hit=document.createElementNS(NS,'rect'), hw=Math.max(n.slot+GP, 26);
+      const hit=document.createElementNS(NS,'rect'), hw=leaf ? n.slot+GP : Math.max(n.slot+GP, 26);
       hit.setAttribute('x',n.mid-hw/2); hit.setAttribute('y',n.my-10); hit.setAttribute('width',hw); hit.setAttribute('height',NW+20); hit.setAttribute('class','nodehit'); g.appendChild(hit);
       g.addEventListener('click',e=>{ e.stopPropagation(); if(end){ cfVSel= cfVSel===n.name ? null : n.name; render(res); } else openPanel(n.name, key); });
       svg.appendChild(g); }));
     const box=document.getElementById('skList'); if(!box) return;
     box.hidden=false;
-    const top=cols[0].find(n=>n.name===cfVSel), sel=top || cols[last].find(n=>n.name===cfVSel);
+    const top=cols[g0].find(n=>n.name===cfVSel), sel=top || cols[g1].find(n=>n.name===cfVSel);
     if(!sel){ box.innerHTML='<div class="skh">Tap a group to see its items.</div>'; return; }
     const it=(top ? sel.inLinks.map(l=>[l,l.src]) : sel.outLinks.map(l=>[l,l.tgt])).filter(([l])=>!l.ghost).sort((a,b)=>b[0].v-a[0].v);
     box.innerHTML=`<div class="skh"><span>${ex(sel.name)} ${fmt(sel.value)}${pc(sel)}</span><button type="button" class="skx" aria-label="Close">\u2715</button></div>`+

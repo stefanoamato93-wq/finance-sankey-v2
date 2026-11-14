@@ -464,6 +464,9 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   savings % to keep), labelled "FIRE xx,x%" on the left (`fireLine()`). The % scale always
   includes it. If the FIRE page was never opened, `fireNeedRefresh()` works it out and redraws
   Trends. No line when FIRE has no answer.
+- **v3.08 (14 Nov 2026):** phone Cash Flow keeps the full Sankey shape again: item bars at
+  both ends, with no names. Tap an item bar to open it. The group rows next to them carry
+  the labels and still open the list; the selected group's items get a white outline.
 - **v3.07 (14 Nov 2026):** phone Cash Flow (`renderVert`) stops at the groups: income
   groups on top, Needs / Wants / Liberality / Taxes at the bottom, no leaf bars. End-row
   labels take the first free line (thin leader line when moved), so they never overlap.
