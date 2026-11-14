@@ -464,6 +464,10 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   savings % to keep), labelled "FIRE xx,x%" on the left (`fireLine()`). The % scale always
   includes it. If the FIRE page was never opened, `fireNeedRefresh()` works it out and redraws
   Trends. No line when FIRE has no answer.
+- **v3.09 (14 Nov 2026):** FIRE splits the start money. `NW_STILL` (set in `buildNetWorth`) =
+  OBJECTS + CREDITS + CASH (`FIRE_STILL_CATS`): no return, used only once the invested part runs
+  out (`fireRun`, `fireBroke`, `fireTrace`). Invested = `B.gross` (net worth + gains tax) minus
+  still; all gains sit in it. Hero and Start settings show invested / still.
 - **v3.08 (14 Nov 2026):** phone Cash Flow keeps the full Sankey shape again: item bars at
   both ends, with no names. Tap an item bar to open it. The group rows next to them carry
   the labels and still open the list; the selected group's items get a white outline.

@@ -1553,7 +1553,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v3.08';
+const APP_VER='v3.09';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 /* self-update (1 Nov 2026): GitHub Pages lets phones keep the page up to 10 min, and a home-
    screen app resumed from the background keeps running its old code for hours. That old code
@@ -2681,6 +2681,8 @@ function buildNetWorth(){
   });
   const sumV=list=>list.reduce((a,r)=>a+r.v,0);
   const gTot=sumV(rows);
+  /* 14 Nov 2026: money that earns no return (FIRE keeps it flat): objects, credits, cash */
+  NW_STILL=sumV(rows.filter(r=>FIRE_STILL_CATS.includes(r.cat)));
   NW_NOW = LIVE ? {v:gTot, at:LIVE.at} : null;              // Years of Life Paid "Now" point
   fcRefresh(gTot);                                          // forecast from today's net worth (Years Paid reads it too)
   /* the hero card and the tables are drawn only while the Net Worth page is on screen;
@@ -5962,7 +5964,8 @@ function fcForecast(nw0, mi0, mi1, rows, fc, price){
 }
 /* FORECAST = fcForecast() from the live net worth (NW_BASE, set by buildNetWorth); FORECAST_FP
    moves only when an input moves, so pages put it in their redraw signatures */
-let FORECAST=[], FORECAST_FP='', NW_BASE=null;
+let FORECAST=[], FORECAST_FP='', NW_BASE=null, NW_STILL=0;
+const FIRE_STILL_CATS=['OBJECTS','CREDITS','CASH'];   // no return in FIRE; everything else (and the gains tax) stays invested
 function fcRefresh(nw0){
   if(nw0!=null) NW_BASE=nw0;
   if(NW_BASE==null || !isFinite(NW_BASE) || !planEnsure()) return false;
@@ -7635,14 +7638,15 @@ function fireReturns(seed, nScen, years, meanBy, sdBy, clamp, dist, stress){
 function fireRun(inp, R, nScen){
   const n=inp.n, Y=inp.years, tax=inp.tax, cash=inp.cash, nw=new Float32Array(nScen*n), broke=new Int32Array(nScen).fill(-1);
   for(let s=0;s<nScen;s++){
-    let v=inp.nw0, b=inp.basis0, f=1; const o=s*n;
+    let v=inp.nw0, b=inp.basis0, f=1, st=inp.still||0; const o=s*n;
     for(let i=0;i<n;i++){
       if(i%12===0) f=Math.pow(1+R[s*Y+(i/12|0)], 1/12);
       v*=f; const c=cash[i];
       if(c>=0){ v+=c; b+=c; }
       else { const g=v>0 ? Math.min(1, Math.max(0, 1-b/v)) : 0, need=-c/(1-tax*g); b-=need*(1-g); v-=need; }
+      if(!(v>0) && st>0){ v+=st; b=v; st=0; }             // invested ran out: the still money (no gains) takes over
       if(!(v>0)){ broke[s]=i; break; }                   // broke: this month and the rest stay 0
-      nw[o+i]=v-tax*Math.max(0, v-b);
+      nw[o+i]=v-tax*Math.max(0, v-b)+st;
     }
   }
   return {nw, broke, n, nScen};
@@ -7704,9 +7708,12 @@ function fireInputs(P, B, fireMi){
     sdBy[k]=r ? r.sd : P.sd; meanBy[k]=r && r.mean!=null ? r.mean : mean0;
   }
   const g0=P.gainOverride!=null ? P.gainOverride : (B.share||0);
-  const nw0=B.gross||0;
+  /* 14 Nov 2026: invested = gross (incl. the gains tax, still invested) minus the still money
+     (objects, credits, cash). Still money earns nothing and is only used once invested runs out.
+     The gains all sit in the invested part. */
+  const gross=B.gross||0, still=Math.max(0, Math.min(gross, B.still||0)), nw0=gross-still;
   return {m0, n, birthMi, endAge:P.endAge, fireMi, fireIdx, pensionMi, pensionOn, pension0, planEndIdx:plan.length-1,
-    cash, inc, exp, pen, one:oneA, years, meanBy, sdBy, mean0, incG, nw0, basis0:nw0*(1-g0), g0, tax:P.tax, infl};
+    cash, inc, exp, pen, one:oneA, years, meanBy, sdBy, mean0, incG, nw0, still, basis0:Math.max(0, nw0-g0*gross), g0, tax:P.tax, infl};
 }
 /* pure: everything for one parameter set; avg = the same engine with every year at the mean */
 function fireSim(P, B, fireMi){
@@ -7720,12 +7727,13 @@ function fireSim(P, B, fireMi){
 function fireBroke(inp, R, nScen, lim, cash){
   const n=Math.min(inp.n, lim==null ? inp.n : lim), Y=inp.years, tax=inp.tax; cash=cash||inp.cash; let c=0;
   for(let s=0;s<nScen;s++){
-    let v=inp.nw0, b=inp.basis0, f=1;
+    let v=inp.nw0, b=inp.basis0, f=1, st=inp.still||0;
     for(let i=0;i<n;i++){
       if(i%12===0) f=Math.pow(1+R[s*Y+(i/12|0)], 1/12);
       v*=f; const x=cash[i];
       if(x>=0){ v+=x; b+=x; }
       else { const g=v>0 ? Math.min(1, Math.max(0, 1-b/v)) : 0, need=-x/(1-tax*g); b-=need*(1-g); v-=need; }
+      if(!(v>0) && st>0){ v+=st; b=v; st=0; }
       if(!(v>0)){ c++; break; }
     }
   }
@@ -7856,8 +7864,8 @@ function fireHeatOrder(rows){
    Per year: start / end value (after the tax on open gains), return, growth, work income,
    pension + passion, expenses, tax paid on sales, gain share of the net worth at the end. */
 function fireTrace(inp, R, s){
-  const n=inp.n, Y=inp.years, tax=inp.tax, out=[]; let v=inp.nw0, b=inp.basis0;
-  const shown=()=> v>0 ? v-tax*Math.max(0, v-b) : 0;
+  const n=inp.n, Y=inp.years, tax=inp.tax, out=[]; let v=inp.nw0, b=inp.basis0, st=inp.still||0;
+  const shown=()=> (v>0 ? v-tax*Math.max(0, v-b) : 0)+st;
   for(let k=0;k<Y;k++){
     const r=R[s*Y+k], f=Math.pow(1+r, 1/12), a=k*12, z=Math.min(n, a+12);
     const row={k, mi:inp.m0+a, last:z-1, ret:r, start:shown(), growth:0, work:0, other:0, exp:0, taxPaid:0, end:0, gain:0, broke:false};
@@ -7868,6 +7876,7 @@ function fireTrace(inp, R, s){
       const c=inp.cash[i];
       if(c>=0){ v+=c; b+=c; }
       else { const g=v>0 ? Math.min(1, Math.max(0, 1-b/v)) : 0, need=-c/(1-tax*g); row.taxPaid+=need+c; b-=need*(1-g); v-=need; }
+      if(!(v>0) && st>0){ v+=st; b=v; st=0; }
       if(!(v>0)){ row.broke=true; row.last=i; v=0; break; }
     }
     row.end=shown(); row.gain=v>0 ? Math.min(1, Math.max(0, 1-b/v)) : 0;
@@ -7921,7 +7930,8 @@ function fireBase(){
   const ks=Object.keys(byMi).map(Number).sort((a,b)=>a-b); let c=0, j=0;
   for(let mi=minMi; mi<m0 && isFinite(minMi); mi++){ while(j<ks.length && ks[j]<=mi) c+=byMi[ks[j++]]; hist.push(c); }
   if(hist.length) hist[hist.length-1]=NW_BASE;
-  return {m0, plan, salary, salNom, salY, infl:fc.inflation, yield:fc.yield, incRise:fc.salary||0, gross, share:gross>0 ? Math.min(0.99, pos/gross) : 0, nwAfter:NW_BASE, hist};
+  return {m0, plan, salary, salNom, salY, infl:fc.inflation, yield:fc.yield, incRise:fc.salary||0, gross, share:gross>0 ? Math.min(0.99, pos/gross) : 0, nwAfter:NW_BASE, hist,
+    still:Math.max(0, Math.min(gross, NW_STILL||0))};
 }
 /* ---- FIRE page UI ---- */
 let FIRE_V={real:true, ci:true}; try{ Object.assign(FIRE_V, JSON.parse(localStorage.getItem(FIRE_VIEW_KEY)||'{}')); }catch(e){}
@@ -7987,7 +7997,8 @@ function fireParamsHtml(P, B){
     `<td><input class="num" data-oo="amount" value="${fireShow('eur', r.amount)}" inputmode="decimal" aria-label="Amount EUR"></td>`+
     `<td><button type="button" data-del="oneOffs" data-i="${i}" aria-label="Remove">\u2715</button></td></tr>`).join('');
   const extra={
-    Start:`<div class="row"><label>Start net worth</label><b>${B ? fireMoney(B.nwAfter) : '\u2013'}</b><span class="h">Your net worth today from the Net Worth page (after the ${firePc(TAX_RATE||0)} tax on today's gains). Not editable here.</span></div>`,
+    Start:`<div class="row"><label>Start net worth</label><b>${B ? fireMoney(B.nwAfter) : '\u2013'}</b><span class="h">Your net worth today from the Net Worth page (after the ${firePc(TAX_RATE||0)} tax on today's gains). Not editable here.</span></div>`+
+      `<div class="row"><label>Invested / still</label><b>${B ? fireMoney((B.gross||0)-(B.still||0))+' / '+fireMoney(B.still||0) : '\u2013'}</b><span class="h">Invested = all assets except objects, credits and cash, plus the tax on gains (paid only when you sell): it gets the returns. Still = objects, credits, cash: no return, used once invested runs out.</span></div>`,
     Returns:`<div class="row"><label>Mean yearly return</label><span>${firePc(B ? B.yield : P.mean,1)}</span><span class="h">The yield in Forecast settings (Plan page), same as the Net Worth forecast. Each year of a scenario gets its own random return around it.</span></div>`+
       `<div class="fimsg" style="margin-top:6px"><b>Spread by age</b> (glide path): from that age on, use this spread and mean (blank mean = the one above).</div>`+
       `<table id="fiSd"><thead><tr><th>From age</th><th>Spread %</th><th>Mean %</th><th></th></tr></thead><tbody>${sdRows}</tbody></table>`+
@@ -8017,7 +8028,7 @@ function fireReadParams(root, P){
   return o;
 }
 function fireCompute(P, B){
-  const fp=JSON.stringify(P)+'|'+[B.m0, Math.round(B.gross), B.share.toFixed(4), B.infl, B.yield, B.incRise, Math.round(B.salary), B.plan.length, Math.round(B.plan.reduce((a,p)=>a+p.inc-p.exp,0))].join('|');
+  const fp=JSON.stringify(P)+'|'+[B.m0, Math.round(B.gross), Math.round(B.still||0), B.share.toFixed(4), B.infl, B.yield, B.incRise, Math.round(B.salary), B.plan.length, Math.round(B.plan.reduce((a,p)=>a+p.inc-p.exp,0))].join('|');
   if(fp===FIRE_FP && FIRE_RES) return FIRE_RES;
   if(fp===FIRE_JOB_FP) return FIRE_RES;                     // this one is already being worked out
   /* 13 Nov 2026: worked out in the background (Web Worker), so the page never freezes; the
@@ -8114,7 +8125,7 @@ function fireHeroHtml(res, B){
   return `<div class="svhero">${svHtml}</div>`+
     `<div class="fisucc"><div class="big">${firePc(st.success)}</div>`+
     `<div><div class="lead">last to ${P.endAge} if you stop at ${P.fireAge}</div><div class="sub">goal ${firePc(P.target)}</div></div></div>`+
-    `<div class="facts"><span>Net worth today</span><b>${fireMoney(B.nwAfter)}</b>`+
+    `<div class="facts"><span>Net worth today</span><b>${fireMoney(B.nwAfter)} <small style="color:var(--muted);font-weight:500">\u00b7 invested ${fireMoney((B.gross||0)-(B.still||0))} \u00b7 still ${fireMoney(B.still||0)}</small></b>`+
     `<span>Gain share (taxed ${firePc(P.tax)})</span><b>${firePc(inp.g0,1)}</b>`+
     `<span>Median at ${P.fireAge}</span><b>${fireMoney(st.medFire/d(st.fireAt))}</b>`+
     `<span>Average path</span><b>${avgTxt}</b>`+
