@@ -464,6 +464,8 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   savings % to keep), labelled "FIRE xx,x%" on the left (`fireLine()`). The % scale always
   includes it. If the FIRE page was never opened, `fireNeedRefresh()` works it out and redraws
   Trends. No line when FIRE has no answer.
+- **v3.14 (14 Nov 2026):** Plan table fills the frame (`.planscroll` width auto, table
+  min-width 100%), so its right edge lines up with the OK box and the ⚙.
 - **v3.13 (14 Nov 2026):** Savings % cells: safe on top, total below (muted), each with its
   own small change; values below −99% show "<−99%"; no more sideways scroll. Total rows a bit
   smaller (13px, 700). OK / NOT OK box sits inset from the frame with a soft gradient.
