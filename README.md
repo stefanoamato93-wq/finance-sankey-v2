@@ -464,6 +464,8 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   savings % to keep), labelled "FIRE xx,x%" on the left (`fireLine()`). The % scale always
   includes it. If the FIRE page was never opened, `fireNeedRefresh()` works it out and redraws
   Trends. No line when FIRE has no answer.
+- **v3.10 (14 Nov 2026):** Years Paid: today's value moved from the title onto the chart,
+  under a ringed dot at the last actual month (the plan end keeps its own label).
 - **v3.09 (14 Nov 2026):** FIRE splits the start money. `NW_STILL` (set in `buildNetWorth`) =
   OBJECTS + CREDITS + CASH (`FIRE_STILL_CATS`): no return, used only once the invested part runs
   out (`fireRun`, `fireBroke`, `fireTrace`). Invested = `B.gross` (net worth + gains tax) minus
