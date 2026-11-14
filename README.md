@@ -464,6 +464,10 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   savings % to keep), labelled "FIRE xx,x%" on the left (`fireLine()`). The % scale always
   includes it. If the FIRE page was never opened, `fireNeedRefresh()` works it out and redraws
   Trends. No line when FIRE has no answer.
+- **v3.11 (14 Nov 2026):** Plan table: the € Savings row is gone; a "Savings % (safe / total)"
+  row closes the table (`savPc`; safe = CF_SAFE income minus expenses, per column, 12M avg and
+  this month's actual too). Total income / Total expenses rows (`tr.tot.big`) are bigger and
+  brighter. Phone and laptop.
 - **v3.10 (14 Nov 2026):** Years Paid: today's value moved from the title onto the chart,
   under a ringed dot at the last actual month (the plan end keeps its own label).
 - **v3.09 (14 Nov 2026):** FIRE splits the start money. `NW_STILL` (set in `buildNetWorth`) =
