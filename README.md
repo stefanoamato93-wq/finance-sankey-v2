@@ -464,6 +464,15 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   savings % to keep), labelled "FIRE xx,x%" on the left (`fireLine()`). The % scale always
   includes it. If the FIRE page was never opened, `fireNeedRefresh()` works it out and redraws
   Trends. No line when FIRE has no answer.
+- **v3.05 (14 Nov 2026):** FIRE chart is log axis only (Log pill gone, `FIRE_V.lin=false`);
+  no state pension when the FIRE age is below `FIRE_PENSION_MIN_AGE` (45 = 20 years of work),
+  shown as "none (FIRE < 45)"; "New dice" has no emoji; the chart note under the FIRE chart is
+  gone; the 2 last run-out cards read "Broke, stop now / stop +1y" and card titles never wrap;
+  phone FIRE inputs (birth month) stay inside the box. Cash Flow on a phone (<=680px,
+  `cfVert()`) draws the Sankey top to bottom at screen width (`renderVert` inside `render`):
+  leaf names upright, middle nodes name + value above the bar, redrawn on resize. Trends
+  yearly bars: every year keeps its savings % label (smaller font, every other one a line
+  further out when tight).
 - **Pension pay includes TFR and food tickets (v3.04, 14 Nov 2026):** the pension base in
   `fireBase` now counts all Work income rows (BASE, bonus, TFR, FOODTICKETS...) except STOCKS /
   RSU rows, plus RSU vests; the salary rise applies to BASE and TFR, as in the forecast.

@@ -788,7 +788,7 @@
     .cmp td.pc{padding-left:2px;}
     .cmp tr.l td.n{padding-left:16px;} .cmp tr.d td.n{padding-left:28px;}
     .cmp .ab{display:block;}
-    .wrap svg{min-width:720px;}
+    .wrap svg{min-width:720px;} .wrap svg.vert{min-width:0; width:100%; height:auto;}
     .node text{font-size:13px;} .node .nval{font-size:12px;} text.mid{font-size:12px;}
     /* both card rows stay three across, just tighter */
     .nwcards,.totals{gap:8px; max-width:100%;}
@@ -1179,7 +1179,8 @@
   .fitab tr.hl td{background:#1d2840;} .fitab td.bad{color:#e58a8a;}
   @media (max-width:680px){
     .firewrap{margin:8px 8px 30px;}
-    .fiparams .row{grid-template-columns:1fr 100px;} .fiparams .row .h{display:none;}
+    .fiparams .row{grid-template-columns:minmax(0,1fr) minmax(0,130px);} .fiparams .row .h{display:none;}
+    .fiparams input,.fiparams select{min-width:0; max-width:100%; box-sizing:border-box;} .fiparams input[type=month]{font-size:16px; padding:4px 2px;}
     /* 13 Nov 2026: phone FIRE page calmer: smaller numbers, fewer facts, tight cards */
     .fibox{padding:8px 10px;}
     .fihero{gap:6px 14px;} .fihwrap .fihero{padding-right:0;}
@@ -1190,7 +1191,7 @@
     .fihero .facts{flex:1 1 100%; font-size:11px; gap:1px 10px;}
     .fihero .facts > :nth-child(n+3):nth-child(-n+8){display:none;}   /* keep net worth, earliest stop age, pension */
     .ficards{grid-template-columns:repeat(4,1fr); gap:4px;}
-    .ficard{padding:4px 5px; border-radius:6px;} .ficard .k{font-size:9.5px; line-height:1.15;} .ficard .v{font-size:13px;}
+    .ficard{padding:4px 5px; border-radius:6px;} .ficard .k{font-size:9.5px; line-height:1.15; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;} .ficard .v{font-size:13px;}
     .fibox h3{font-size:12.5px; margin:0 0 5px;}
     .fichart text{font-size:13px;}
     .fitools .scrub{flex:1 1 100%; margin-left:0; font-size:10.5px;}
@@ -1544,7 +1545,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v3.04';
+const APP_VER='v3.05';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 /* self-update (1 Nov 2026): GitHub Pages lets phones keep the page up to 10 min, and a home-
    screen app resumed from the background keeps running its old code for hours. That old code
@@ -2323,6 +2324,8 @@ function clipTxt(s,budget,cw){
 }
 
 /* ---- render sankey ------------------------------------------------------- */
+/* phone width: the Cash Flow diagram is drawn top to bottom (14 Nov 2026) */
+function cfVert(){ return typeof window.matchMedia==='function' && window.matchMedia('(max-width:680px)').matches; }
 function render(res){
   svg.innerHTML=''; const {links, income}=res;
   const hidden=res.hidden||new Set(), ghosts=res.ghosts||[];
@@ -2359,6 +2362,59 @@ function render(res){
   const rankKey=n=> n.layer===0 ? 'I|'+n.name : n.layer===maxLayer ? 'E|'+n.name : null;
   byLayer.forEach(col=>col.sort((a,b)=>{ const r=ORDER.indexOf(band(a))-ORDER.indexOf(band(b)); if(r!==0) return r;
     const ka=rankKey(a), kb=rankKey(b); return (ka&&kb) ? rankCmp(ka,kb) : b.value-a.value; }));
+  svg.classList.toggle('vert', cfVert());
+  if(cfVert()){ renderVert(); return; }
+  /* 14 Nov 2026: phone = vertical diagram (income on top, expenses at the bottom), as
+     wide as the screen so it all shows with no sideways scroll. Leaf names run upright
+     (rotated), the middle nodes carry name + value above their bar. Same nodes, colours,
+     taps (openPanel) and ghost stubs as the wide layout. */
+  function renderVert(){
+    const VW=Math.max(280, Math.round((svg.parentNode && svg.parentNode.clientWidth) || 360)), PADX=4, GP=2, NW=10, TOPM=150, BOTM=165, LG=92;
+    const avail=VW-2*PADX, maxN=Math.max(...byLayer.map(c=>c.length));
+    const MS=Math.max(5, Math.min(13, (avail-(maxN-1)*GP)/maxN*0.6));
+    const fit=s=> Math.max(...byLayer.map(col=> col.reduce((a,n)=>a+Math.max(n.value*s,MS),0)+(col.length-1)*GP));
+    let lo=0, hi=scale; if(fit(hi)<=avail) lo=hi; else for(let k=0;k<40;k++){ const m=(lo+hi)/2; if(fit(m)<=avail) lo=m; else hi=m; }
+    const sc=lo, yOf=L=> TOPM+L*LG, H=TOPM+maxLayer*LG+NW+BOTM;
+    byLayer.forEach((col,ci)=>{ const u=col.reduce((a,n)=>a+Math.max(n.value*sc,MS),0)+(col.length-1)*GP; let x=PADX+(avail-u)/2;
+      col.forEach(n=>{ const key=entryKeyOf(n), isHidden=key&&hidden.has(key), bar=isHidden?MS:n.value*sc, slot=Math.max(bar,MS);
+        n.my=yOf(ci); n.w=bar; n.slot=slot; n.cx=x+(slot-bar)/2; n.mid=x+slot/2; x+=slot+GP; }); });
+    svg.setAttribute('viewBox',`0 0 ${VW} ${H}`);
+    NL.forEach(n=>{ n.outLinks.sort((a,b)=>a.tgt.cx-b.tgt.cx); n.inLinks.sort((a,b)=>a.src.cx-b.src.cx);
+      let so=0, gso=0; n.outLinks.forEach(l=>{ if(l.ghost){ l.soff=n.w+2+gso; gso+=GHOST_TH+1; } else { l.soff=so; so+=l.v*sc; } });
+      let io=0, gio=0; n.inLinks.forEach(l=>{ if(l.ghost){ l.ioff=n.w+2+gio; gio+=GHOST_TH+1; } else { l.ioff=io; io+=l.v*sc; } }); });
+    const ribbon=l=>{ const th=l.ghost?GHOST_TH:l.v*sc, t=th/2, sy=l.src.my+NW, ty=l.tgt.my, ym=(sy+ty)/2,
+        sx=l.src.cx+l.soff+t, tx=l.tgt.cx+l.ioff+t;
+      return `M${sx-t},${sy} C${sx-t},${ym} ${tx-t},${ym} ${tx-t},${ty} L${tx+t},${ty} C${tx+t},${ym} ${sx+t},${ym} ${sx+t},${sy} Z`; };
+    NL.forEach(n=> n.outLinks.forEach(l=>{ const p=document.createElementNS(NS,'path');
+      p.setAttribute('d',ribbon(l)); p.setAttribute('fill',linkColor(l)); p.setAttribute('class', l.ghost?'link deselected':'link');
+      if(!l.ghost){ p.addEventListener('mousemove',e=>showTip(e,`${l.s} → ${l.t}: ${fmt(l.v)}`)); p.addEventListener('mouseleave',hideTip); } svg.appendChild(p); }));
+    const T=(attrs,txt,cls)=>{ const e=document.createElementNS(NS,'text'); for(const k in attrs) e.setAttribute(k,attrs[k]); if(cls) e.setAttribute('class',cls); if(txt!=null) e.textContent=txt; return e; };
+    NL.forEach(n=>{ const g=document.createElementNS(NS,'g'); g.setAttribute('class','node');
+      const key=entryKeyOf(n), isHidden=key&&hidden.has(key); if(isHidden) g.classList.add('deselected');
+      const r=document.createElementNS(NS,'rect'); r.setAttribute('x',n.cx); r.setAttribute('y',n.my);
+      r.setAttribute('width',Math.max(1,n.w)); r.setAttribute('height',NW); r.setAttribute('rx',2); r.setAttribute('fill',nodeColor(n));
+      const open=e=>{ e.stopPropagation(); openPanel(n.name, key); };
+      r.style.cursor='pointer'; r.addEventListener('click',open); g.appendChild(r);
+      const pct=income>0 ? Math.round(n.value/income*100)+'%' : '';
+      if(n.layer===0 || n.layer===maxLayer){
+        const top=n.layer===0, fs=Math.max(7, Math.min(11, n.slot+GP-1)), y=top ? n.my-4 : n.my+NW+4;
+        const valTxt=isHidden ? '' : ' '+fmt(n.value)+' '+pct, budget=(top?TOPM:BOTM)-12-valTxt.length*fs*0.56;
+        const lab=T({x:n.mid, y, 'text-anchor':top?'start':'end', 'dominant-baseline':'central', transform:`rotate(-90 ${n.mid} ${y})`, style:`font-size:${fs}px`});
+        const a=document.createElementNS(NS,'tspan'); a.textContent=clipTxt(n.name, budget, fs*0.6); lab.append(a);
+        if(valTxt){ const b=document.createElementNS(NS,'tspan'); b.setAttribute('class','nval'); b.setAttribute('style',`font-size:${Math.max(6.5,fs-1)}px`); b.textContent=valTxt; lab.append(b); }
+        const ttl=document.createElementNS(NS,'title'); ttl.textContent=n.name; lab.appendChild(ttl); g.appendChild(lab);
+      }else{
+        const room=Math.max(46, n.slot+GP);
+        g.appendChild(T({x:n.mid, y:n.my-17, 'text-anchor':'middle'}, clipTxt(n.name, room, 6.2), 'mid'));
+        if(!isHidden) g.appendChild(T({x:n.mid, y:n.my-5, 'text-anchor':'middle'}, fmt(n.value)+(n.name!=='Total income' && pct ? ' '+pct : ''), 'mid'));
+      }
+      /* tap target: a leaf gets its own column (bar + its upright name), no overlap with neighbours */
+      const leaf=n.layer===0 || n.layer===maxLayer, hw=leaf ? n.slot+GP : Math.max(n.slot,30), nh=document.createElementNS(NS,'rect');
+      const hy=leaf ? (n.layer===0 ? n.my-TOPM+8 : n.my) : n.my-16, hh=leaf ? (n.layer===0 ? TOPM-8+NW : NW+BOTM-8) : NW+32;
+      nh.setAttribute('x',n.mid-hw/2); nh.setAttribute('y',hy); nh.setAttribute('width',hw); nh.setAttribute('height',hh); nh.setAttribute('class','nodehit');
+      nh.addEventListener('click',open); g.appendChild(nh);
+      svg.appendChild(g); });
+  }
   const used=byLayer.map(col=>col.reduce((a,n)=>a+Math.max(n.value*scale,MINSLOT),0)+(col.length-1)*GAP);
   const contentH=Math.max(...used);
   const xOf=L=> LEFTM + L*((W-LEFTM-RIGHTM-NODEW)/maxLayer);
@@ -3553,15 +3609,19 @@ function renderCashBars(){
       if(dash) p.setAttribute('stroke-dasharray','5 3');
       svgEl.appendChild(p);
       /* % labels: only every rStep-th point when they would clash (dots stay); the last point and LY always */
-      const rStep=[1,2,3,4,6,12,24].find(k=>slot*k>=4*fsP*0.62+4) || 24;
+      /* 14 Nov 2026: in the yearly view every year keeps its label: the font shrinks to the
+         slot (down to 8px) and, if still too tight, every other label sits one line further out so they never clash */
+      const fsL=drill ? fsP : Math.max(8, Math.min(fsP, (slot-2)/(3*0.62))), stag=!drill && slot<3*fsL*0.62+3;
+      const rStep=drill ? ([1,2,3,4,6,12,24].find(k=>slot*k>=4*fsP*0.62+4) || 24) : 1;
       let lastI=-1; rows.forEach((r,i)=>{ if(!r.ly && rateOf(r,key)!=null) lastI=i; });
       rows.forEach((r,i)=>{ const v=rateOf(r,key); if(v==null) return;
         const showL=r.ly || i===lastI || (drill ? (rStep>=12 ? r.year%12===0 : (r.year-S)%rStep===0) : i%rStep===0);
+        const dz=stag && i%2 ? fsL+1 : 0;
         /* LY: hollow dot, dimmed label */
         svgEl.appendChild(el('circle',r.ly ? {cx:cx(i),cy:ry(v),r:2.6,fill:'none',stroke:color,'stroke-width':1.3}
                                            : {cx:cx(i),cy:ry(v),r:2.6,fill:color}));
-        if(showL) svgEl.appendChild(el('text',{x:cx(i),y:above?ry(v)-6:ry(v)+fsP+3,'text-anchor':'middle',fill:color,'fill-opacity':lyTx(r),
-          'font-size':fsP,'font-weight':above?700:500},Math.round(v)+'%')); });
+        if(showL) svgEl.appendChild(el('text',{x:cx(i),y:above?ry(v)-6-dz:ry(v)+fsL+3+dz,'text-anchor':'middle',fill:color,'fill-opacity':lyTx(r),
+          'font-size':fsL,'font-weight':above?700:500},Math.round(v)+'%')); });
     };
     line('rateSafe',CF_LINE_SAFE,true,false);
     line('rateTot',CF_LINE_TOT,false,true);
@@ -7405,7 +7465,9 @@ function initControlsOnce(){
   let cfRT=null;
   window.addEventListener('resize',()=>{ clearTimeout(cfRT); cfRT=setTimeout(()=>{
     const s=document.getElementById('cfbars'); if(s && Math.round(s.getBoundingClientRect().width)!==cfLastW) renderCashBars();
-    renderYlp(); renderCompare(); },150); });
+    renderYlp(); renderCompare();
+    /* Cash Flow: redraw when the phone (vertical) layout is on or switches on/off */
+    if(PAGE==='cashflow' && (cfVert() || svg.classList.contains('vert'))) build(); },150); });
   const er=document.getElementById('exclReset');
   if(er) er.addEventListener('click',e=>{ e.stopPropagation(); deselected.clear(); build(); });
   document.getElementById('controls').style.display='';
@@ -7443,6 +7505,8 @@ function initControlsOnce(){
    cash >= 0 is invested (cost base grows), cash < 0 is sold grossed up for the tax on the gain
    share; nw <= 0 = broke, it stays 0. Shown values = nw minus the tax on its open gains. */
 const FIRE_KEY='fs2-fire-v1', FIRE_VIEW_KEY='fs2-fire-view-v1';
+/* 14 Nov 2026: no state pension with fewer than 20 years of work, i.e. FIRE before age 45 */
+const FIRE_PENSION_MIN_AGE=45;
 const FIRE_DEF={v:2, birth:'1993-01', fireAge:45, endAge:100, mean:0.1005, sd:0.2, sdBy:[], clamp:[-0.8,0.8], dist:'normal', n:10000, seed:12345, stress:false, incGrowth:0.02, passion:0, passionEnd:0, pensionAge:72, pensionPct:0.6, salaryOverride:null, expAfterFire:1, oneOffs:[], tax:0.26, target:0.9, safeAge:90, gainOverride:null};
 /* pure: any stored object -> valid FIRE settings (bad or missing fields take the defaults) */
 function fireNorm(o){
@@ -7589,7 +7653,7 @@ function fireInputs(P, B, fireMi){
   const m0=B.m0, birthMi=ymMi(P.birth), endMi=birthMi+12*P.endAge-1, n=Math.max(1, endMi-m0+1), infl=B.infl||0;
   if(fireMi==null) fireMi=birthMi+12*P.fireAge;
   const fireIdx=Math.max(0, fireMi-m0), pensionMi=birthMi+12*P.pensionAge;
-  const sal=P.salaryOverride!=null ? P.salaryOverride : (B.salary||0), pension0=P.pensionPct*sal, pensionOn=pension0>0;
+  const sal=P.salaryOverride!=null ? P.salaryOverride : (B.salary||0), pension0=P.pensionPct*sal, pensionOn=pension0>0 && fireMi-birthMi>=12*FIRE_PENSION_MIN_AGE;
   /* the Plan page's Forecast settings win when known: yield = mean return, salary rise = income growth */
   const mean0=B.yield!=null ? B.yield : P.mean, incG=B.incRise!=null ? B.incRise : P.incGrowth;
   const plan=B.plan||[], pe=m0+plan.length-1, yr=mi=>Math.floor(mi/12);
@@ -7837,6 +7901,7 @@ function fireBase(){
 /* ---- FIRE page UI ---- */
 let FIRE_V={real:true, ci:true}; try{ Object.assign(FIRE_V, JSON.parse(localStorage.getItem(FIRE_VIEW_KEY)||'{}')); }catch(e){}
 FIRE_V.real=false;   // 13 Nov 2026: always nominal EUR (no Today's EUR pill)
+FIRE_V.lin=false;    // 14 Nov 2026: log axis only (the Log pill is gone)
 let FIRE_HL=null, FIRE_SORT={k:'final', dir:1}, FIRE_RES=null, FIRE_FP='', FIRE_EXTRA=null, fireTimer=0;
 const FIRE_OPEN=new Set(['You','Start']);
 const FIRE_FIELDS=[
@@ -7885,7 +7950,8 @@ function fireParamsHtml(P, B){
           `${pc} = ${fireMoney(P.pensionPct*B.salNom)} a month in ${B.salY}. Grown with inflation to ${pY} (age ${P.pensionAge}): ${fireMoney(atP)} a month.`
         : `${pc} of ${fireMoney(sal)} a month (today) = ${fireMoney(P.pensionPct*sal)}. Grown with inflation to ${pY} (age ${P.pensionAge}): ${fireMoney(atP)} a month.`;
       hint+=
-        (sal>0 ? '' : ' No pay found: fill in "Total pay".'); }
+        (sal>0 ? '' : ' No pay found: fill in "Total pay".')+
+        (P.fireAge<FIRE_PENSION_MIN_AGE ? ` Only if FIRE age is ${FIRE_PENSION_MIN_AGE}+ (20 years of work): now none.` : ''); }
     return `<div class="row"><label>${esc(lab)}${t.startsWith('pc')?' (%)':t.startsWith('eur')?' (\u20ac)':''}</label>${ctl}<span class="h">${esc(hint)}</span></div>`;
   };
   const sdRows=P.sdBy.map((r,i)=>`<tr data-i="${i}"><td><input class="num" data-sd="fromAge" value="${r.fromAge}" inputmode="numeric" aria-label="From age"></td>`+
@@ -8028,14 +8094,14 @@ function fireHeroHtml(res, B){
     `<span>Median at ${P.fireAge}</span><b>${fireMoney(st.medFire/d(st.fireAt))}</b>`+
     `<span>Average path</span><b>${avgTxt}</b>`+
     `<span>Earliest stop age</span><b>${res.solve==null ? 'none before '+P.endAge : res.solve}</b>`+
-    `<span>Pension from ${P.pensionAge}</span><b>${inp.pensionOn ? fireMoney(inp.pen[Math.max(0, Math.min(inp.n-1, inp.pensionMi-inp.m0))] || inp.pension0)+'/month' : 'none'}</b></div>`;
+    `<span>Pension from ${P.pensionAge}</span><b>${inp.pensionOn ? fireMoney(inp.pen[Math.max(0, Math.min(inp.n-1, inp.pensionMi-inp.m0))] || inp.pension0)+'/month' : (P.fireAge<FIRE_PENSION_MIN_AGE ? 'none (FIRE < '+FIRE_PENSION_MIN_AGE+')' : 'none')}</b></div>`;
 }
 function fireCardsHtml(res){
   const {P, st}=res, N=P.n;
   return st.hist.map(h=>`<div class="ficard"><div class="k">Broke before ${h.age}</div><div class="v">${firePc(h.n/N)}</div></div>`).join('')+
     /* 13 Nov 2026: shown as broke %, like the cards before (res.today / res.in1 are success rates) */
-    `<div class="ficard"><div class="k">Broke if I stop today</div><div class="v">${firePc(1-res.today)}</div></div>`+
-    `<div class="ficard"><div class="k">Broke if I stop in 1 year</div><div class="v">${firePc(1-res.in1)}</div></div>`;
+    `<div class="ficard"><div class="k">Broke, stop now</div><div class="v">${firePc(1-res.today)}</div></div>`+
+    `<div class="ficard"><div class="k">Broke, stop +1y</div><div class="v">${firePc(1-res.in1)}</div></div>`;
 }
 function firePickHtml(res){
   const r=res.rows, lab=x=> `#${x.s+1} \u00b7 ${x.broke!=null ? 'broke at '+Math.floor(x.broke) : fireMoney(x.final)+' at '+res.P.endAge} \u00b7 avg ${firePc(x.avg,1)}`;
@@ -8086,11 +8152,11 @@ function renderFire(force){
   if(!B){ wrap.innerHTML='<div class="fibox">Waiting for today\'s net worth\u2026</div>'; return; }
   const ae=document.activeElement, typing=ae && wrap.contains(ae) && (ae.tagName==='INPUT' || ae.tagName==='SELECT');
   if(!document.getElementById('fiParams')){
-    wrap.innerHTML=`<div class="fihwrap"><button type="button" class="fidice" id="fiDice" title="Roll new dice: another set of scenarios">\u{1F3B2} New dice</button><div class="fibox fihero" id="fiHero"></div></div>`+
+    wrap.innerHTML=`<div class="fihwrap"><button type="button" class="fidice" id="fiDice" title="Roll new dice: another set of scenarios">New dice</button><div class="fibox fihero" id="fiHero"></div></div>`+
       `<div class="fibox"><div class="fitools">`+
-      `<label class="pill" title="Log axis (on) or normal axis (off)"><input type="checkbox" id="fiLog"${FIRE_V.lin?'':' checked'}>Log</label>`+
+      
       `<span class="scrub" id="fiScrub" aria-live="polite"></span></div>`+
-      `<div class="fichart" id="fiChart"></div><div class="fimsg" id="fiNote"></div></div>`+
+      `<div class="fichart" id="fiChart"></div></div>`+
       `<div class="fibox"><h3>Follow one scenario, year by year</h3><div class="fitools"><select id="fiPick" aria-label="Scenario"></select>`+
       `<button type="button" data-pick="0">Worst</button><button type="button" data-pick="50">Median</button><button type="button" data-pick="99">Best</button><button type="button" data-pick="">Clear</button></div>`+
       `<div id="fiTrace"></div></div>`+
@@ -8123,7 +8189,7 @@ function fireWire(wrap){
     const g=b.closest('details[data-g]'); if(g) FIRE_OPEN.add(g.dataset.g);   // the group stays open after the redraw
     clearTimeout(fireTimer); fireApply(P, true);
   });
-  wrap.querySelector('#fiLog').addEventListener('change', e=>{ FIRE_V.lin=!e.target.checked; fireViewSave(); fireDrawResults(); });
+
   wrap.querySelector('#fiPick').addEventListener('change', e=>{ FIRE_HL= e.target.value==='' ? null : +e.target.value; fireDrawResults(); });
   wrap.querySelectorAll('[data-pick]').forEach(b=>b.addEventListener('click', ()=>{
     FIRE_HL= b.dataset.pick==='' || !FIRE_RES ? null : FIRE_RES.order[+b.dataset.pick]; fireDrawResults(); }));
