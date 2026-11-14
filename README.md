@@ -464,6 +464,12 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   savings % to keep), labelled "FIRE xx,x%" on the left (`fireLine()`). The % scale always
   includes it. If the FIRE page was never opened, `fireNeedRefresh()` works it out and redraws
   Trends. No line when FIRE has no answer.
+- **v3.07 (14 Nov 2026):** phone Cash Flow (`renderVert`) stops at the groups: income
+  groups on top, Needs / Wants / Liberality / Taxes at the bottom, no leaf bars. End-row
+  labels take the first free line (thin leader line when moved), so they never overlap.
+  Tapping a top or bottom group (`cfVSel`) lists its items under the chart (`#skList`:
+  colour, name, €, % of income); tap again or ✕ to close; a row opens the item panel.
+  Middle nodes still open their panel.
 - **v3.06 (14 Nov 2026):** Years Paid is no longer in the top tab row. It is the second tab
   inside Trends (`.subtabs`: Cash flow = page `savings`, Years paid = page `life`); the
   Trends tab stays lit on both. `#life` links still work.
