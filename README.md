@@ -464,6 +464,7 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   savings % to keep), labelled "FIRE xx,x%" on the left (`fireLine()`). The % scale always
   includes it. If the FIRE page was never opened, `fireNeedRefresh()` works it out and redraws
   Trends. No line when FIRE has no answer.
+- **v3.16 (14 Nov 2026):** Plan Savings % values: 1 decimal, normal weight (not bold).
 - **v3.15 (14 Nov 2026):** FIRE hero "Pension from 72" adds "; a pizza costs € X" (a € 10
   pizza today grown with inflation to the pension year), for scale.
 - **v3.14 (14 Nov 2026):** Plan table fills the frame (`.planscroll` width auto, table
