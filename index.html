@@ -4228,7 +4228,7 @@ function renderYlp(){
     pts.push({mi:m1+1, nw:NW_NOW.v, exp:L.exp, years: L.exp>0 ? NW_NOW.v/L.exp : null, now:true}); }
   /* current value next to the title: the live Now point, else the last complete month */
   { const vEl=document.getElementById('ylpVal'); let q=pts.length-1; while(q>=0 && pts[q].years==null) q--;
-    if(vEl){ vEl.textContent = '';   // 14 Nov 2026: shown on the chart instead vEl.title = q>=0 ? (pts[q].now ? 'Now (live)' : miLabel(pts[q].mi)) : ''; } }
+    if(vEl){ vEl.textContent = ''; /* 14 Nov 2026: shown on the chart instead */ vEl.title = q>=0 ? (pts[q].now ? 'Now (live)' : miLabel(pts[q].mi)) : ''; } }
   /* plan view: one point per planned month = forecast net worth / T12M expenses, where the
      T12M mixes real and planned months (planned DATA rows incl. INFLATION) */
   if(pvOn() && pts.length && pts[pts.length-1].now && FORECAST.length){
