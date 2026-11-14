@@ -464,6 +464,9 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   savings % to keep), labelled "FIRE xx,x%" on the left (`fireLine()`). The % scale always
   includes it. If the FIRE page was never opened, `fireNeedRefresh()` works it out and redraws
   Trends. No line when FIRE has no answer.
+- **Pension pay includes TFR and food tickets (v3.04, 14 Nov 2026):** the pension base in
+  `fireBase` now counts all Work income rows (BASE, bonus, TFR, FOODTICKETS...) except STOCKS /
+  RSU rows, plus RSU vests; the salary rise applies to BASE and TFR, as in the forecast.
 - **Pension hint in steps (v3.03, 13 Nov 2026):** the pension hint now reads in nominal €, step
   by step: total pay in the plan's last year (a year and a month; `B.salNom`, `B.salY` from
   fireBase) -> pension % of it that year -> grown with inflation to the pension year.

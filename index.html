@@ -1544,7 +1544,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v3.03';
+const APP_VER='v3.04';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 /* self-update (1 Nov 2026): GitHub Pages lets phones keep the page up to 10 min, and a home-
    screen app resumed from the background keeps running its old code for hours. That old code
@@ -7816,13 +7816,13 @@ function fireBase(){
   const m0=planStart()+1, fc=fcGet();
   let plan=[], salary=0, salNom=0, salY=null;
   if(planEnsure()){ plan=fcForecast(0, m0, planEnd(), PLAN.rows, fc, amznPrice()).map(p=>({inc:p.inc+p.rise+p.rsu, exp:p.exp+p.infl}));
-    /* pension reference salary (13 Nov 2026): total work pay (Work income without TFR and food
+    /* pension reference salary (13 Nov 2026): total work pay (all Work income incl. TFR and food
        tickets, + salary rise + RSU vests) over the plan's LAST 12 months (moves when a year is
        added on the Plan page), a month, brought back to today's EUR with inflation */
     const pe=planEnd(), p0=Math.max(m0, pe-11), rsu=fcRsuByMi(fc, amznPrice(), p0, pe);
     for(let mi=p0; mi<=pe; mi++){
-      PLAN.rows.forEach(r=>{ if(r.k!=='I' || r.g!=='Work income' || ['TFR','FOODTICKETS','STOCKS','RSU'].includes(r.l)) return;
-        const v=+r.m[mi]||0; salary+=v+(r.l==='BASE' ? v*fcSalF(mi, fc) : 0); });
+      PLAN.rows.forEach(r=>{ if(r.k!=='I' || r.g!=='Work income' || ['STOCKS','RSU'].includes(r.l)) return;
+        const v=+r.m[mi]||0; salary+=v+((r.l==='BASE' || r.l==='TFR') ? v*fcSalF(mi, fc) : 0); });
       salary+=rsu[mi]||0; }
     salNom=salary/(pe-p0+1); salY=Math.floor(pe/12);   // nominal month in the plan's last year (shown in the hint)
     salary=salNom/Math.pow(1+(fc.inflation||0), salY-Math.floor(m0/12)); }
@@ -7854,7 +7854,7 @@ const FIRE_FIELDS=[
     ['passionEnd','Passion income ends at age','int','0 = never ends.'],
     ['pensionAge','State pension from age','int','Paid from this age, even if you stopped working.'],
     ['pensionPct','Pension = % of total pay','pc','Share of your total monthly pay, grown with inflation from today.'],
-    ['salaryOverride','Total pay (monthly, today\'s \u20ac)','eurOpt','Blank = Work income (no TFR, food tickets) + salary rise + RSU over the plan\'s last 12 months, in today\'s \u20ac.']]],
+    ['salaryOverride','Total pay (monthly, today\'s \u20ac)','eurOpt','Blank = Work income (incl. TFR, food tickets) + salary rise + RSU over the plan\'s last 12 months, in today\'s \u20ac.']]],
   ['Expenses', [['expAfterFire','Spending after FIRE','pc','100 % = same as before; 90 % = spend less once retired.']]],
   ['Tax and target', [['tax','Tax on gains when selling','pc','Only on the gain share of what you sell. Max 60 %.'],
     ['target','Success target','pc','Share of scenarios that must last to the age above.'],
@@ -7881,7 +7881,7 @@ function fireParamsHtml(P, B){
       const pc=fireShow('pc', P.pensionPct)+' %', i=B ? B.infl||0 : 0, y0=B ? Math.floor(B.m0/12) : new Date().getFullYear(),
             pY=Math.floor((ymMi(P.birth)+12*P.pensionAge)/12), atP=P.pensionPct*sal*Math.pow(1+i, pY-y0);
       hint=P.salaryOverride==null && B && B.salY!=null
-        ? `Total pay in ${B.salY}: ${fireMoney(B.salNom*12)} a year = ${fireMoney(B.salNom)} a month (Work income without TFR and food tickets, + salary rise + RSU). `+
+        ? `Total pay in ${B.salY}: ${fireMoney(B.salNom*12)} a year = ${fireMoney(B.salNom)} a month (Work income incl. TFR and food tickets, + salary rise + RSU). `+
           `${pc} = ${fireMoney(P.pensionPct*B.salNom)} a month in ${B.salY}. Grown with inflation to ${pY} (age ${P.pensionAge}): ${fireMoney(atP)} a month.`
         : `${pc} of ${fireMoney(sal)} a month (today) = ${fireMoney(P.pensionPct*sal)}. Grown with inflation to ${pY} (age ${P.pensionAge}): ${fireMoney(atP)} a month.`;
       hint+=
