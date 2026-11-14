@@ -464,6 +464,9 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   savings % to keep), labelled "FIRE xx,x%" on the left (`fireLine()`). The % scale always
   includes it. If the FIRE page was never opened, `fireNeedRefresh()` works it out and redraws
   Trends. No line when FIRE has no answer.
+- **v3.17 (14 Nov 2026):** Plan 12M avg counts all past spend, like Trends (`refX`): spend on
+  details with no plan row goes to the label's "(not in plan)" line (created if needed, or the
+  label's single row); labels with no plan row at all go to NOT IN PLAN.
 - **v3.16 (14 Nov 2026):** Plan Savings % values: 1 decimal, normal weight (not bold).
 - **v3.15 (14 Nov 2026):** FIRE hero "Pension from 72" adds "; a pizza costs € X" (a € 10
   pizza today grown with inflation to the pension year), for scale.
