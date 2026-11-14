@@ -464,6 +464,9 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   savings % to keep), labelled "FIRE xx,x%" on the left (`fireLine()`). The % scale always
   includes it. If the FIRE page was never opened, `fireNeedRefresh()` works it out and redraws
   Trends. No line when FIRE has no answer.
+- **v3.06 (14 Nov 2026):** Years Paid is no longer in the top tab row. It is the second tab
+  inside Trends (`.subtabs`: Cash flow = page `savings`, Years paid = page `life`); the
+  Trends tab stays lit on both. `#life` links still work.
 - **v3.05 (14 Nov 2026):** FIRE chart is log axis only (Log pill gone, `FIRE_V.lin=false`);
   no state pension when the FIRE age is below `FIRE_PENSION_MIN_AGE` (45 = 20 years of work),
   shown as "none (FIRE < 45)"; "New dice" has no emoji; the chart note under the FIRE chart is
