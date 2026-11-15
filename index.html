@@ -1561,7 +1561,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v3.18';
+const APP_VER='v3.19';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 /* self-update (1 Nov 2026): GitHub Pages lets phones keep the page up to 10 min, and a home-
    screen app resumed from the background keeps running its old code for hours. That old code
@@ -8148,6 +8148,14 @@ function fireCore(P, B){
   res.rows=fireRows(res); res.orderAll=fireHeatOrder(res.rows); { const A=res.orderAll, k=Math.min(100, A.length); res.order=Array.from({length:k}, (_,j)=>A[k>1 ? Math.round(j*(A.length-1)/(k-1)) : 0]); }
   res.solve=fireSolveAge(P, B, res.R); res.today=fireOk(P, B, B.m0, res.R); res.in1=fireOk(P, B, B.m0+12, res.R);
   res.save=fireSaveNeed(res.inp, res.R, P.n, P.safeAge, 1-P.target);
+  /* 15 Nov 2026: what the dice really drew, over every scenario-year: average, spread, the
+     growth you keep (geometric mean) and how often a year hit the floor / cap, vs what is set */
+  { const R=res.R, N=R.length, cl=P.clamp, inp=res.inp; let s=0, s2=0, sl=0, lo=0, hi=0, mb=0, sb=0;
+    for(let i=0;i<N;i++){ const r=R[i]; s+=r; s2+=r*r; sl+=Math.log(1+r); if(r<=cl[0]+1e-12) lo++; else if(r>=cl[1]-1e-12) hi++; }
+    for(let k=0;k<inp.years;k++){ mb+=inp.meanBy[k]; sb+=inp.sdBy[k]; }
+    const m=N ? s/N : 0;
+    res.rs={mean:m, sd:N ? Math.sqrt(Math.max(0, s2/N-m*m)) : 0, geo:N ? Math.exp(sl/N)-1 : 0, floor:N ? lo/N : 0, cap:N ? hi/N : 0,
+      setMean:inp.years ? mb/inp.years : 0, setSd:inp.years ? sb/inp.years : 0, n:N}; }
   return res;
 }
 var FIRE_W=null, FIRE_JOB=0, FIRE_JOB_FP='', FIRE_NEED_CH=false;   // var: safe if asked before this line runs
@@ -8221,6 +8229,9 @@ function fireHeroHtml(res, B){
     `<span>Gain share (taxed ${firePc(P.tax)})</span><b>${firePc(inp.g0,1)}</b>`+
     `<span>Median at ${P.fireAge}</span><b>${fireMoney(st.medFire/d(st.fireAt))}</b>`+
     `<span>Average path</span><b>${avgTxt}</b>`+
+    /* 15 Nov 2026: the returns the simulation really drew vs the ones set */
+    (res.rs ? `<span title="Over all ${res.rs.n.toLocaleString('it-IT')} scenario-years. Kept = the yearly growth you really keep (geometric mean): lower than the average because bad years hurt more than good years help.">Returns drawn</span>`+
+      `<b>${firePc(res.rs.mean,1)} avg \u00b7 ${firePc(res.rs.sd,1)} spread <small style="color:var(--muted);font-weight:500">\u00b7 set ${firePc(res.rs.setMean,1)} / ${firePc(res.rs.setSd,1)} \u00b7 kept ${firePc(res.rs.geo,1)} a year \u00b7 at floor ${firePc(res.rs.floor,1)} / cap ${firePc(res.rs.cap,1)} of years</small></b>` : '')+
     `<span>Earliest stop age</span><b>${res.solve==null ? 'none before '+P.endAge : res.solve}</b>`+
     `<span>Pension from ${P.pensionAge}</span><b>${inp.pensionOn ? fireMoney(inp.pen[Math.max(0, Math.min(inp.n-1, inp.pensionMi-inp.m0))] || inp.pension0)+'/month' : (P.fireAge<FIRE_PENSION_MIN_AGE ? 'none (FIRE < '+FIRE_PENSION_MIN_AGE+')' : 'none')}`+
     /* 14 Nov 2026: a 10 EUR pizza today, grown with inflation to the pension year, for scale */
