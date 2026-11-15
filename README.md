@@ -492,6 +492,11 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
 - **v3.24 (15 Nov 2026):** Net Worth chart: the forecast lines are continuous (no dashes) and differ
   by colour only: net worth forecast teal `#5fc4d6`, money-put-in forecast orange `#e8935a`.
 - **v3.25 (15 Nov 2026):** both forecast lines more faded: stroke-opacity .9 -> .5.
+- **v3.26 (15 Nov 2026):** phone Plan, **Savings %** row = **plan only** (no actuals, also in the
+  current month's Act / Plan cell and in the year column), safe on top / total below, each with its
+  change in % points vs the starting plan: Month view vs `PLAN.base` (1st of the month), Year view
+  vs `PLAN.baseY` (1 Jan). Always on, independent of the Δ month / Δ year option (`pcTdPlan`,
+  `dSumS`). Laptop unchanged.
 - **v3.17 (14 Nov 2026):** Plan 12M avg counts all past spend, like Trends (`refX`): spend on
   details with no plan row goes to the label's "(not in plan)" line (created if needed, or the
   label's single row); labels with no plan row at all go to NOT IN PLAN.
