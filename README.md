@@ -479,6 +479,13 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
 - **v3.21 (15 Nov 2026):** Trends bar charts: the FIRE dotted line runs from the first to the last
   savings point (bar centres, LY bar left out) with a gold dot (r 2.6, like the savings line) at
   each point. No "FIRE x%" text on any Trends chart (the % stays in the line's hover title).
+- **v3.22 (15 Nov 2026):** Trends picker: **Food** and **Non-food** (keys `C2|FOOD`, `C2|NONFOOD`)
+  at the end of the Expenses group. CATEGORY2 cuts across the macro groups, so they have no
+  label level under them; R12M / bars stack their labels like a macro group. `aggregate()` keeps
+  `META.c2Of` (expense label -> FOOD / NONFOOD from CATEGORY2); `c2Of()` falls back to FOOD for
+  FOOD / GROCERIES / RESTAURANTS and NONFOOD otherwise (old snapshots, slim loads without
+  CATEGORY2), so the snapshot cache key did not need a bump. Taxes are in neither. They honour
+  label and macro-group exclusions.
 - **v3.17 (14 Nov 2026):** Plan 12M avg counts all past spend, like Trends (`refX`): spend on
   details with no plan row goes to the label's "(not in plan)" line (created if needed, or the
   label's single row); labels with no plan row at all go to NOT IN PLAN.
