@@ -486,6 +486,9 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   FOOD / GROCERIES / RESTAURANTS and NONFOOD otherwise (old snapshots, slim loads without
   CATEGORY2), so the snapshot cache key did not need a bump. Taxes are in neither. They honour
   label and macro-group exclusions.
+- **v3.23 (15 Nov 2026):** Header: **Data / Archive / Month-end** moved from under the title into
+  the account menu (round button, top right), as the first row. A tap on one closes the menu
+  (capture listener). `#acct` is now absolute on the title row, so the empty row under the title is gone.
 - **v3.17 (14 Nov 2026):** Plan 12M avg counts all past spend, like Trends (`refX`): spend on
   details with no plan row goes to the label's "(not in plan)" line (created if needed, or the
   label's single row); labels with no plan row at all go to NOT IN PLAN.
