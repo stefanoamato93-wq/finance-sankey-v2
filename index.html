@@ -1561,7 +1561,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v3.20';
+const APP_VER='v3.21';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 /* self-update (1 Nov 2026): GitHub Pages lets phones keep the page up to 10 min, and a home-
    screen app resumed from the background keeps running its old code for hours. That old code
@@ -3189,12 +3189,13 @@ function cfRollLayers(sel, data, detail, lastMi, excluded){
 /* pure: rolling 12-month sums over [m0, m1] -> array (months before m0 count as 0
    only when they hold no data; the window reads whatever exists) */
 /* Trends (13 Nov 2026): dotted straight line at the FIRE minimum save (the total savings % to keep), in the savings % band */
-function fireLine(svgEl, x1, x2, y, pct, fs){
+/* 15 Nov 2026: no "FIRE x%" text any more (Stefano); dots = x positions that get a circle like the savings line */
+function fireLine(svgEl, x1, x2, y, pct, fs, dots){
   const el=(tag,attrs,txt)=>{ const e=document.createElementNS('http://www.w3.org/2000/svg',tag);
     for(const k in attrs) e.setAttribute(k, attrs[k]); if(txt!=null) e.textContent=txt; return e; };
-  svgEl.appendChild(el('line',{x1, x2, y1:y, y2:y, stroke:'#e7c14a', 'stroke-opacity':.8, 'stroke-width':1.2, 'stroke-dasharray':'2 3', 'stroke-linecap':'round'}));
-  const t=el('text',{x:x1+2, y:y-3, fill:'#e7c14a', 'fill-opacity':.85, 'font-size':Math.max(8.5,fs-1)}, 'FIRE '+String(Math.round(pct*10)/10).replace('.',',')+'%');
-  const tt=el('title',{}); tt.textContent='FIRE minimum save: total savings % to keep'; t.appendChild(tt); svgEl.appendChild(t);
+  const ln=el('line',{x1, x2, y1:y, y2:y, stroke:'#e7c14a', 'stroke-opacity':.8, 'stroke-width':1.2, 'stroke-dasharray':'2 3', 'stroke-linecap':'round'});
+  const tt=el('title',{}); tt.textContent='FIRE minimum save '+String(Math.round(pct*10)/10).replace('.',',')+'%: total savings % to keep'; ln.appendChild(tt); svgEl.appendChild(ln);
+  (dots||[]).forEach(x=> svgEl.appendChild(el('circle',{cx:x, cy:y, r:2.6, fill:'#e7c14a', 'fill-opacity':.9})));
 }
 function rolling12(m, m0, m1){
   const out=[]; let s=0;
@@ -3634,9 +3635,9 @@ function renderCashBars(){
     const fireP=cfFire && typeof FIRE_NEED==='number' ? FIRE_NEED*100 : null;
     let rMax=Math.max(...rates, fireP ?? -Infinity), rMin=Math.max(-100,Math.min(...rates, fireP ?? Infinity)); if(rMax-rMin<1){ rMax+=1; rMin-=1; }
     const ry=v=> lineTop+(rMax-Math.max(rMin,v))/(rMax-rMin)*lineH;
-    /* 15 Nov 2026: the FIRE line runs from the first bar's left edge to the last bar's right edge */
-  if(fireP!=null && n){ let fx1=Infinity, fx2=-Infinity; for(let i=0;i<n;i++){ fx1=Math.min(fx1, cx(i)-barW/2); fx2=Math.max(fx2, cx(i)+barW/2); }
-    fireLine(svgEl, fx1, fx2, ry(fireP), fireP, fsP); }
+    /* 15 Nov 2026: the FIRE line runs from the first to the last savings point, with a dot at each one */
+    if(fireP!=null){ const fxs=[]; rows.forEach((r,i)=>{ if(!r.ly && (rateOf(r,'rateTot')!=null || rateOf(r,'rateSafe')!=null)) fxs.push(cx(i)); });
+      if(fxs.length) fireLine(svgEl, Math.min(...fxs), Math.max(...fxs), ry(fireP), fireP, fsP, fxs); }
     const line=(key,color,dash,above)=>{
       let dd='', pen=false;
       /* the LY point is not part of the timeline: left out of the path */

@@ -476,6 +476,9 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
 - **v3.20 (15 Nov 2026):** Trends bar charts: the FIRE dotted line now runs only from the first
   bar's left edge to the last bar's right edge (it used to span the whole chart width). The R12M
   line chart is unchanged (its line already ends at the first / last point).
+- **v3.21 (15 Nov 2026):** Trends bar charts: the FIRE dotted line runs from the first to the last
+  savings point (bar centres, LY bar left out) with a gold dot (r 2.6, like the savings line) at
+  each point. No "FIRE x%" text on any Trends chart (the % stays in the line's hover title).
 - **v3.17 (14 Nov 2026):** Plan 12M avg counts all past spend, like Trends (`refX`): spend on
   details with no plan row goes to the label's "(not in plan)" line (created if needed, or the
   label's single row); labels with no plan row at all go to NOT IN PLAN.
