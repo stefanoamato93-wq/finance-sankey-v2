@@ -500,6 +500,11 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
 - **v3.27 (15 Nov 2026):** Savings % change (`dpp`, phone and laptop) always has 1 decimal
   ("▲ 2,0", not "▲ 2"); no change shows a plain "0,0" (no arrow) instead of being hidden,
   whenever a starting plan is there to compare with.
+- **v3.28 (15 Nov 2026):** laptop Plan, Savings % row: "51,1% ▲ 11,6" ran into the next cell and the
+  last column's change went under the scrollbar. Now the change is 9px with a narrow space after the
+  arrow, and the % cells have 2px / 4px side padding, so value + change fit the 74px column.
+  Columns keep one fixed width (Stefano: "always the same"); the change sits in a fixed 26px slot,
+  so every % lines up, and the cell clips (overflow hidden) instead of spilling into the next one.
 - **v3.17 (14 Nov 2026):** Plan 12M avg counts all past spend, like Trends (`refX`): spend on
   details with no plan row goes to the label's "(not in plan)" line (created if needed, or the
   label's single row); labels with no plan row at all go to NOT IN PLAN.
