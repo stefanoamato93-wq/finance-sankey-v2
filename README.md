@@ -497,6 +497,9 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   change in % points vs the starting plan: Month view vs `PLAN.base` (1st of the month), Year view
   vs `PLAN.baseY` (1 Jan). Always on, independent of the Δ month / Δ year option (`pcTdPlan`,
   `dSumS`). Laptop unchanged.
+- **v3.27 (15 Nov 2026):** Savings % change (`dpp`, phone and laptop) always has 1 decimal
+  ("▲ 2,0", not "▲ 2"); no change shows a plain "0,0" (no arrow) instead of being hidden,
+  whenever a starting plan is there to compare with.
 - **v3.17 (14 Nov 2026):** Plan 12M avg counts all past spend, like Trends (`refX`): spend on
   details with no plan row goes to the label's "(not in plan)" line (created if needed, or the
   label's single row); labels with no plan row at all go to NOT IN PLAN.
