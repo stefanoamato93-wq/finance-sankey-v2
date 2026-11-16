@@ -455,6 +455,10 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   end, dashed. Each future month adds the forecast's `save` (planned income + salary rise +
   RSU − planned expenses − inflation) and leaves out its `growth`, so the gap to the green
   dashed line is the expected appreciation. The scrubber shows `put in` there too.
+- **Money put in, month in progress (v3.29, 16 Nov 2026):** the current month's point
+  counts income / expenses / taxes as `mixMonth` does (per label the bigger of real so far
+  and plan), like Plan and Trends. Before, mid-month costs booked with the salary not yet
+  paid made the gold line drop (e.g. Oct 336.931 → Nov 333.791). Transfers stay real.
 - **Bigger laptop chart (v2.74, 11 Nov 2026):** above 680px wide the sparkline is 96px tall
   (was 58px) and up to 720px wide (was 520px). The phone size is unchanged (46px).
 - **Chart dates icon (v2.75, 11 Nov 2026):** the ⚙ emoji is replaced by a small 11px
