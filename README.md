@@ -472,6 +472,12 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   only when every ticked row has the same label / detail. Each row then takes type, group,
   category 2 and Net Worth columns from the newest matching row, like the single edit. Same cap,
   confirm and undo as Set value ("Undo last edit").
+- **v3.30 (20 Nov 2026): expense -> transfer in the edit box.** When Type is `TRANSFER`, a
+  **Transfer to** box shows (account suggestions). Fill it and Save: after a confirm, the edited
+  row plus the other side are written in one write - a copy on that account with the opposite
+  value (id `tr`+`fsHash(rowId|account)`, so saving again overwrites it, never doubles it). Its
+  Net Worth columns come from the target account (same label + detail first, else its newest
+  row): `txMirrorRow()`. Leave the box empty to change only the one row, as before.
 - **v3.19 (15 Nov 2026):** FIRE hero row **"Returns drawn"** (`res.rs`, worked out in `fireCore`,
   so in the worker): over every scenario-year of `R`, the average and spread the dice really drew,
   vs the set mean / spread (averaged over the years, so the age steps count), the growth you keep

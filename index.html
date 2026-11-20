@@ -1568,7 +1568,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v3.29';
+const APP_VER='v3.30';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 /* self-update (1 Nov 2026): GitHub Pages lets phones keep the page up to 10 min, and a home-
    screen app resumed from the background keeps running its old code for hours. That old code
@@ -5606,6 +5606,20 @@ async function autoRows(){
     clearInterval(iv); autoRows().catch(e=>console.warn('autoRows', e));
     let last=''; setInterval(()=>{ const fp=[...FS_MONTHS.values()].map(m=>m.month+'@'+(m.updatedAt||0)).join(',');
       if(fp===last) return; last=fp; autoRows().catch(e=>console.warn('autoRows', e)); }, 15000); }, 2000); }
+/* the other side of a transfer (v3.30): a copy of row nt on account toName with the opposite
+   value. Its Net Worth columns come from that account (same label + detail first, else the
+   newest row of the account), so it lands in the right holding. Pure apart from FS_MONTHS. */
+function txMirrorRow(nt, toName, skip, month){
+  const toA=norm(toName), L=norm(nt.l), D=norm(nt.dt);
+  let hold=qEditHoldOf(toA, L, D, skip);
+  if(!hold){ let bd=''; for(const m of FS_MONTHS.values()) for(const id in (m.tx||{})){ const t=m.tx[id];
+    if(id!==skip && norm(t.a)===toA && String(t.d||'')>=bd){ hold=t; bd=String(t.d||''); } } }
+  const r=Object.assign({}, nt, {a:toName, v:-nt.v}); delete r.live;
+  if(hold) TX_HOLD.forEach(k=>{ if(hold[k]!==undefined) r[k]=hold[k]; });
+  let maxO=0; for(const id in ((month && month.tx)||{})) maxO=Math.max(maxO, +month.tx[id].o||0);
+  r.o=Math.max(maxO, +nt.o||0)+1;
+  return r;
+}
 function qEditOpen(r){
   const old=document.getElementById('txDlg'); if(old) old.remove();
   const hit=qEditFind(r), can=hit && aprOn();
@@ -5620,7 +5634,11 @@ function qEditOpen(r){
   const dls=Object.keys(lists).map(k=>`<datalist id="txl-${k}">${[...lists[k]].sort().map(v=>`<option value="${planEsc(v)}">`).join('')}</datalist>`).join('');
   const why=!hit ? 'This row was not found in the database (reload and try again).'
     : !aprOn() ? (FS2.fake ? 'This is an archive: nothing can be saved.' : 'Editing works after Data \u2192 Switch to Firebase for good.') : '';
-  dlg.innerHTML=`<h3 id="txH" tabindex="-1" autofocus>Edit transaction</h3><div class="txg">${TX_EDIT_F.map(field).join('')}</div>${dls}<div class="txnw" id="txNw"></div>`+
+  /* Transfer to (v3.30, 20 Nov 2026): shown when Type = TRANSFER. Save also writes the other
+     side: same row on that account with the opposite sign, so Net Worth stays right. */
+  const toBox=`<div class="txg" id="txToRow" style="display:none;margin-top:7px"><label for="txf-to">Transfer to</label>`+
+    `<input id="txf-to" type="text" list="txl-a" placeholder="other account (adds the + row)" autocomplete="off"></div>`;
+  dlg.innerHTML=`<h3 id="txH" tabindex="-1" autofocus>Edit transaction</h3><div class="txg">${TX_EDIT_F.map(field).join('')}</div>${toBox}${dls}<div class="txnw" id="txNw"></div>`+
     `<div class="txb"><button type="button" class="pri" id="txSave"${can?'':' disabled'}>Save</button><button type="button" id="txClose">Cancel</button>`+
     `<button type="button" class="del" id="txDel"${can?'':' disabled'}>Delete</button><span class="txmsg" id="txMsg" role="status">${planEsc(why)}</span></div>`;
   document.body.appendChild(dlg);
@@ -5639,6 +5657,8 @@ function qEditOpen(r){
     const was=norm(t0.c3)!==norm(h.c3) ? ` (now ${cap(t0.c3)}: Save fixes it)` : '';
     dlg.querySelector('#txNw').textContent=`Net Worth: ${cap(h.c3)} \u203a ${cap($f('a').value)}${was}`; };
   dlg.addEventListener('input', nwLine); nwLine();
+  const toRow=dlg.querySelector('#txToRow'), toSync=()=>{ toRow.style.display= norm($f('ty').value)==='TRANSFER' ? '' : 'none'; };
+  $f('ty').addEventListener('input', toSync); $f('ty').addEventListener('change', toSync); toSync();
   /* asset class detail follows the account / label / detail typed, until you type it yourself */
   let acdOwn=false; $f('acd').addEventListener('input', ()=>{ acdOwn=true; });
   ['a','l','dt'].forEach(k=>$f(k).addEventListener('change', ()=>{ if(acdOwn) return; const h=holdNow();
@@ -5659,11 +5679,20 @@ function qEditOpen(r){
     TX_EDIT_F.forEach(([k])=>{ if(k!=='d' && k!=='v') nt[k]=$f(k).value.trim(); });
     nt.d=d; nt.v=Math.round(v*100)/100; delete nt.live;
     const ym=d.slice(0,7);
+    const rows={[hit.id]:nt};
+    const toA=norm(dlg.querySelector('#txf-to').value);
+    if(norm(nt.ty)==='TRANSFER' && toA){
+      if(toA===norm(nt.a)){ msg('Transfer to: pick another account.'); return; }
+      const toName=[...lists.a].find(x=>norm(x)===toA) || dlg.querySelector('#txf-to').value.trim();
+      const mr=txMirrorRow(nt, toName, hit.id, FS_MONTHS.get(ym));
+      rows['tr'+fsHash(hit.id+'|'+toA)]=mr;
+      if(!confirm(`Also add ${(mr.v>0?'+':'')+mr.v.toFixed(2).replace('.',',')} \u20ac on ${toName} (the other side of the transfer)?`)) return;
+    }
     busy(true); msg('Saving\u2026');
     try{
-      if(ym===hit.ym) await FS2.data.putTx(ym, {[hit.id]:nt});
-      else await FS2.data.moveTx(hit.ym, ym, [hit.id], {[hit.id]:nt});
-      done('Saved.');
+      if(ym===hit.ym) await FS2.data.putTx(ym, rows);
+      else await FS2.data.moveTx(hit.ym, ym, [hit.id], rows);
+      done(Object.keys(rows).length>1 ? 'Saved, with the other side.' : 'Saved.');
     }catch(e){ msg('Not saved: '+((e && (e.code||e.message))||e)); busy(false); }
   };
   dlg.querySelector('#txDel').onclick=async()=>{
