@@ -478,6 +478,8 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   value (id `tr`+`fsHash(rowId|account)`, so saving again overwrites it, never doubles it). Its
   Net Worth columns come from the target account (same label + detail first, else its newest
   row): `txMirrorRow()`. Leave the box empty to change only the one row, as before.
+- **v3.31 (20 Nov 2026):** the Transfer to box also shows when Type is filled by a new label
+  (code sets the value, no input event on Type): the check runs after any change in the box.
 - **v3.19 (15 Nov 2026):** FIRE hero row **"Returns drawn"** (`res.rs`, worked out in `fireCore`,
   so in the worker): over every scenario-year of `R`, the average and spread the dice really drew,
   vs the set mean / spread (averaged over the years, so the age steps count), the growth you keep
