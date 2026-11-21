@@ -485,6 +485,8 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   booked values and then a jump. While `loadLive()` runs, a small spinning ring (`i.lvspin`)
   sits before the LIVE time under the net worth; it goes away when prices land or the check
   fails. The Capgain rebuild and the auto-open appreciation box still wait for fresh prices.
+- **v3.33 (21 Nov 2026):** the yellow "Showing last loaded data (from ...) — refreshing…" line
+  (`#dataBadge`) is gone: `showBadge()` returns at once. Cached data still paints first.
 - **v3.19 (15 Nov 2026):** FIRE hero row **"Returns drawn"** (`res.rs`, worked out in `fireCore`,
   so in the worker): over every scenario-year of `R`, the average and spread the dice really drew,
   vs the set mean / spread (averaged over the years, so the age steps count), the growth you keep
