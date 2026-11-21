@@ -480,6 +480,11 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   row): `txMirrorRow()`. Leave the box empty to change only the one row, as before.
 - **v3.31 (20 Nov 2026):** the Transfer to box also shows when Type is filled by a new label
   (code sets the value, no input event on Type): the check runs after any change in the box.
+- **v3.32 (21 Nov 2026):** Net Worth keeps the last live prices seen on the device
+  (localStorage `fs2-live-v1`) and shows them at once on open (`LIVE.cached`), instead of the
+  booked values and then a jump. While `loadLive()` runs, a small spinning ring (`i.lvspin`)
+  sits before the LIVE time under the net worth; it goes away when prices land or the check
+  fails. The Capgain rebuild and the auto-open appreciation box still wait for fresh prices.
 - **v3.19 (15 Nov 2026):** FIRE hero row **"Returns drawn"** (`res.rs`, worked out in `fireCore`,
   so in the worker): over every scenario-year of `R`, the average and spread the dice really drew,
   vs the set mean / spread (averaged over the years, so the age steps count), the growth you keep
