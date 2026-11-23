@@ -1850,7 +1850,7 @@ const grp=n=> String(n).replace(/\B(?=(\d{3})+(?!\d))/g,'.');
 const fmt=v=>{
   const neg=v<0, a=Math.abs(v);
   if(showK){ const r=Math.round(a/100), i=Math.floor(r/10), d=r%10;
-    const s=grp(i)+','+d+'K';   // 23 Nov 2026 (v3.36): K view always keeps 1 decimal (5,0K) return (neg&&r?'-':'')+s; }
+    const s=grp(i)+','+d+'K'; return (neg&&r?'-':'')+s; }   /* 23 Nov 2026 (v3.36): K view always keeps 1 decimal (5,0K) */
   const r=Math.round(a); return (neg&&r?'-':'')+grp(r);
 };
 function showTip(e,html){ tip.innerHTML=html; tip.style.opacity=1; tip.style.left=(e.clientX+12)+'px'; tip.style.top=(e.clientY+12)+'px'; }
