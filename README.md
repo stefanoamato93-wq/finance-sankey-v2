@@ -485,6 +485,8 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   booked values and then a jump. While `loadLive()` runs, a small spinning ring (`i.lvspin`)
   sits before the LIVE time under the net worth; it goes away when prices land or the check
   fails. The Capgain rebuild and the auto-open appreciation box still wait for fresh prices.
+- **v3.36 (23 Nov 2026):** K view: `fmt()` always shows 1 decimal (`5,0K`, not `5K`). The
+  "is it zero" checks on bar labels accept `0,0K` too (`/^-?0(,0)?K?$/`).
 - **v3.35 (23 Nov 2026):** Trends yearly bars: the current year tagged "+Plan" (real so far
   plus planned months) is drawn in the same faded plan style as an all-plan year
   (`lyOp` / `lyTx` now also take `pvPart`), because the year is not complete.

@@ -1575,7 +1575,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v3.35';
+const APP_VER='v3.36';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 /* self-update (1 Nov 2026): GitHub Pages lets phones keep the page up to 10 min, and a home-
    screen app resumed from the background keeps running its old code for hours. That old code
@@ -1850,7 +1850,7 @@ const grp=n=> String(n).replace(/\B(?=(\d{3})+(?!\d))/g,'.');
 const fmt=v=>{
   const neg=v<0, a=Math.abs(v);
   if(showK){ const r=Math.round(a/100), i=Math.floor(r/10), d=r%10;
-    const s=grp(i)+(d?','+d:'')+'K'; return (neg&&r?'-':'')+s; }
+    const s=grp(i)+','+d+'K';   // 23 Nov 2026 (v3.36): K view always keeps 1 decimal (5,0K) return (neg&&r?'-':'')+s; }
   const r=Math.round(a); return (neg&&r?'-':'')+grp(r);
 };
 function showTip(e,html){ tip.innerHTML=html; tip.style.opacity=1; tip.style.left=(e.clientX+12)+'px'; tip.style.top=(e.clientY+12)+'px'; }
@@ -3633,7 +3633,7 @@ function renderCashBars(){
     stk.L.forEach(l=>{ const h=Math.max(0,stk.v(l,i))*sc; if(h<=0) return;
       y-=h; svgEl.appendChild(el('rect',{x,y,width:barW,height:h,fill:l.color,'fill-opacity':.85*lyOp(r)})); });
     const v=sv[i];
-    if(!/^-?0K?$/.test(fmt(v))) svgEl.appendChild(el('text',{x:cx(i),y:Math.min(y,baseY)-5,'text-anchor':'middle',
+    if(!/^-?0(,0)?K?$/.test(fmt(v))) svgEl.appendChild(el('text',{x:cx(i),y:Math.min(y,baseY)-5,'text-anchor':'middle',
       fill:v<0?'#e58a8a':'#e7ecf5','fill-opacity':lyTx(r),'font-size':fsV,display:vOk?'inline':'none','font-weight':700},fmt(v)));
     yearLabel(r,i);
   });
@@ -3643,7 +3643,7 @@ function renderCashBars(){
     /* negative savings = red; any other negative (net refund) = its own colour, faded */
     if(h>0) svgEl.appendChild(el('rect',{x,y:neg?baseY:baseY-h,width:barW,height:h,
       fill: neg && isSav ? '#e58a8a' : info.color, 'fill-opacity': (neg && !isSav ? .5 : 1)*lyOp(r)}));
-    if(!/^-?0K?$/.test(fmt(v))) svgEl.appendChild(el('text',{x:cx(i),y:neg?baseY+h+fsV+3:baseY-h-5,'text-anchor':'middle',
+    if(!/^-?0(,0)?K?$/.test(fmt(v))) svgEl.appendChild(el('text',{x:cx(i),y:neg?baseY+h+fsV+3:baseY-h-5,'text-anchor':'middle',
       fill:neg?'#e58a8a':'#e7ecf5','fill-opacity':lyTx(r),'font-size':fsV,display:vOk?'inline':'none','font-weight':700},fmt(v)));
     yearLabel(r,i);
   });
@@ -3810,7 +3810,7 @@ function renderMd(){
   const isPlan=src.plFrom!=null && mi>=src.plFrom && mi>nowMi;
   const R=comparePeriods(src.SD, src.SDT, [mi,mi], [mi,mi], cfDs());
   const esc=s=> String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  const zero=v=> /^-?0K?$/.test(fmt(Math.abs(v)));
+  const zero=v=> /^-?0(,0)?K?$/.test(fmt(Math.abs(v)));
   const inc=R.tot.a.inc, exp=R.tot.a.exp, safe=R.tot.a.safe;
   const pct=v=>{ if(!(inc>0)) return ''; const p=v/inc*100;
     return (Math.abs(p)<10 ? p.toFixed(1).replace('.',',') : String(Math.round(p)))+'%'; };
@@ -4034,7 +4034,7 @@ function renderCompare(){
   const R=comparePeriods(CD, CDET, pa, pb, deselected);
   const da=perMonth?Math.max(1,R.monthsA):1, db=perMonth?Math.max(1,R.monthsB):1;
   const esc=s=> String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  const zero=v=> /^-?0K?$/.test(fmt(Math.abs(v)));
+  const zero=v=> /^-?0(,0)?K?$/.test(fmt(Math.abs(v)));
   const sgn=v=> (v<0?'\u2212':'+')+fmt(Math.abs(v));
   const pctTxt=(a,b)=>{ if(zero(b)) return zero(a) ? '' : 'new';
     const p=(a-b)/Math.abs(b)*100, q=Math.abs(p);
