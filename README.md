@@ -485,6 +485,10 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   booked values and then a jump. While `loadLive()` runs, a small spinning ring (`i.lvspin`)
   sits before the LIVE time under the net worth; it goes away when prices land or the check
   fails. The Capgain rebuild and the auto-open appreciation box still wait for fresh prices.
+- **v3.34 (23 Nov 2026):** Plan page: the top-left table cell (was "Category") holds one
+  toggle button (`.pcat`, phone and laptop): "▾ Collapse" while any group or detail is open,
+  else "▸ Expand". It fires `detclose` / `detopen` on press, like before. Expand all /
+  Collapse all are no longer rows in the ⚙ Options sheet.
 - **v3.33 (21 Nov 2026):** the yellow "Showing last loaded data (from ...) — refreshing…" line
   (`#dataBadge`) is gone: `showBadge()` returns at once. Cached data still paints first.
 - **v3.19 (15 Nov 2026):** FIRE hero row **"Returns drawn"** (`res.rs`, worked out in `fireCore`,
