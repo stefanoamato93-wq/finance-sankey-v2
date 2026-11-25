@@ -411,6 +411,13 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   every row gets the new 12 months at its December amount (`planExtendRows()`, months already
   there are kept). **Remove YYYY** shortens the plan; the amounts stay and return if the year
   is added again.
+- **v3.37 (25 Nov 2026) – RSU this month by hand:** the month in progress can be set on the
+  RSU row (laptop: box in this month's column; Act/Plan cell or phone: tap opens the keypad
+  sheet with chips Actual / Stock plans / Plan now). Stored as `PLAN.rsuOv = {mi: €}` (synced
+  with the plan; only the current month counts, older keys ignored). `fcRsuByMi(..., noOv)`
+  applies it everywhere (Plan, Trends, Net Worth); start copies (`planBaseRsu`) skip it, so
+  the Δ shows the change. Empty box (or picking the Stock plans amount) = back to automatic.
+  Undo covers it (`planUndoOv`). Use case: a stock sale booked as actual Extra > Stocks.
 - **RSU** (read-only line in Work income): for each vest, shares × live AMZN EUR price ×
   the part kept. Price = the `…|AMZN` holding's live price, else one onvista read
   (`amznPrice()`, ISIN US0231351067). Stefano sells the shares at once, so it is cash income.
