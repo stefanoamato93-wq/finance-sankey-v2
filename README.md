@@ -335,7 +335,7 @@ pages. Only the page on screen is shown **and drawn**:
 
 | Tab | Hash | Content |
 |---|---|---|
-| **Net Worth** | `#networth` | Hero card (net worth, `LIVE HH:MM`, trend sparkline, investment gains) + **Assets & Liabilities** tables (side by side on wide screens, stacked on phones, totals on top, collapsed by category). **By category / By account** switch above the tables (v3.43): By account groups the rows per account (total per account), each row inside names its category; liabilities stay in their own table; the choice is saved per device (`fs2-nwview-v1` in localStorage). |
+| **Net Worth** | `#networth` | Hero card (net worth, `LIVE HH:MM`, trend sparkline, investment gains) + **Assets & Liabilities** tables (side by side on wide screens, stacked on phones, totals on top, collapsed by category). **By category / By account** switch above the tables (v3.43): By account groups the rows per account (total per account), each row inside names its category; liabilities stay in their own table; the choice is saved per device (`fs2-nwview-v1` in localStorage). Order (v3.44): assets groups high -> low by value, so negative groups (e.g. Amex Platinum) sit at the bottom; liabilities largest debt first. |
 | **Cash Flow** | `#cashflow` | Period controls, range bar, Income / Expenses / Savings / Safe savings cards, the money-flow **Sankey** and its detail panel. |
 | **Savings** | `#savings` | **Cash Flow vs Savings** chart (see below); clicking a month in its month view opens the **Month detail** overlay. |
 | **Compare** | `#compare` | **Period Comparison** with a drill-down **waterfall** of the changes (see below). |
