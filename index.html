@@ -1595,7 +1595,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v3.47';
+const APP_VER='v3.48';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 /* self-update (1 Nov 2026): GitHub Pages lets phones keep the page up to 10 min, and a home-
    screen app resumed from the background keeps running its old code for hours. That old code
@@ -2743,7 +2743,8 @@ function buildNetWorth(){
         .map(n=>{ let s=0; const f=h.det[n]; for(const k in f){ if(+k<=cur) s+=f[k]; } return {n,v:s}; })
         .filter(d=>Math.abs(d.v)>0.5).sort((a,b)=>Math.abs(b.v)-Math.abs(a.v));
       // v3.46: money put in (all time, no APPRECIATION rows) for the all-time gain on live rows
-      let inv=null; if(h.vary==='VARIABLE' && h.inflow){ inv=0; for(const k in h.inflow) inv+=h.inflow[k]; }
+      const pen=[h.cat,h.acd,h.acct].some(x=>norm(x).replace(/\s+/g,'')==='PENSIONFUND');   // v3.48
+      let inv=null; if((h.vary==='VARIABLE' || pen) && h.inflow){ inv=0; for(const k in h.inflow) inv+=h.inflow[k]; }
       return {vary:h.vary,acd:h.acd,acct:h.acct,cat:h.cat, v:cumAt(h,cur), inv,
               hk:h.vary+'|'+h.acd+'|'+h.acct+'|'+h.cat, det:det&&det.length?det:null}; })
                   .filter(r=> Math.abs(r.v)>0.5);
@@ -2965,14 +2966,20 @@ function buildNetWorth(){
         // live rows: "LIVE · Vwce · 1.091 × 170,61" (shares from LIST, price from GOOGLEFINANCE)
         const liveTxt = r.live ? '<b class="live">LIVE</b> \u00B7 ' : '';
         // v3.46: all-time gain = live value - money put in, with % of the money put in
+        // v3.48: also on Pension Fund rows (value - money put in, APPRECIATION rows = the gain)
+        const isPen=[r.cat,r.acd,r.acct].some(x=>norm(x).replace(/\s+/g,'')==='PENSIONFUND');
+        const isLv=r.live && !r.live.capgain;
         let gTxt='';
-        if(r.live && !r.live.capgain && r.inv!=null && Math.abs(r.inv)>0.5){
+        if((isLv || isPen) && r.inv!=null && Math.abs(r.inv)>0.5){
           const g=r.v-r.inv, p=g/r.inv*100, sg=g<0?'\u2212':'+';
           gTxt=` \u00B7 <span class="again ${g<0?'neg':'pos'}" title="All-time gain: live value minus money put in">`+
                `${sg}${fmt(Math.abs(g))} (${sg}${Math.abs(p).toFixed(1).replace('.',',')}%)</span>`;
         }
         const qtyTxt = r.live && !r.live.capgain ? ` \u00B7 ${qty(r.live.shares)} \u00D7 ${px(r.live.price)}${gTxt}` : '';
-        const acd=r.acd && r.acd!=='\u2014' ? `<span class="acd${r.live && !r.live.capgain ? ' lv' : ''}">${liveTxt}${esc(r.live && !r.live.capgain ? norm(r.acd) : cap(r.acd))}${qtyTxt}</span>` : '';
+        const hasAcd=r.acd && r.acd!=='\u2014';
+        const penTxt=isPen && !isLv ? gTxt : '';   // pension: the gain ends the grey line
+        const acd=hasAcd || penTxt ? `<span class="acd${isLv || penTxt ? ' lv' : ''}">${liveTxt}`+
+          (hasAcd ? esc(isLv ? norm(r.acd) : cap(r.acd)) : '')+(hasAcd ? penTxt : penTxt.replace(/^ \u00B7 /,''))+`${qtyTxt}</span>` : '';
         const kLab=esc(cap(byAcct ? r.cat : r.acct));   // account view: the row names its category
         if(!r.det){ t+=`<tr class="kid"><td class="t2">${kLab}${acd}</td>`+vcell(r.v)+`</tr>`; return; }
         // CREDITS / DEBTS: the account row itself toggles its DETAIL lines
