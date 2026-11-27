@@ -176,6 +176,26 @@ export function setSettings(partial) {
   return setDoc(settingsRef(), partial, { merge: true });
 }
 
+// ---- full backup (27 Nov 2026, account rename) ---------------------------------------
+// Every month doc AS STORED (txj, tx, del, n, source, updatedAt), the settings doc, the plan
+// doc and the AMEX benefits doc, read from the server. Timestamps become {_ts: ms}.
+const plainOf = x => {
+  if (x && typeof x.toMillis === "function") return { _ts: x.toMillis() };
+  if (Array.isArray(x)) return x.map(plainOf);
+  if (x && typeof x === "object") { const o = {}; for (const k in x) o[k] = plainOf(x[k]); return o; }
+  return x;
+};
+export async function exportRaw() {
+  const uid = uidOrThrow();
+  const amexRef = doc(db, "users", uid, "amex", "benefits");
+  const [ms, st, pl, ax] = await Promise.all([getDocs(monthsCol()), getDoc(settingsRef()), getDoc(planRef()), getDoc(amexRef).catch(() => null)]);
+  const months = {}; ms.docs.forEach(d => { months[d.id] = plainOf(d.data()); });
+  return { v: 1, at: Date.now(), uid, months,
+    settings: st.exists() ? plainOf(st.data()) : null,
+    plan: pl.exists() ? plainOf(pl.data()) : null,
+    amex: ax && ax.exists() ? plainOf(ax.data()) : null };
+}
+
 // Can this account read its own data? "locked" = the security rules do not let it in
 // yet (rules not published with this uid, or a different Google account).
 export async function checkAccess() {
@@ -187,7 +207,7 @@ export async function checkAccess() {
 }
 
 const api = { signIn, signOut, onUser, loadMonths, loadCachedMonths, writeMonths, putTx, delTx, moveTx, watchChanges, loadPlan, savePlan,
-              getSettings, setSettings, checkAccess };
+              getSettings, setSettings, checkAccess, exportRaw };
 window.FS2Data = api;
 
 // ---- sign-in gate (UI) ----------------------------------------------------------------

@@ -1250,6 +1250,7 @@
           <button type="button" id="acctData" aria-expanded="false" aria-controls="fsPanel">Data</button>
           <button type="button" id="acctArch" title="Download this app with today's data as one file, to keep a record">Archive</button>
           <button type="button" id="acctApr" title="Write last month's value changes (APPRECIATION rows)">Month-end</button>
+          <button type="button" id="acctRen" title="Backup of all data, and the one-off account rename (27 Nov 2026)">Backup / Rename</button>
         </div>
         <div><div class="amk">Signed in as</div><div class="amv" id="acctEmail"></div></div>
         <div><div class="amk">uid</div><code class="amv" id="acctUid"></code></div>
@@ -1575,7 +1576,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v3.38';
+const APP_VER='v3.39';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 /* self-update (1 Nov 2026): GitHub Pages lets phones keep the page up to 10 min, and a home-
    screen app resumed from the background keeps running its old code for hours. That old code
@@ -8656,6 +8657,50 @@ function aprOpen(){
   dlg.showModal();
 }
 document.getElementById('acctApr').addEventListener('click', e=>{ e.stopPropagation(); aprOpen(); });
+
+/* ---- Backup / Rename (27 Nov 2026, v3.39) -----------------------------------------------
+   Backup: every month doc as stored + settings + plan + AMEX benefits, one JSON file
+   (FS2.data.exportRaw). The rename tool is added below it (renOpen). */
+let renBackupAt=0;
+function renDownload(obj, name){
+  const url=URL.createObjectURL(new Blob([JSON.stringify(obj)],{type:'application/json'}));
+  const a=document.createElement('a'); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),60000);
+}
+function renStamp(){ const d=new Date(); return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate())+'_'+pad2(d.getHours())+pad2(d.getMinutes()); }
+/* pure: raw backup -> {months, rows}: rows = txj + tx - del, as data.js reads them */
+function renCount(B){
+  let rows=0; const months=Object.keys(B.months||{}).length;
+  for(const id in (B.months||{})){ const x=B.months[id]; let tx={};
+    if(typeof x.txj==='string'){ try{ tx=JSON.parse(x.txj)||{}; }catch(e){} }
+    Object.assign(tx, x.tx||{}); for(const k in (x.del||{})) delete tx[k]; rows+=Object.keys(tx).length; }
+  return {months, rows};
+}
+async function renBackup(msg){
+  if(!FS2.data || !FS2.data.exportRaw || FS2.fake){ msg('Sign in first (not in an archive).'); return null; }
+  msg('Reading everything from Firebase\u2026');
+  const B=await FS2.data.exportRaw(), c=renCount(B);
+  renDownload(B, 'finance-backup_'+renStamp()+'.json');
+  renBackupAt=Date.now();
+  msg(`Backup downloaded: ${c.months} months, ${c.rows} rows, settings ${B.settings?'yes':'no'}, plan ${B.plan?'yes':'no'}.`);
+  return B;
+}
+function renOpen(){
+  const old=document.getElementById('renDlg'); if(old) old.remove();
+  const dlg=document.createElement('dialog'); dlg.id='renDlg'; dlg.className='aprdlg'; dlg.setAttribute('aria-labelledby','renH');
+  dlg.innerHTML=`<h3 id="renH">Backup / Rename</h3>
+    <div class="sub">Backup downloads all months, settings and plan as one JSON file.</div>
+    <div id="renBody"></div>
+    <div><button type="button" class="pri" id="renBk">Download backup</button>
+    <button type="button" id="renClose">Close</button> <span id="renMsg" class="sub" role="status"></span></div>`;
+  document.body.appendChild(dlg);
+  const msg=t=>{ dlg.querySelector('#renMsg').textContent=t; };
+  dlg.querySelector('#renClose').onclick=()=>dlg.close();
+  dlg.querySelector('#renBk').onclick=async()=>{ const b=dlg.querySelector('#renBk'); b.disabled=true;
+    try{ await renBackup(msg); }catch(e){ msg('Backup failed: '+((e && (e.code||e.message))||e)); } finally{ b.disabled=false; } };
+  dlg.showModal();
+}
+document.getElementById('acctRen').addEventListener('click', e=>{ e.stopPropagation(); renOpen(); });
 /* opens by itself once per visit when due: after the data, the settings and (up to 60 s) the live prices */
 { const t0=Date.now(), iv=setInterval(()=>{
     if(FS2.fake || Date.now()-t0>180e3){ clearInterval(iv); return; }
@@ -8954,7 +8999,7 @@ document.getElementById('fsPanel').addEventListener('click',e=>e.stopPropagation
   btn.addEventListener('click',e=>{ e.stopPropagation(); set(menu.hidden); });
   menu.addEventListener('click',e=>e.stopPropagation());
   /* Data / Archive / Month-end sit in the menu (15 Nov 2026): a tap on one closes the menu (capture: their own handlers stop the bubble) */
-  menu.addEventListener('click',e=>{ if(e.target.closest && e.target.closest('#acctData,#acctArch,#acctApr')) set(false); }, true);
+  menu.addEventListener('click',e=>{ if(e.target.closest && e.target.closest('#acctData,#acctArch,#acctApr,#acctRen')) set(false); }, true);
   document.addEventListener('click',()=>{ if(!menu.hidden) set(false); });
   document.addEventListener('keydown',e=>{ if(e.key==='Escape' && !menu.hidden){ set(false); btn.focus(); } }); }
 

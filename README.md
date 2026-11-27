@@ -411,6 +411,7 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   every row gets the new 12 months at its December amount (`planExtendRows()`, months already
   there are kept). **Remove YYYY** shortens the plan; the amounts stay and return if the year
   is added again.
+- **v3.39 (27 Nov 2026) - Backup / Rename:** Account menu > **Backup / Rename** > **Download backup** saves every month doc as stored (txj, tx, del), `meta/settings`, `plan/current` and `amex/benefits` as one JSON file (`finance-backup_YYYY-MM-DD_HHMM.json`, `FS2.data.exportRaw()` in data.js; timestamps as `{_ts: ms}`). The same box holds the one-off account rename (see below).
 - **v3.38 (26 Nov 2026) - push test:** no app changes; version bump only, to check pushing works from the new laptop.
 - **v3.37 (25 Nov 2026) – RSU this month by hand:** the month in progress can be set on the
   RSU row (laptop: box in this month's column; Act/Plan cell or phone: tap opens the keypad
