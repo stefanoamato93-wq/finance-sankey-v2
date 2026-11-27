@@ -411,6 +411,7 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   every row gets the new 12 months at its December amount (`planExtendRows()`, months already
   there are kept). **Remove YYYY** shortens the plan; the amounts stay and return if the year
   is added again.
+- **v3.41 (27 Nov 2026):** Net Worth group rows drop the CSS ALL CAPS, so they read in Title Case ("Pension Fund"). The rename ran at 09:28: 636 of 12,515 rows in 61 months, Net Worth per group unchanged (book 471.246,21 before and after), `holdingsj` and `listsj` updated, 0 rows left.
 - **v3.40 (27 Nov 2026) - account and group rename:** names change in the data and on screen.
   | Before | After | Fields |
   |---|---|---|
