@@ -1576,7 +1576,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v3.41';
+const APP_VER='v3.42';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 /* self-update (1 Nov 2026): GitHub Pages lets phones keep the page up to 10 min, and a home-
    screen app resumed from the background keeps running its old code for hours. That old code
@@ -1644,12 +1644,16 @@ const REN_NAME={REALESTATE:'REAL ESTATE', PENSIONFUND:'PENSION FUND', EMERGENCYF
 const REN_BROKERS=new Set(['DIRECTA','TRADE REPUBLIC']);
 const renA=s=> REN_ACCT[norm(s)] || s;
 const renN=s=> REN_NAME[norm(s)] || s;
+/* v3.42 (27 Nov 2026): the Emergency Fund at DIRECTA is the ETF XEON (LU0290358497). Asset XEON,
+   group stays EMERGENCY FUND (like VWCE inside Stocks), so it is priced live like the stocks. */
+const renX=(a,e)=> norm(renA(a))==='DIRECTA' && norm(renN(e))==='EMERGENCY FUND' ? 'XEON' : renN(e);
 /* pure: a row -> its renamed copy, or null when nothing changes */
 function renRow(t){
   if(!t) return null;
   const o=Object.assign({}, t); let ch=false;
   const a=renA(t.a); if(a!==t.a){ o.a=a; ch=true; }
   ['c3','acd','acdf'].forEach(k=>{ const v=renN(t[k]); if(v!==t[k]){ o[k]=v; ch=true; } });
+  ['acd','acdf'].forEach(k=>{ if(!o[k]) return; const v=renX(o.a, o[k]); if(v!==o[k]){ o[k]=v; ch=true; } });
   if(REN_BROKERS.has(norm(o.a)) && (norm(o.ac)==='8' || norm(o.c3)==='CASH') && (norm(o.acd)!=='CASH' || norm(o.c3)!=='CASH')){
     o.acd='CASH'; o.c3='CASH'; ch=true; }
   /* the form pick of a broker row = its real asset: the cash side of an old TRADEREPUBLIC -> TRSTOCKS
@@ -2928,7 +2932,7 @@ function buildNetWorth(){
         // live rows: "LIVE · Vwce · 1.091 × 170,61" (shares from LIST, price from GOOGLEFINANCE)
         const liveTxt = r.live ? '<b class="live">LIVE</b> \u00B7 ' : '';
         const qtyTxt = r.live && !r.live.capgain ? ` \u00B7 ${qty(r.live.shares)} \u00D7 ${px(r.live.price)}` : '';
-        const acd=r.acd && r.acd!=='\u2014' ? `<span class="acd">${liveTxt}${esc(cap(r.acd))}${qtyTxt}</span>` : '';
+        const acd=r.acd && r.acd!=='\u2014' ? `<span class="acd">${liveTxt}${esc(r.live && !r.live.capgain ? norm(r.acd) : cap(r.acd))}${qtyTxt}</span>` : '';
         if(!r.det){ t+=`<tr class="kid"><td class="t2">${esc(cap(r.acct))}${acd}</td>`+vcell(r.v)+`</tr>`; return; }
         // CREDITS / DEBTS: the account row itself toggles its DETAIL lines
         const dOpen=nwDetOpen.has(r.hk);
@@ -7539,6 +7543,8 @@ function holdingsLoad(){
   if(!FS_SETTINGS) return HOLD_SEED.map(x=>Object.assign({},x));
   let h=null; try{ h=JSON.parse(FS_SETTINGS.holdingsj||'null'); }catch(e){ h=null; }
   HOLDINGS=Array.isArray(h) ? h : HOLD_SEED.map(x=>Object.assign({},x));
+  /* v3.42: a holding typed as DIRECTA / EMERGENCY FUND reads as DIRECTA / XEON (saved so on the next Save) */
+  HOLDINGS=HOLDINGS.map(x=> x && x.e && renX(x.a, x.e)!==x.e ? Object.assign({}, x, {e:renX(x.a, x.e)}) : x);
   return HOLDINGS;
 }
 async function holdingsSave(list){
@@ -7557,7 +7563,7 @@ try{ const c=JSON.parse(localStorage.getItem(LIVE_KEY)||'null');
    meet (none today) add their shares and value */
 function renLiveHold(hold){
   const out={};
-  for(const k in (hold||{})){ const i=k.indexOf('|'), a=norm(renA(k.slice(0,i))), e=norm(renN(k.slice(i+1))), nk=a+'|'+e, h=hold[k];
+  for(const k in (hold||{})){ const i=k.indexOf('|'), a=norm(renA(k.slice(0,i))), e=norm(renX(k.slice(0,i), k.slice(i+1))), nk=a+'|'+e, h=hold[k];
     if(!out[nk]){ out[nk]=Object.assign({}, h); continue; }
     out[nk].shares=(+out[nk].shares||0)+(+h.shares||0); out[nk].value=(+out[nk].value||0)+(+h.value||0); }
   return out;
@@ -8766,7 +8772,7 @@ function renSettings(S){
   const ch={}, J=(k,d)=>{ try{ return JSON.parse(S[k]||'null')||d; }catch(e){ return d; } };
   const H=J('holdingsj', null);
   if(Array.isArray(H)){ const m=new Map(), warn=[];
-    H.forEach(h=>{ const a=renA(h.a), e=renN(h.e), k=norm(a)+'|'+norm(e), p=m.get(k);
+    H.forEach(h=>{ const a=renA(h.a), e=renX(h.a, h.e), k=norm(a)+'|'+norm(e), p=m.get(k);
       if(!p){ m.set(k, Object.assign({}, h, {a, e})); return; }
       if(p.isin!==h.isin) warn.push(k+': two ISINs');
       p.sh=Math.round(((+p.sh||0)+(+h.sh||0))*1e6)/1e6; });
