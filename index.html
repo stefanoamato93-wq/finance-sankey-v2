@@ -1576,7 +1576,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
    its header for the next load (SLIM_KEY in localStorage). */
 /* app version (1 Nov 2026): restarted at v2.20, +0.01 with every update pushed live;
    shown under the account icon and in its menu */
-const APP_VER='v3.39';
+const APP_VER='v3.40';
 ['appVer','appVerM'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=APP_VER; });
 /* self-update (1 Nov 2026): GitHub Pages lets phones keep the page up to 10 min, and a home-
    screen app resumed from the background keeps running its old code for hours. That old code
@@ -1632,6 +1632,31 @@ function csvHash(s){
 const INCGRP={WORKINCOME:"Work income",NONWORKINCOME:"Non-work income"};
 const EXPGRP={NEEDS:"Needs",WANTS:"Wants",LIBERALITY:"Liberality"};
 const norm=s=> s==null ? "" : String(s).trim().toUpperCase();
+/* 27 Nov 2026 (v3.40): names on screen in Title Case, every word ("PENSION FUND" -> "Pension Fund",
+   "TRADE REPUBLIC" -> "Trade Republic"). The data keeps upper case. */
+const tcase=s=> s==null || s==='' ? s : String(s).toLowerCase().replace(/(^|[\s\-\/])(\S)/g,(m,p,c)=>p+c.toUpperCase());
+/* 27 Nov 2026 (v3.40): account and group rename. Old name -> new name, for the account (a),
+   and for Category 3 / asset class details (c3, acd, acdf). REN_BROKERS: their cash rows
+   sit in the Cash group with asset CASH. Used by the one-off rename (renOpen), by the
+   live-price cache and by renAutoFix (rows an old app version still writes with old names). */
+const REN_ACCT={DIRECTASTOCKS:'DIRECTA', DIRECTAFUNDS:'DIRECTA', TRSTOCKS:'TRADE REPUBLIC', TRADEREPUBLIC:'TRADE REPUBLIC', REALESTATE:'REAL ESTATE'};
+const REN_NAME={REALESTATE:'REAL ESTATE', PENSIONFUND:'PENSION FUND', EMERGENCYFUND:'EMERGENCY FUND'};
+const REN_BROKERS=new Set(['DIRECTA','TRADE REPUBLIC']);
+const renA=s=> REN_ACCT[norm(s)] || s;
+const renN=s=> REN_NAME[norm(s)] || s;
+/* pure: a row -> its renamed copy, or null when nothing changes */
+function renRow(t){
+  if(!t) return null;
+  const o=Object.assign({}, t); let ch=false;
+  const a=renA(t.a); if(a!==t.a){ o.a=a; ch=true; }
+  ['c3','acd','acdf'].forEach(k=>{ const v=renN(t[k]); if(v!==t[k]){ o[k]=v; ch=true; } });
+  if(REN_BROKERS.has(norm(o.a)) && (norm(o.ac)==='8' || norm(o.c3)==='CASH') && (norm(o.acd)!=='CASH' || norm(o.c3)!=='CASH')){
+    o.acd='CASH'; o.c3='CASH'; ch=true; }
+  /* the form pick of a broker row = its real asset: the cash side of an old TRADEREPUBLIC -> TRSTOCKS
+     transfer carried VWCE, and the VALL row kept VWCE; an edit in the tracker would move them */
+  if(REN_BROKERS.has(norm(o.a)) && norm(o.acdf) && norm(o.acd) && norm(o.acdf)!==norm(o.acd)){ o.acdf=o.acd; ch=true; }
+  return ch ? o : null;
+}
 const DETAIL_ACCTS=new Set(["CREDITS","DEBTS"]);   // accounts that drill down by DETAIL
 const MOBILE_BP=680;
 const isMobile=w=> (w==null?window.innerWidth:w) <= MOBILE_BP;   // <=680px resolves to mobile
@@ -2714,7 +2739,7 @@ function buildNetWorth(){
   if(!pageOn('networth')){ renderYlp(); renderFire(); return; }
   const qty=n=>{ const [i,d]=String(+Number(n).toFixed(4)).split('.'); return grp(i)+(d?','+d:''); };
   const px=n=>{ const c=Math.round(n*100); return grp(Math.floor(c/100))+','+String(c%100).padStart(2,'0'); };
-  const cap=s=> s ? s.charAt(0)+s.slice(1).toLowerCase() : s;
+  const cap=tcase;   // v3.40: every word capitalised ("Pension Fund", "Trade Republic")
   const vcell=v=>`<td class="val ${v<0?'neg':''}">${v<0?'('+fmt(-v)+')':fmt(v)}</td>`;
   const money=v=>(v<0?'\u2212':'')+fmt(Math.abs(v));
 
@@ -4686,6 +4711,7 @@ function qName(f, key){
   if(key==null || key==='') return '(blank)';
   if(f==='detail') return Q_DISP.get(key) || key;
   if(f==='c1' || f==='c2') return Q_PRETTY[key] || (key.charAt(0)+key.slice(1).toLowerCase());
+  if(f==='acct') return tcase(key);   // v3.40: "Trade Republic", not "TRADE REPUBLIC"
   return key;
 }
 /* once per transaction load: detail spellings, and the search suggestions (label, detail,
@@ -5148,7 +5174,7 @@ function depObjects(){
 function depEditOpen(){
   const old=document.getElementById('depDlg'); if(old) old.remove();
   const can=aprOn(), objs=can ? depObjects() : [];
-  const cap=x=>{ x=String(x||'\u2014'); return x.charAt(0)+x.slice(1).toLowerCase(); };
+  const cap=x=>tcase(String(x||'\u2014'));
   const dlg=document.createElement('dialog'); dlg.id='depDlg'; dlg.className='txdlg'; dlg.setAttribute('aria-labelledby','depH');
   const rows=objs.map((o,i)=>`<tr><td>${planEsc(cap(o.t.l))}<span class="sub" style="display:block;color:var(--muted);font-size:11px">${planEsc(cap(o.t.acd||o.t.a))} \u00b7 left ${fmtE(o.left)}</span></td>`+
     `<td style="text-align:right"><input data-di="${i}" type="text" inputmode="decimal" value="${String(Math.abs(+o.t.v||0)).replace('.',',')}" style="width:80px;text-align:right" autocomplete="off"></td></tr>`).join('');
@@ -5481,9 +5507,35 @@ function qEditTemplate(months, lab, det, skip, acct){
 /* the row whose Net Worth columns an edited row takes. CREDITS / DEBTS: every row of the
    account sits in ONE holding (drilled by detail), so the newest healthy row of the account
    (CATEGORY3 = its usual one); else the newest row with the same account + label (+ detail). */
-function qEditHoldOf(acct, lab, det, skip){
+function qEditHoldOf(acct, lab, det, skip, acd){
   if(DETAIL_ACCTS.has(acct)) return debtTemplate(FS_MONTHS.values(), acct, skip);
+  /* v3.40 (27 Nov 2026): one account can hold several assets (DIRECTA: VWCE, VALL, EMERGENCY
+     FUND, CASH). With an asset given, the columns come from a row of the same account AND
+     asset; an asset new to the account takes the usual columns of that asset elsewhere. */
+  if(acd){
+    const own=qEditAssetTemplate(FS_MONTHS.values(), acct, norm(acd), lab, det, skip);
+    if(own) return own;
+    const any=qEditAssetTemplate(FS_MONTHS.values(), null, norm(acd), lab, det, skip);
+    if(any) return any;
+  }
   return qEditTemplate(FS_MONTHS.values(), lab, det, skip, acct);
+}
+/* pure: rows with this asset (and account, unless acct is null) -> the template row.
+   Same account: the best label + detail match, newest first. Any account: the newest row of
+   the most common Net Worth place of the asset (CASH -> FINECO's, not an AMEX card's). */
+function qEditAssetTemplate(months, acct, A, lab, det, skip){
+  const cnt={}, newest={};
+  let best=null, bs=-1, bd='';
+  for(const m of months) for(const id in (m.tx||{})){ if(id===skip) continue;
+    const t=m.tx[id]; if(norm(t.acd)!==A) continue;
+    if(acct!=null && norm(t.a)!==acct) continue;
+    const d=String(t.d||'');
+    if(acct!=null){ const s=(norm(t.l)===lab?2:0)+(norm(t.dt)===det?1:0); if(s>bs || (s===bs && d>=bd)){ best=t; bs=s; bd=d; } continue; }
+    const k=['c3','ac','var','liq','av'].map(f=>norm(t[f])).join('|'); cnt[k]=(cnt[k]||0)+1;
+    if(!newest[k] || d>=String(newest[k].d||'')) newest[k]=t; }
+  if(acct!=null) return best;
+  const top=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a])[0];
+  return top ? newest[top] : null;
 }
 /* pure: newest row of a CREDITS / DEBTS account in its home CATEGORY3 (LIABILITIES / CREDITS) */
 function debtTemplate(months, acct, skip){
@@ -5619,13 +5671,14 @@ async function autoRows(){
 /* the other side of a transfer (v3.30): a copy of row nt on account toName with the opposite
    value. Its Net Worth columns come from that account (same label + detail first, else the
    newest row of the account), so it lands in the right holding. Pure apart from FS_MONTHS. */
-function txMirrorRow(nt, toName, skip, month){
+function txMirrorRow(nt, toName, skip, month, toAcd){
   const toA=norm(toName), L=norm(nt.l), D=norm(nt.dt);
-  let hold=qEditHoldOf(toA, L, D, skip);
+  let hold=qEditHoldOf(toA, L, D, skip, toAcd||'');
   if(!hold){ let bd=''; for(const m of FS_MONTHS.values()) for(const id in (m.tx||{})){ const t=m.tx[id];
     if(id!==skip && norm(t.a)===toA && String(t.d||'')>=bd){ hold=t; bd=String(t.d||''); } } }
   const r=Object.assign({}, nt, {a:toName, v:-nt.v}); delete r.live;
   if(hold) TX_HOLD.forEach(k=>{ if(hold[k]!==undefined) r[k]=hold[k]; });
+  if(toAcd){ r.acd=toAcd; r.acdf=toAcd; }
   let maxO=0; for(const id in ((month && month.tx)||{})) maxO=Math.max(maxO, +month.tx[id].o||0);
   r.o=Math.max(maxO, +nt.o||0)+1;
   return r;
@@ -5647,7 +5700,9 @@ function qEditOpen(r){
   /* Transfer to (v3.30, 20 Nov 2026): shown when Type = TRANSFER. Save also writes the other
      side: same row on that account with the opposite sign, so Net Worth stays right. */
   const toBox=`<div class="txg" id="txToRow" style="display:none;margin-top:7px"><label for="txf-to">Transfer to</label>`+
-    `<input id="txf-to" type="text" list="txl-a" placeholder="other account (adds the + row)" autocomplete="off"></div>`;
+    `<input id="txf-to" type="text" list="txl-a" placeholder="other account (adds the + row)" autocomplete="off">`+
+    /* v3.40: the asset on the other account (DIRECTA holds VWCE, VALL, EMERGENCY FUND, CASH); blank = its usual one */
+    `<label for="txf-toacd">Its asset</label><input id="txf-toacd" type="text" list="txl-acd" placeholder="blank = usual asset of that account" autocomplete="off"></div>`;
   dlg.innerHTML=`<h3 id="txH" tabindex="-1" autofocus>Edit transaction</h3><div class="txg">${TX_EDIT_F.map(field).join('')}</div>${toBox}${dls}<div class="txnw" id="txNw"></div>`+
     `<div class="txb"><button type="button" class="pri" id="txSave"${can?'':' disabled'}>Save</button><button type="button" id="txClose">Cancel</button>`+
     `<button type="button" class="del" id="txDel"${can?'':' disabled'}>Delete</button><span class="txmsg" id="txMsg" role="status">${planEsc(why)}</span></div>`;
@@ -5662,8 +5717,11 @@ function qEditOpen(r){
     msg(tpl ? 'Type, group and category copied from a matching row.' : 'New label: check type, group and category.'); };
   $f('l').addEventListener('change', refill); $f('dt').addEventListener('change', refill);
   /* where Save will put the row in Net Worth (group > account), live while typing */
-  const holdNow=()=> hit ? qEditHoldOf(norm($f('a').value), norm($f('l').value), norm($f('dt').value), hit.id) : null;
-  const nwLine=()=>{ const h=Object.assign({}, t0, holdNow()||{}), cap=x=>{ x=String(x||'\u2014'); return x.charAt(0)+x.slice(1).toLowerCase(); };
+  /* v3.40: the asset counts when you typed it, or when the account is still the row's own */
+  let acdOwn=false;
+  const acdArg=()=> (acdOwn || norm($f('a').value)===norm(t0.a)) ? $f('acd').value.trim() : '';
+  const holdNow=()=> hit ? qEditHoldOf(norm($f('a').value), norm($f('l').value), norm($f('dt').value), hit.id, acdArg()) : null;
+  const nwLine=()=>{ const h=Object.assign({}, t0, holdNow()||{}), cap=x=>tcase(String(x||'\u2014'));
     const was=norm(t0.c3)!==norm(h.c3) ? ` (now ${cap(t0.c3)}: Save fixes it)` : '';
     dlg.querySelector('#txNw').textContent=`Net Worth: ${cap(h.c3)} \u203a ${cap($f('a').value)}${was}`; };
   dlg.addEventListener('input', nwLine); nwLine();
@@ -5672,8 +5730,9 @@ function qEditOpen(r){
      change anywhere in the box (fix v3.31: the row did not show when Type came from the label) */
   ['input','change'].forEach(ev=>dlg.addEventListener(ev, ()=>setTimeout(toSync, 0))); toSync();
   /* asset class detail follows the account / label / detail typed, until you type it yourself */
-  let acdOwn=false; $f('acd').addEventListener('input', ()=>{ acdOwn=true; });
-  ['a','l','dt'].forEach(k=>$f(k).addEventListener('change', ()=>{ if(acdOwn) return; const h=holdNow();
+  $f('acd').addEventListener('input', ()=>{ acdOwn=true; });
+  ['a','l','dt'].forEach(k=>$f(k).addEventListener('change', ()=>{ if(acdOwn || norm($f('a').value)===norm(t0.a)) return;
+    const h=qEditHoldOf(norm($f('a').value), norm($f('l').value), norm($f('dt').value), hit ? hit.id : null);
     if(h && h.acd!==undefined) $f('acd').value=h.acd==null ? '' : String(h.acd); }));
   dlg.querySelector('#txClose').onclick=()=>dlg.close();
   dlg.addEventListener('close',()=>dlg.remove());
@@ -5686,7 +5745,7 @@ function qEditOpen(r){
     const nt=Object.assign({}, t0);
     /* Net Worth columns: from the newest row with the same account + label (+ detail), worked
        out at Save (no reliance on a change event); none = keep the row's own */
-    const hold=qEditHoldOf(norm($f('a').value), norm($f('l').value), norm($f('dt').value), hit.id);
+    const hold=qEditHoldOf(norm($f('a').value), norm($f('l').value), norm($f('dt').value), hit.id, acdArg());
     if(hold) TX_HOLD.forEach(k=>{ if(hold[k]!==undefined) nt[k]=hold[k]; });
     TX_EDIT_F.forEach(([k])=>{ if(k!=='d' && k!=='v') nt[k]=$f(k).value.trim(); });
     nt.d=d; nt.v=Math.round(v*100)/100; delete nt.live;
@@ -5694,9 +5753,10 @@ function qEditOpen(r){
     const rows={[hit.id]:nt};
     const toA=norm(dlg.querySelector('#txf-to').value);
     if(norm(nt.ty)==='TRANSFER' && toA){
-      if(toA===norm(nt.a)){ msg('Transfer to: pick another account.'); return; }
+      const toAcd=norm(dlg.querySelector('#txf-toacd').value);
+      if(toA===norm(nt.a) && (!toAcd || toAcd===norm(nt.acd))){ msg('Transfer to: pick another account, or another asset on the same account.'); return; }
       const toName=[...lists.a].find(x=>norm(x)===toA) || dlg.querySelector('#txf-to').value.trim();
-      const mr=txMirrorRow(nt, toName, hit.id, FS_MONTHS.get(ym));
+      const mr=txMirrorRow(nt, toName, hit.id, FS_MONTHS.get(ym), dlg.querySelector('#txf-toacd').value.trim());
       rows['tr'+fsHash(hit.id+'|'+toA)]=mr;
       if(!confirm(`Also add ${(mr.v>0?'+':'')+mr.v.toFixed(2).replace('.',',')} \u20ac on ${toName} (the other side of the transfer)?`)) return;
     }
@@ -7466,8 +7526,8 @@ const HOLD_SEED=[   // the sheet's LIST tab on 25 Oct 2026
   {a:'DEGIRO',        e:'VWCE',     isin:'IE00BK5BQT80', t:'FUND',  sh:1091},
   {a:'DEGIRO',        e:'LON:IUSE', isin:'IE00B3ZW0K18', t:'FUND',  sh:383},
   {a:'DEGIRO',        e:'AMS:IMAE', isin:'IE00B4K48X80', t:'FUND',  sh:107},
-  {a:'DIRECTASTOCKS', e:'VWCE',     isin:'IE00BK5BQT80', t:'FUND',  sh:832},
-  {a:'TRSTOCKS',      e:'VWCE',     isin:'IE00BK5BQT80', t:'FUND',  sh:5.9},
+  {a:'DIRECTA',       e:'VWCE',     isin:'IE00BK5BQT80', t:'FUND',  sh:832},    // was DIRECTASTOCKS (renamed 27 Nov 2026)
+  {a:'TRADE REPUBLIC',e:'VWCE',     isin:'IE00BK5BQT80', t:'FUND',  sh:5.9},    // was TRSTOCKS
   {a:'DIRECTA',       e:'AMZN',     isin:'US0231351067', t:'STOCK', sh:1}
 ];
 const TAX_RATE=0.26;   // conservative: 26% on the gains of every VARIABLE holding (Stefano, 25 Oct 2026)
@@ -7492,7 +7552,16 @@ let LIVE=null;   // {hold:{'DEGIRO|VWCE':{shares,price,value,src}}, at:ms, miss:
    until the new prices are in. Before, the page showed the booked values and then jumped. */
 const LIVE_KEY='fs2-live-v1';
 try{ const c=JSON.parse(localStorage.getItem(LIVE_KEY)||'null');
-  if(c && c.hold && Object.keys(c.hold).length && c.at) LIVE={hold:c.hold, miss:c.miss||[], at:c.at, cached:true}; }catch(e){}
+  if(c && c.hold && Object.keys(c.hold).length && c.at) LIVE={hold:renLiveHold(c.hold), miss:c.miss||[], at:c.at, cached:true}; }catch(e){}
+/* pure (v3.40): live holdings keyed 'ACCOUNT|ASSET' under the new names; two old keys that
+   meet (none today) add their shares and value */
+function renLiveHold(hold){
+  const out={};
+  for(const k in (hold||{})){ const i=k.indexOf('|'), a=norm(renA(k.slice(0,i))), e=norm(renN(k.slice(i+1))), nk=a+'|'+e, h=hold[k];
+    if(!out[nk]){ out[nk]=Object.assign({}, h); continue; }
+    out[nk].shares=(+out[nk].shares||0)+(+h.shares||0); out[nk].value=(+out[nk].value||0)+(+h.value||0); }
+  return out;
+}
 const PX_TYPE={};    // isin -> 'FUND' | 'STOCK' that answered
 async function fetchJSON(url){
   let signal,to;
@@ -8685,19 +8754,135 @@ async function renBackup(msg){
   msg(`Backup downloaded: ${c.months} months, ${c.rows} rows, settings ${B.settings?'yes':'no'}, plan ${B.plan?'yes':'no'}.`);
   return B;
 }
+/* ---- the rename (v3.40) ------------------------------------------------------------------
+   renPlan() is pure: months + settings + live prices -> what changes. Rows go through renRow();
+   a month with a change is rewritten whole (writeMonths, same as Month-end). Settings: Shares
+   held (holdingsj, same account + asset added up), pick lists (listsj), names added in the
+   tracker (extraj), typed rules (ruleoverj); rulesj is cleared so the tracker relearns its
+   rules from the renamed rows on its next open. Report: Net Worth per group and in total,
+   before and after, at book value and with today's live prices. */
+const renUniq=a=>{ const s=new Set(), o=[]; (a||[]).forEach(x=>{ const k=norm(x); if(k && s.has(k)) return; s.add(k); o.push(x); }); return o; };
+function renSettings(S){
+  const ch={}, J=(k,d)=>{ try{ return JSON.parse(S[k]||'null')||d; }catch(e){ return d; } };
+  const H=J('holdingsj', null);
+  if(Array.isArray(H)){ const m=new Map(), warn=[];
+    H.forEach(h=>{ const a=renA(h.a), e=renN(h.e), k=norm(a)+'|'+norm(e), p=m.get(k);
+      if(!p){ m.set(k, Object.assign({}, h, {a, e})); return; }
+      if(p.isin!==h.isin) warn.push(k+': two ISINs');
+      p.sh=Math.round(((+p.sh||0)+(+h.sh||0))*1e6)/1e6; });
+    const nh=[...m.values()]; if(JSON.stringify(nh)!==JSON.stringify(H)) ch.holdingsj=JSON.stringify(nh); ch._hwarn=warn; }
+  const L=J('listsj', null);
+  if(L && typeof L==='object'){ const nl=Object.assign({}, L);
+    ['accountMinus','accountPlus'].forEach(k=>{ if(Array.isArray(L[k])) nl[k]=renUniq(L[k].map(renA)); });
+    if(Array.isArray(L.assetclass)) nl.assetclass=renUniq(L.assetclass.map(renN).concat(['CASH']));
+    if(JSON.stringify(nl)!==JSON.stringify(L)) ch.listsj=JSON.stringify(nl); }
+  const X=J('extraj', null);
+  if(X && typeof X==='object'){ const nx=Object.assign({}, X, {acct:renUniq((X.acct||[]).map(renA)), acdf:renUniq((X.acdf||[]).map(renN))});
+    if(JSON.stringify(nx)!==JSON.stringify(X)) ch.extraj=JSON.stringify(nx); }
+  const O=J('ruleoverj', null);
+  if(O && typeof O==='object'){ const no={acct:{}, label:Object.assign({}, O.label||{})};
+    for(const a in (O.acct||{})){ const r=Object.assign({}, O.acct[a]); ['c3','acd'].forEach(f=>{ if(r[f]!=null) r[f]=renN(r[f]); }); no.acct[norm(renA(a))]=r; }
+    if(JSON.stringify(no)!==JSON.stringify(O)) ch.ruleoverj=JSON.stringify(no); }
+  return ch;
+}
+function renPlan(months, S, liveHold){
+  const put={}, combos=new Map(), grp={}, hold={}; let n=0, rows=0;
+  const g=(c,k,v)=>{ const e=grp[c]||(grp[c]={b:0,a:0,lb:0,la:0}); e[k]+=v; };
+  const hk=t=>[norm(t.var)||'OTHER', norm(t.acd)||'\u2014', norm(t.a)||'\u2014', norm(t.c3)||'\u2014'];
+  const addH=(side,t)=>{ const k=hk(t), key=side+k.join('|'), e=hold[key]||(hold[key]={side, acct:k[2], acd:k[1], c3:k[3], v:0}); e.v+=+t.v||0; };
+  for(const m of months){ const tx=m.tx||{};
+    for(const id in tx){ const t=tx[id], r=renRow(t), nt=r||t; rows++;
+      const v=+t.v||0; g(norm(t.c3)||'\u2014','b',v); g(norm(nt.c3)||'\u2014','a',v); addH('b',t); addH('a',nt);
+      if(!r) continue;
+      n++; (put[m.month]=put[m.month]||Object.assign({}, tx))[id]=r;
+      const ck=[t.a,t.acd,t.c3].map(x=>norm(x)||'\u2014').join(' / ')+'  \u2192  '+[r.a,r.acd,r.c3].map(x=>norm(x)||'\u2014').join(' / ');
+      const c=combos.get(ck)||{n:0,v:0}; c.n++; c.v+=v; combos.set(ck,c); } }
+  /* with live prices: a holding whose ACCOUNT|ASSET has a price takes shares x price (as Net Worth does) */
+  const LA=liveHold||{}, LB=renLiveHold(liveHold||{}), seen={b:{}, a:{}}, dup=[];
+  Object.values(hold).forEach(h=>{ if(Math.abs(h.v)<=0.5) return;
+    const L=(h.side==='b'?LA:LB)[h.acct+'|'+h.acd], s=seen[h.side], lk=h.acct+'|'+h.acd;
+    if(L){ if(s[lk]) dup.push((h.side==='b'?'before ':'after ')+lk); s[lk]=1; }
+    g(h.c3, h.side==='b'?'lb':'la', L ? L.value : h.v); });
+  return {put, n, rows, months:Object.keys(put).length, combos:[...combos.entries()].sort((a,b)=>b[1].n-a[1].n), grp, dup, set:renSettings(S||{})};
+}
+function renReport(P){
+  const f=v=>aprFmt(Math.round(v*100)/100), cs=Object.keys(P.grp).sort();
+  const tot=k=>cs.reduce((s,c)=>s+P.grp[c][k],0);
+  const sk=Object.keys(P.set).filter(k=>k[0]!=='_');
+  return `<div class="sub">${P.n} of ${P.rows} rows change, in ${P.months} months.</div>
+    <table><thead><tr><th>Rows: account / asset / group</th><th class="n">Rows</th><th class="n">\u20ac</th></tr></thead><tbody>`+
+    P.combos.map(([k,c])=>`<tr><td>${planEsc(k)}</td><td class="n">${c.n}</td><td class="n">${f(c.v)}</td></tr>`).join('')+`</tbody></table>
+    <table><thead><tr><th>Net Worth group</th><th class="n">Book before</th><th class="n">Book after</th><th class="n">Live before</th><th class="n">Live after</th></tr></thead><tbody>`+
+    cs.filter(c=>cs.length && (Math.abs(P.grp[c].b)>0.5 || Math.abs(P.grp[c].a)>0.5 || Math.abs(P.grp[c].lb)>0.5 || Math.abs(P.grp[c].la)>0.5))
+      .map(c=>{ const e=P.grp[c]; return `<tr><td>${planEsc(tcase(c))}</td><td class="n">${f(e.b)}</td><td class="n">${f(e.a)}</td><td class="n">${f(e.lb)}</td><td class="n">${f(e.la)}</td></tr>`; }).join('')+
+    `<tr><td><b>Total</b></td><td class="n"><b>${f(tot('b'))}</b></td><td class="n"><b>${f(tot('a'))}</b></td><td class="n"><b>${f(tot('lb'))}</b></td><td class="n"><b>${f(tot('la'))}</b></td></tr></tbody></table>
+    <div class="sub">Settings that change: ${sk.length ? sk.join(', ') : 'none'}; rulesj is cleared (the tracker relearns it).</div>`+
+    (P.dup.length ? `<div class="sub dn">Two holdings share one live price: ${planEsc(P.dup.join(', '))}</div>` : '')+
+    (P.set._hwarn && P.set._hwarn.length ? `<div class="sub dn">Shares held: ${planEsc(P.set._hwarn.join(', '))}</div>` : '');
+}
+let renLast=null;
+async function renDry(msg, body){
+  if(!aprOn()){ msg(FS2.fake ? 'This is an archive.' : 'Works after Data \u2192 Switch to Firebase for good.'); return null; }
+  msg('Reading the newest data\u2026');
+  await fsFetch(); FS_SETTINGS=await FS2.data.getSettings(); HOLDINGS=null;
+  if(!LIVE || LIVE.cached) await loadLive();               // today's prices under the names the settings use now
+  const P=renPlan([...FS_MONTHS.values()], FS_SETTINGS, LIVE && LIVE.hold);
+  body.innerHTML=renReport(P); renLast=P;
+  msg('Dry run: nothing written.'); return P;
+}
+async function renRun(msg, body){
+  if(!renBackupAt || Date.now()-renBackupAt>3600e3){ msg('Download a backup first (this box, less than an hour ago).'); return; }
+  const P=await renDry(msg, body); if(!P) return;
+  if(P.dup.length){ msg('Stopped: two holdings would share one live price.'); return; }
+  if(!P.n && !Object.keys(P.set).some(k=>k[0]!=='_')){ msg('Nothing to rename.'); return; }
+  if(!confirm(`Rename ${P.n} rows in ${P.months} months and update the settings?`)) return;
+  msg('Writing\u2026');
+  const W={}; for(const ym in P.put) W[ym]={tx:P.put[ym], source:'rename'};
+  if(P.months) await FS2.data.writeMonths(W);
+  const ch={}; for(const k in P.set) if(k[0]!=='_') ch[k]=P.set[k];
+  ch.rulesj=''; ch.renameAt=Date.now();
+  await FS2.data.setSettings(ch);
+  FS_SETTINGS=Object.assign({}, FS_SETTINGS, ch); HOLDINGS=null;
+  if(LIVE) LIVE=Object.assign({}, LIVE, {hold:renLiveHold(LIVE.hold)});
+  try{ const c=JSON.parse(localStorage.getItem(LIVE_KEY)||'null'); if(c && c.hold){ c.hold=renLiveHold(c.hold); localStorage.setItem(LIVE_KEY, JSON.stringify(c)); } }catch(e){}
+  dbAt=0; await refreshDB(); loadLive();
+  const after=renPlan([...FS_MONTHS.values()], FS_SETTINGS, LIVE && LIVE.hold);
+  msg(`Done: ${P.n} rows in ${P.months} months renamed, settings updated. Rows still to rename: ${after.n}.`);
+}
+/* rows an old app version (a phone that has not reloaded yet) writes with an old name are
+   renamed when this page is open, after the rename was run (settings.renameAt) */
+async function renAutoFix(){
+  if(!FS_SETTINGS || !FS_SETTINGS.renameAt || !aprOn() || !FS2.data || !FS2.data.putTx) return 0;
+  const fix={};
+  for(const m of FS_MONTHS.values()) for(const id in (m.tx||{})){ const r=renRow(m.tx[id]); if(r) (fix[m.month]=fix[m.month]||{})[id]=r; }
+  const ms=Object.keys(fix); if(!ms.length) return 0;
+  for(const ym of ms) await FS2.data.putTx(ym, fix[ym]);
+  console.info('renAutoFix: renamed', ms.map(ym=>ym+':'+Object.keys(fix[ym]).length).join(', '));
+  dbAt=0; refreshDB(); return ms.length;
+}
+{ let last=''; const t0=Date.now(); setInterval(()=>{
+    if(FS2.fake || !FS_MONTHS.size || !FS_SETTINGS || !FS_SETTINGS.renameAt) return;
+    const fp=[...FS_MONTHS.values()].map(m=>m.month+'@'+(m.updatedAt||0)).join(','); if(fp===last) return; last=fp;
+    renAutoFix().catch(e=>console.warn('renAutoFix', e)); }, 20000); }
 function renOpen(){
   const old=document.getElementById('renDlg'); if(old) old.remove();
   const dlg=document.createElement('dialog'); dlg.id='renDlg'; dlg.className='aprdlg'; dlg.setAttribute('aria-labelledby','renH');
   dlg.innerHTML=`<h3 id="renH">Backup / Rename</h3>
-    <div class="sub">Backup downloads all months, settings and plan as one JSON file.</div>
+    <div class="sub">Backup downloads all months, settings and plan as one JSON file. Rename: DIRECTASTOCKS / DIRECTAFUNDS \u2192 DIRECTA,
+    TRSTOCKS / TRADEREPUBLIC \u2192 TRADE REPUBLIC, REALESTATE \u2192 REAL ESTATE, PENSIONFUND \u2192 PENSION FUND, EMERGENCYFUND \u2192 EMERGENCY FUND;
+    cash at Directa and Trade Republic in the Cash group. Dry run writes nothing.</div>
     <div id="renBody"></div>
     <div><button type="button" class="pri" id="renBk">Download backup</button>
+    <button type="button" id="renDry">Dry run</button> <button type="button" id="renGo">Rename now</button>
     <button type="button" id="renClose">Close</button> <span id="renMsg" class="sub" role="status"></span></div>`;
   document.body.appendChild(dlg);
-  const msg=t=>{ dlg.querySelector('#renMsg').textContent=t; };
+  const msg=t=>{ dlg.querySelector('#renMsg').textContent=t; }, body=dlg.querySelector('#renBody');
+  const btn=(id,fn)=>{ dlg.querySelector(id).onclick=async()=>{ const b=dlg.querySelector(id); b.disabled=true;
+    try{ await fn(); }catch(e){ msg('Failed: '+((e && (e.code||e.message))||e)); } finally{ b.disabled=false; } }; };
   dlg.querySelector('#renClose').onclick=()=>dlg.close();
-  dlg.querySelector('#renBk').onclick=async()=>{ const b=dlg.querySelector('#renBk'); b.disabled=true;
-    try{ await renBackup(msg); }catch(e){ msg('Backup failed: '+((e && (e.code||e.message))||e)); } finally{ b.disabled=false; } };
+  btn('#renBk', ()=>renBackup(msg));
+  btn('#renDry', ()=>renDry(msg, body));
+  btn('#renGo', ()=>renRun(msg, body));
   dlg.showModal();
 }
 document.getElementById('acctRen').addEventListener('click', e=>{ e.stopPropagation(); renOpen(); });

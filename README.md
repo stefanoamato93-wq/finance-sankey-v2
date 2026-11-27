@@ -411,6 +411,30 @@ It does **not** touch the Google Sheet: the plan lives **only in this browser**
   every row gets the new 12 months at its December amount (`planExtendRows()`, months already
   there are kept). **Remove YYYY** shortens the plan; the amounts stay and return if the year
   is added again.
+- **v3.40 (27 Nov 2026) - account and group rename:** names change in the data and on screen.
+  | Before | After | Fields |
+  |---|---|---|
+  | DIRECTASTOCKS, DIRECTAFUNDS, DIRECTA | DIRECTA (assets told apart by Asset class detail: VWCE, VALL, AMZN, EMERGENCY FUND, CASH) | account `a` |
+  | TRSTOCKS, TRADEREPUBLIC | TRADE REPUBLIC (VWCE, CASH) | account |
+  | REALESTATE | REAL ESTATE | account, `c3`, `acd` |
+  | PENSIONFUND / EMERGENCYFUND | PENSION FUND / EMERGENCY FUND | `c3`, `acd`, `acdf` |
+  Cash at Directa and Trade Republic sits in the Cash group (`c3` CASH, `acd` CASH); a broker row's
+  `acdf` is set to its real asset. Map in `REN_ACCT` / `REN_NAME`, rows in `renRow()` (pure).
+  **Backup / Rename** box: **Dry run** (nothing written) lists the rows per change and Net Worth per
+  group before / after, at book value and with live prices (`renPlan()`, `renReport()`); **Rename now**
+  needs a backup from the same box in the last hour, rewrites the changed months whole
+  (`writeMonths`), updates `holdingsj` (same account + asset added up), `listsj`, `extraj`,
+  `ruleoverj`, clears `rulesj` (the tracker relearns it) and sets `settings.renameAt`. After that,
+  `renAutoFix()` renames any row an old app version still writes with an old name (every 20 s when
+  the months change). The live-price cache (`fs2-live-v1`) is read under the new names
+  (`renLiveHold()`). `HOLD_SEED` uses the new names. One-off, 27 Nov 2026; the backup taken before it is in
+  `Personal Finance\_backup\2026-11-27_pre-rename\`. The old Google Sheet and FullDB.xlsx keep the old names.
+  **Title Case on screen:** `tcase()` capitalises every word (Net Worth groups and accounts,
+  Query account names, the edit and depreciation boxes): "Pension Fund", "Trade Republic".
+  **Query > Edit transaction:** with an asset typed (or the account unchanged) the Net Worth columns
+  come from a row of the same account AND asset (`qEditAssetTemplate()`); an asset new to the
+  account takes that asset's usual columns elsewhere (DIRECTA + CASH -> Cash). **Transfer to** has
+  an **Its asset** box, and a transfer to the same account is allowed when the asset differs.
 - **v3.39 (27 Nov 2026) - Backup / Rename:** Account menu > **Backup / Rename** > **Download backup** saves every month doc as stored (txj, tx, del), `meta/settings`, `plan/current` and `amex/benefits` as one JSON file (`finance-backup_YYYY-MM-DD_HHMM.json`, `FS2.data.exportRaw()` in data.js; timestamps as `{_ts: ms}`). The same box holds the one-off account rename (see below).
 - **v3.38 (26 Nov 2026) - push test:** no app changes; version bump only, to check pushing works from the new laptop.
 - **v3.37 (25 Nov 2026) – RSU this month by hand:** the month in progress can be set on the
